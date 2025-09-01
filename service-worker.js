@@ -8,5 +8,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', function (event) {
-  // Basic fetch handler
+  event.respondWith(
+    caches.match(event.request).then(function (response) {
+      // If cached, return it; otherwise fetch from network
+      return response || fetch(event.request);
+    })
+  );
 });
+
+
