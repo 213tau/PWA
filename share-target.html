@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shared Content</title>
+</head>
+<body>
+  <h1>Received Shared Content</h1>
+  <div id="output"></div>
+
+  <script>
+    async function getFormData() {
+      const formData = await navigator?.serviceWorker?.ready.then(reg => {
+        return reg.navigationPreload?.get();
+      });
+
+      if (!formData) {
+        console.warn("No preload form data.");
+        return;
+      }
+
+      const data = await formData.formData();
+      const title = data.get('title');
+      const text = data.get('text');
+      const url = data.get('url');
+      const file = data.get('media');
+
+      const output = document.getElementById('output');
+      output.innerHTML = `
+        <p><strong>Title:</strong> ${title}</p>
+        <p><strong>Text:</strong> ${text}</p>
+        <p><strong>URL:</strong> ${url}</p>
+      `;
+
+      if (file && file.type.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.style.maxWidth = '300px';
+        output.appendChild(img);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', getFormData);
+  </script>
+</body>
+</html>
