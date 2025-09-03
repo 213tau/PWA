@@ -49,57 +49,41 @@ caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
+  // Intercept POST to /share-target.html
   if (event.request.method === "POST" && url.pathname === "/share-target.html") {
     event.respondWith(
       (async () => {
         const formData = await event.request.formData();
 
-        const sharedTitle = formData.get("title");
-        const sharedText = formData.get("text");
+        const files = formData.getAll("file"); // includes images / PDFs
+        const title = formData.get("title");
+        const text = formData.get("text");
         const sharedUrl = formData.get("url");
 
-        // Handle files
-        const files = formData.getAll("file"); // may be multiple
-        const fileInfos = [];
-
-        for (const file of files) {
-          if (file && file.name) {
-            // Store or forward to your app
-            fileInfos.push({
-              name: file.name,
-              type: file.type,
-              size: file.size
-            });
-
-            // Example: put in Cache Storage
-            const cache = await caches.open("shared-files");
-            await cache.put(
-              `/uploads/${file.name}`,
-              new Response(file, { headers: { "Content-Type": file.type } })
-            );
-          }
-        }
-
-        // Notify app windows
+        // Send data to your app
         const clientsList = await self.clients.matchAll({ type: "window" });
         for (const client of clientsList) {
           client.postMessage({
             type: "share",
-            title: sharedTitle,
-            text: sharedText,
+            title,
+            text,
             url: sharedUrl,
-            files: fileInfos
+            files: files.map(f => ({
+              name: f.name,
+              type: f.type,
+              size: f.size
+            }))
           });
         }
 
-        // Redirect user into the app
+        // Respond with a redirect so user lands in your UI
         return Response.redirect("/?shared=true", 303);
       })()
     );
-    return;
+    return; // stop here so it doesn’t hit the server
   }
 
-  // Fallback: cache or fetch
+  // Normal cache-first fetch
   event.respondWith(
     caches.match(event.request).then((res) => res || fetch(event.request))
   );
