@@ -46,46 +46,39 @@ caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
 
 // Fetch event: serve cached files if offline
 
-self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-
-  // Intercept POST to /share-target.html
-  if (event.request.method === "POST" && url.pathname === "/share-target.html") {
+self.addEventListener('fetch', event => {
+  // Only intercept POST requests to /share-target.html
+  if (
+    event.request.method === 'POST' &&
+    new URL(event.request.url).pathname === '/share-target.html'
+  ) {
     event.respondWith(
       (async () => {
+        // Get the form data
         const formData = await event.request.formData();
+        // Get the image file
+        const imageFile = formData.get('media');
+        // Optionally get other fields (title, text, url)
+        const title = formData.get('title');
+        const text = formData.get('text');
+        const url = formData.get('url');
 
-        const files = formData.getAll("file"); // includes images / PDFs
-        const title = formData.get("title");
-        const text = formData.get("text");
-        const sharedUrl = formData.get("url");
-
-        // Send data to your app
-        const clientsList = await self.clients.matchAll({ type: "window" });
-        for (const client of clientsList) {
-          client.postMessage({
-            type: "share",
-            title,
-            text,
-            url: sharedUrl,
-            files: files.map(f => ({
-              name: f.name,
-              type: f.type,
-              size: f.size
-            }))
-          });
+        // Save to IndexedDB, cache, or pass using clients.openWindow with a query string
+        // Here, we'll open a window and pass info in URL (simple demo)
+        const imageUrl = URL.createObjectURL(imageFile);
+        const newPageUrl =
+          `/share-target.html?image=${encodeURIComponent(imageUrl)}&title=${encodeURIComponent(title)}&text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+        // Open your share target page with the image
+        const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of clientList) {
+          client.navigate(newPageUrl);
+          client.focus();
+          break;
         }
-
-        // Respond with a redirect so user lands in your UI
-        return Response.redirect("/?shared=true", 303);
+        // Respond with a simple HTML
+        return Response.redirect(newPageUrl, 303);
       })()
     );
-    return; // stop here so it doesn’t hit the server
   }
-
-  // Normal cache-first fetch
-  event.respondWith(
-    caches.match(event.request).then((res) => res || fetch(event.request))
-  );
 });
 
