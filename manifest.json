@@ -1,6 +1,6 @@
 {
-  "name": "My Share Target PWA",
-  "short_name": "SharePWA",
+  "name": "Tauseef PWA",
+  "short_name": "Tauseef PWA",
   "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -34,4 +34,5 @@
     }
   }
 }
+
 
