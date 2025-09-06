@@ -1,11 +1,3 @@
-self.addEventListener('install', (event) => {
-
-console.log('Service Worker installed.');
-
-self.skipWaiting();
-
-});
-
 self.addEventListener('activate', (event) => {
 
 console.log('Service Worker activated.');
@@ -46,39 +38,46 @@ caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
 
 // Fetch event: serve cached files if offline
 
-self.addEventListener('fetch', event => {
-  // Only intercept POST requests to /share-target.html
-  if (
-    event.request.method === 'POST' &&
-    new URL(event.request.url).pathname === '/share-target.html'
-  ) {
-    event.respondWith(
-      (async () => {
-        // Get the form data
-        const formData = await event.request.formData();
-        // Get the image file
-        const imageFile = formData.get('media');
-        // Optionally get other fields (title, text, url)
-        const title = formData.get('title');
-        const text = formData.get('text');
-        const url = formData.get('url');
+self.addEventListener("fetch", event => {
+  const url = new URL(event.request.url);
 
-        // Save to IndexedDB, cache, or pass using clients.openWindow with a query string
-        // Here, we'll open a window and pass info in URL (simple demo)
-        const imageUrl = URL.createObjectURL(imageFile);
-        const newPageUrl =
-          `/share-target.html?image=${encodeURIComponent(imageUrl)}&title=${encodeURIComponent(title)}&text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
-        // Open your share target page with the image
-        const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-        for (const client of clientList) {
-          client.navigate(newPageUrl);
-          client.focus();
-          break;
-        }
-        // Respond with a simple HTML
+  // Handle Web Share Target POST
+  if (event.request.method === "POST" && url.pathname === "/share-target.html") {
+    event.respondWith((async () => {
+      const formData = await event.request.formData();
+      const imageFile = formData.get("media");
+      const title = formData.get("title") || "";
+      const text = formData.get("text") || "";
+      const sharedUrl = formData.get("url") || "";
+
+      // Use object URL (temporary) or save in IndexedDB for persistence
+      const imageUrl = imageFile ? URL.createObjectURL(imageFile) : "";
+
+      const newPageUrl =
+        `/share-target.html?title=${encodeURIComponent(title)}&text=${encodeURIComponent(text)}&url=${encodeURIComponent(sharedUrl)}&image=${encodeURIComponent(imageUrl)}`;
+
+      // Focus or open client window
+      const clientList = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      if (clientList.length > 0) {
+        clientList[0].navigate(newPageUrl);
+        clientList[0].focus();
+      } else {
         return Response.redirect(newPageUrl, 303);
-      })()
+      }
+
+      return new Response(null, { status: 200 });
+    })());
+    return; // exit early so offline handler doesn’t run
+  }
+
+  // Default: offline caching for GET
+  if (event.request.method === "GET") {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        caches.match(event.request).then(res => res || caches.match("/offline.html"))
+      )
     );
   }
 });
+
 
