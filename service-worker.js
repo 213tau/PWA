@@ -1,31 +1,31 @@
-self.addEventListener('activate', (event) => {
-  console.log('Service Worker activated.');
-});
-
 const CACHE_NAME = "my-pwa-cache-v1";
-
 const ASSETS = [
   "/",
   "/index.html",
   "/service-worker.js",
   "/script.js",
   "/icons/icon-192.png",
-  "/icons/icon-512.png",
+  "/icons/icon-512.png"
 ];
 
-// Install event: cache assets
-self.addEventListener("install", (event) => {
+// Install: cache assets
+self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
   );
 });
 
-// Fetch event: serve cached files if offline
+// Activate
+self.addEventListener("activate", event => {
+  console.log("Service Worker activated.");
+});
+
+// Fetch: intercept
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
 
-  // Handle Web Share Target POST (redirect to index.html instead)
-  if (event.request.method === "POST" && url.pathname === "/index.html") {
+  // Handle Web Share Target POST
+  if (event.request.method === "POST" && url.pathname === "/share-target") {
     event.respondWith((async () => {
       const formData = await event.request.formData();
       const imageFile = formData.get("media");
@@ -35,6 +35,7 @@ self.addEventListener("fetch", event => {
 
       const imageUrl = imageFile ? URL.createObjectURL(imageFile) : "";
 
+      // 👇 Redirect to index.html with shared data
       const newPageUrl =
         `/index.html?title=${encodeURIComponent(title)}&text=${encodeURIComponent(text)}&url=${encodeURIComponent(sharedUrl)}&image=${encodeURIComponent(imageUrl)}`;
 
@@ -48,10 +49,10 @@ self.addEventListener("fetch", event => {
 
       return new Response(null, { status: 200 });
     })());
-    return; // prevent offline handler from interfering
+    return;
   }
 
-  // Default: offline caching for GET
+  // Default: offline cache for GET
   if (event.request.method === "GET") {
     event.respondWith(
       fetch(event.request).catch(() =>
