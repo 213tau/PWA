@@ -2,8 +2,7 @@ const CACHE_NAME = "my-pwa-cache-v1";
 const ASSETS = [
   "/",
   "/index.html",
-  "/service-worker.js",
-  "/script.js",
+  "/service-worker.js",  
   "/icons/icon-192.png",
   "/icons/icon-512.png"
 ];
