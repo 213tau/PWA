@@ -8,11 +8,12 @@ const ASSETS = [
   "/icons/icon-512.png"
 ];
 
-// Install: cache assets
+// Install: cache all
 self.addEventListener("install", event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
   );
+  self.skipWaiting(); // activate immediately
 });
 
 // Activate: cleanup old caches (optional but recommended)
