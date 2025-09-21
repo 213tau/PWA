@@ -6127,11 +6127,11 @@ function contrastStretchingWithHistogramClipping(canvas = document.querySelector
   </script>
   
   <script>
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('service-worker.js')
-        .then(() => console.log('Service Worker registered.'));
-    }
+    if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/service-worker.js")
+    .then(() => console.log("SW registered"))
+    .catch(err => console.error("SW registration failed:", err));
+}
 
     // Handle install prompt
     let deferredPrompt;
@@ -6162,6 +6162,7 @@ function contrastStretchingWithHistogramClipping(canvas = document.querySelector
   </script>
 </body>
 </html>
+
 
 
 
