@@ -6094,7 +6094,7 @@ function contrastStretchingWithHistogramClipping(canvas = document.querySelector
   <script>
     async function getFormData() {
       const formData = await navigator?.serviceWorker?.ready.then(reg => {
-        return reg.navigationPreload?.get();
+        reg.navigationPreload?.getState();
       });
 
       if (!formData) {
@@ -6162,6 +6162,7 @@ function contrastStretchingWithHistogramClipping(canvas = document.querySelector
   </script>
 </body>
 </html>
+
 
 
 
