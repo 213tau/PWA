@@ -16,7 +16,7 @@ self.addEventListener("install", event => {
   self.skipWaiting(); // activate immediately
 });
 
-// Activate: cleanup old caches (optional but recommended)
+// Activate: cleanup old caches
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -27,26 +27,32 @@ self.addEventListener("activate", event => {
       }))
     )
   );
-  console.log("Service Worker activated.");
+  self.clients.claim(); // control all clients immediately
 });
 
-// Fetch: always serve index.html when offline
+// Fetch handler
 self.addEventListener("fetch", event => {
   if (event.request.method === "GET") {
     event.respondWith(
       fetch(event.request)
-        .then(res => {
-          // Cache updated response
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
-          return res;
+        .then(response => {
+          // Online: update cache
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseClone);
+          });
+          return response;
         })
-        .catch(() =>
-          // If offline → return cached file (index.html or requested asset)
-          caches.match(event.request).then(res =>
-            res || caches.match("/index.html")
-          )
-        )
+        .catch(() => {
+          // Offline: serve cached file
+          return caches.match(event.request)
+            .then(cachedRes => {
+              // If the requested file is cached → return it
+              if (cachedRes) return cachedRes;
+              // Otherwise → always fall back to index.html
+              return caches.match("/index.html");
+            });
+        })
     );
   }
 });
