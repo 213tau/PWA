@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Drawing</title>
+    <style>
+        #canvas {
+            border: 1px solid black;
+            cursor: crosshair;
+            position: absolute;
+            top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div>Tauseef</div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+let painting = false;
+
+// Start painting
+function startPosition(e) {
+    painting = true;
+    draw(e);
+}
+
+// End painting
+function endPosition() {
+    painting = false;
+    ctx.beginPath(); // Begin a new path to avoid connecting lines
+}
+
+// Draw on canvas
+function draw(e) {
+    if (!painting) return;
+
+    ctx.lineWidth = 5; // Set line width
+    ctx.lineCap = 'round'; // Round line ends
+    ctx.strokeStyle = 'black'; // Set line color
+
+    // Get mouse position
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+}
+
+// Event listeners for mouse movements
+canvas.addEventListener('mousedown', startPosition);
+canvas.addEventListener('mouseup', endPosition);
+canvas.addEventListener('mousemove', draw);
+
+    </script>
+</body>
+</html>
