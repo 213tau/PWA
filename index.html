@@ -1,15 +1,73 @@
 <html lang="en"><head>
   <meta charset="UTF-8">
-  <title>Canvas Multiple Image Warp and Crop</title>
+  <title>Atauxel</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.11.0/dist/pptxgen.bundle.js"></script>
   <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+    }
+
+    .tab-container {
+      overflow-x: auto;
+      white-space: nowrap;
+      background: #f1f1f1;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .tabs-scroll {
+      display: flex;
+      width: max-content;
+      cursor: grab;
+    }
+
+    .tab {
+      display: inline-block;
+      padding: 10px 20px;
+      font-size: 14px;
+      background: #e0e0e0;
+      border-right: 1px solid #ccc;
+      cursor: pointer;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .tab:hover,
+    .tab.active {
+      background: #d0d0d0;
+      font-weight: bold;
+    }
+
+    .tab-content {
+      padding: 15px;
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    button {
+      margin: 4px;
+      padding: 8px 12px;
+    }
+
+    @media (max-width: 768px) {
+      .tab {
+        font-size: 12px;
+        padding: 8px 12px;
+      }
+    }
     canvas {
       border: 1px solid black;
       display: block;
       margin-top: 10px;
+    }
+    body{
+      background: linear-gradient(130deg, #654ea3 0%, #eaafc8 50%, #94bbe9 100%);
     }
     button, select {
       margin: 5px 10px 10px 0;
@@ -24,7 +82,7 @@
         /* page-break-after: always; */
       }
     @media print{
-      body > div:not(:nth-of-type(3)), button, select, input, h3, canvas, label, span{
+      button, select, input, h3, canvas, label, span, fieldset, #buttons, h2,h4{
         display: none;
       }      
       img{
@@ -48,136 +106,139 @@
       padding:0;
       margin:0;
     }
+
+  button {
+    margin: 4px;
+  }
   </style>
 </head>
-<body ondrop="dropHandler(event);" ondragover="dragOverHandler(event);" style="
-    display: flex;    
-">
-
-  <div style="
-    min-width: 7in;max-width: 7in;
-"><h3>Upload Images</h3>
+<body ondrop="dropHandler(event);" ondragover="dragOverHandler(event);" >
+<div>
+  <div id=buttons><h3 style="text-align: center;background:white">Atauxel Hybrid App for Images & Pdfs</h3>
   <input type="file" id="upload" multiple="">
   <select id="imageSelector"></select>
-  <!-- IMAGE PROCESSING -->
-<fieldset>
-  <legend>🖼️ Image Processing</legend>
-  <button id="warpBtn">Warp Image</button>
-  <button id="removePointsBtn">Show Remove Points</button>
-  <button id="rotate">Rotate Canvas Clockwise</button>
-  <button onclick="applyContrastStretching(true);">Auto Light Image Enhancement</button>
-  <button id="sharpenImage">Image Sharpening Kernel</button>  
-  <button onclick="applyMagicFilter()">Enhance Contrast (Histogram Equalization)</button>  
-  <button onclick="applyBiHistogramEqualizationWithEdgePreservation()">apply Bi Histogram Equalization</button>
-  <button onclick="adaptiveHistogramEqualization()">Adaptive Histogram Equalization (CLAHE)</button>    
-  <button onclick="adaptiveHistogramEqualizationReinhard()">adaptive Histogram Equalization Reinhard</button>    
-  <button onclick="dualGammaCLAHE(64, 40, 0.5, 1.5);">Dual Exposure Clahe</button>    
-  <button onclick="enhancePhoto(canvas, 1.15, 1.0);">Enhance Photo using Unsharp Masking</button>
-  <button onclick="applyGammaCorrection()">Apply Gamma Correction</button>
-  <button onclick="gradientShadowRemovalWithGuidedFilter(document.querySelector('canvas'));">Gradient Shadow Removal</button>  
-  <button onclick="edgeAwareAdaptiveThresholding()">edgeAware Adaptive Thresholding</button>
-  <button onclick="laplacianEdgeAwareEnhancement({
-    edgeStrength: 1.2,
-    bilateralRadius: 2,
-    sigmaSpatial: 2.0,
-    sigmaRange: 20.0,
-    adaptiveScaling: true,
-    edgeSharpness: 0.1
-});">edgeAware Laplacian Filter</button>
-  <button onclick="intelligentEdgeAwareThresholding()">intelligent Edge Aware Thresholding</button>
-  <button onclick="edgeAwareAdaptiveThresholdingSobel()">edgeAware Adaptive Thresholding Sobel</button>
-  <button onclick="edgeAwareAdaptiveThresholdingColorPreserved()">edgeAware Adaptive Thresholding Color Preserved</button>  
-  <button onclick="applyBrightnessAdjustment()">Adjust Brightness</button>
-  <button onclick="applyHighPassFilter()">apply High Pass Filter</button>
-  <button onclick="applyGaussianBlur()">apply Gaussian Blur</button>
-  <button onclick="applyGuidedFilter(8, 0.02);">apply Guided Filter</button>
-  <button onclick="applyMedianBlur()">apply Median Blur</button>  
-  <button onclick="adaptiveLuminanceSegmentationWithCCL()">Adaptive Luminance Segmentation With CCL</button>
-  <button onclick="globalContrastStretching()">Global Contrast Stretching</button>  
-  <button onclick="autoTrimWhiteSpace()">auto Trim White Space</button>  
-  <button onclick="toneMapReinhardWithExposure()">Tone Mapping Reinhard With Exposure</button>  
-  <button onclick="enhanceCanvasImageColorAndSharpen()">Image Enhancement Color And Sharpen</button>
-  <button id="invertcolor">Invert Colors</button>
-  <button onclick="downscaleImage(canvas, 1024, 1024);">Downscale Image Progressively</button>
-  <button onclick="upscaleAndSharpen(canvas, 1024, 1024);">Upscale Image Progressively</button>  
-</fieldset>
+  <!-- TAB MENU -->
+  <div class="tab-container">
+    <div class="tabs-scroll" id="tabsScroll">
+      <div class="tab" onclick="showTab('imageProcessing')">🖼️ Image</div>
+      <div class="tab" onclick="showTab('imageAnalysis')">🧠 Analysis</div>
+      <div class="tab" onclick="showTab('idCardTools')">🖨️ ID</div>
+      <div class="tab" onclick="showTab('thresholding')">🌀 Threshold</div>
+      <div class="tab" onclick="showTab('svgTools')">🌐 SVG</div>
+      <div class="tab" onclick="showTab('pdfTools')">📄 PDF</div>
+      <div class="tab" onclick="showTab('printTools')">🖨️ Print</div>
+      <div class="tab" onclick="showTab('canvasTools')">🌀 Canvas</div>
+    </div>
+  </div>
 
-<!-- IMAGE ANALYSIS & SEGMENTATION -->
-<fieldset>
-  <legend>🧠 Image Analysis & Segmentation</legend>
-  <button onclick="applySobelEdgeDetection()">Detect Edges (Sobel Filter)</button>
-  <button onclick="segmentImageByLuminance()">Segment Image (Luminance Threshold)</button>
-  <button onclick="adaptiveLuminanceSegmentation()">Adaptive Threshold</button>
-  <button onclick="adaptiveLuminanceMaskColor()">adaptive Luminance Mask Color</button>
-  <button onclick="adaptiveLuminanceMaskWithContours()">adaptive Luminance Mask Color Conters</button>
-  <button onclick="segmentImageByOtsu()">Otsu Threshold</button>
-  <button onclick="unsharpMasking(1.5, 2);">Unsharp Masking</button>
-  <button onclick="contrastStretchingWithHistogramClipping();">Histogram Clipping</button>
-  <button onclick="equalizeHSVValueHistogramWithMask();">equalize HSV Histogram</button>
-</fieldset>
+  <!-- TAB CONTENTS -->
 
-<!-- IMAGE TO ID CARD / RESIZING -->
-<fieldset>
-  <legend>🖨️ ID Card & Image Resizing</legend>
-  <button id="idcardcapture">Capture 3.4in x 2.2in Photo</button>
-  <button id="idcardsgenerate">ID Card Generation</button>
-  <button id="resizeimage">Resize Image In KB</button>
-  <button id="centercontent">Center Content</button>
-  <button id="heightresize">Resize Images to 285mm</button>
-  <button id="displayblock">Display Block</button>
-  <button id="idcard">Resize Images to ID Card</button>
-  <button id="idcardstacked">Resize Images to ID Card Stacked Position</button>
-  <button id="resizetoA4">Images to A4 Size</button>
-</fieldset>
+  <div class="tab-content" id="imageProcessing">
+    <button id="warpBtn">Warp Image</button>
+    <button id="canvastoimage">Canvas to Image</button>
+    <button id="removePointsBtn">Show Remove Points</button>
+    <button id="rotate">Rotate Canvas Clockwise</button>
+    <button id="invertcolor">Invert Colors</button>
+    <button onclick="autoTrimWhiteSpace()">Auto Trim White Space</button>
+    <button onclick="autoTrimblackSpace()">Auto Trim Black Space</button>
+    <button onclick="applyBrightnessAdjustment()">Adjust Brightness</button>
+    <button id="print">Print</button>
+    <button onclick="downscaleImage(canvas, 1024, 1024);">Downscale Image</button>
+    <button onclick="upscaleAndSharpen(canvas, 1024, 1024);">Upscale Image</button>
+  </div>
 
-<!-- EMBEDDING & CONVERSIONS -->
-<fieldset>
-  <legend>🌐 Embedding & Conversion</legend>
-  <button id="textlayerdisplay">Show or Hide Text Layer</button>
-  <button id="embedsvgimages">SVG Embed Images to URL</button>
-  <button id="canvastoimage">Canvas to Image</button>
-</fieldset>
+  <div class="tab-content" id="imageAnalysis">
+    <button onclick="contrastStretchingWithHistogramClipping();">Histogram Clipping</button>
+    <button onclick="applyContrastStretching(true);">Auto Light Image Enhancement</button>
+    <button id="sharpenImage">Image Sharpening Kernel</button>
+    <button onclick="applyMagicFilter()">Enhance Contrast</button>
+    <button onclick="applyBiHistogramEqualizationWithEdgePreservation()">Bi Histogram Equalization</button>
+    <button onclick="adaptiveHistogramEqualization()">CLAHE</button>
+    <button onclick="adaptiveHistogramEqualizationReinhard()">CLAHE Reinhard</button>
+    <button onclick="dualGammaCLAHE(64, 40, 0.5, 1.5);">Dual Exposure CLAHE</button>
+    <button onclick="enhancePhoto(canvas, 1.15, 1.0);">Enhance Photo</button>
+    <button onclick="applyGammaCorrection()">Gamma Correction</button>
+    <button onclick="gradientShadowRemovalWithGuidedFilter(document.querySelector('canvas'));">Shadow Removal</button>    
+    <button onclick="applyHighPassFilter()">High Pass Filter</button>
+    <button onclick="applyGaussianBlur()">Gaussian Blur</button>
+    <button onclick="applyGuidedFilter(8, 0.02);">Guided Filter</button>
+    <button onclick="applyMedianBlur()">Median Blur</button>
+    <button onclick="adaptiveLuminanceSegmentationWithCCL()">Luminance Seg + CCL</button>
+    <button onclick="globalContrastStretching()">Global Contrast</button>
+    <button onclick="toneMapReinhardWithExposure()">Tone Mapping</button>
+    <button onclick="enhanceCanvasImageColorAndSharpen()">Color + Sharpen</button>
+    <button onclick="applySobelEdgeDetection()">Sobel Edge Detection</button>
+    <button onclick="unsharpMasking(1.5, 2);">Unsharp Masking</button>
+    <button onclick="wienerFilterColor(canvas, 7);">Wiener Filter Deblur</button>
+    <button onclick="applyDynamicHistogramEqualization();">Dynamic Histogram Equalization</button>
+  </div>
 
-<!-- PDF TOOLS -->
-<fieldset>
-  <legend>📄 PDF Tools</legend>
-  <button id="mergePdfBtn">Merge PDFs</button>
-  <button id="downloadFirstPages">Only First Pages of PDF</button>
-  <button id="cropPdf">Crop PDF (Top 3.5in, Bottom 2.5in)</button>
-  <button id="twopagecrop">Two Page Crop</button>
-  <button id="generatePdf">Generate Images to PDF</button>
-  <label for="filename" style="display: block;">Name for PDF: <input id="filename" value=""></label>
-  <button id="ManualdoublesideWithBlanks">Manual double side With Blanks</button>
-  <button id="ManualBookletWithBlanks">Manual Booklet With Blanks</button>
-</fieldset>
+  <div class="tab-content" id="idCardTools">
+    <button id="idcardcapture">Capture 3.4x2.2in</button>
+    <button id="idcardsgenerate">Generate ID Card</button>
+    <button id="resizeimage">Resize Image (KB)</button>
+    <button id="centercontent">Center Content</button>
+    <button id="heightresize">Resize to 285mm</button>
+    <button id="displayblock">Display Block</button>
+    <button id="idcard">Resize to ID Card</button>
+    <button id="idcardstacked">Resize to ID Card (Stacked)</button>
+    <button id="resizetoA4">Resize to A4</button>
+  </div>
 
-<!-- PRINT & DOCUMENT OUTPUT -->
-<fieldset>
-  <legend>🖨️ Print & Document Output</legend>
-  <button id="noofprint" onclick="generatefidaPDF()">Pending Page Print Slip</button>
-  <button id="print">Print Window</button>
-  <button id="generatepptx">Download A4 PPTX</button>
-  <button onclick='window.location.href="camscanner://scan"'>Open CamScanner</button>
-  <button onclick="openWhatsApp()">Chat on WhatsApp</button>
+  <div class="tab-content" id="thresholding">
+    <button onclick="segmentImageByOtsu()">Otsu Threshold</button>
+    <button onclick="adaptiveLuminanceSegmentation()">Adaptive Threshold</button>
+    <button onclick="segmentImageByLuminance()">Luminance Threshold</button>
+    <button onclick="adaptiveLuminanceMaskColor()">Luminance Mask Color</button>
+    <button onclick="adaptiveLuminanceMaskWithContours()">Luminance Mask + Contours</button>
+    <button onclick="intelligentEdgeAwareThresholding()">Edge-Aware Thresholding</button>
+    <button onclick="edgeAwareAdaptiveThresholdingSobel()">Edge-Aware (Sobel)</button>
+    <button onclick="edgeAwareAdaptiveThresholdingColorPreserved()">Color Preserved</button>
+    <button onclick="edgeAwareAdaptiveThresholding()">Adaptive Thresholding</button>
+  </div>
 
-</fieldset>
+  <div class="tab-content" id="svgTools">
+    <button id="textlayerdisplay">Show/Hide Text Layer</button>
+    <button id="embedsvgimages">Embed SVG Images</button>
+    <button id="pdfpagetocanvas">PDF to Canvas</button>
+    <button id="removetag">Remove Tags</button>
+    <button id="togglesvg">Show/Hide SVG</button>
+  </div>
 
-<!-- CANVAS TOOLS -->
-<fieldset>
-  <legend>🌀 Canvas Tools</legend>  
-  <label for="rotationSlider">Rotation (degrees): </label>
-  <input type="range" id="rotationSlider" min="-45" max="45" value="0">
-  <span id="angleValue">0°</span>
-  <label for="refno">Enter Reference Number:</label>
-<input type="text" id="refno" placeholder="e.g. 20151746013001" />
-<a href="#" id="openBillLink" class="btn btn-lg btn-success">Open My Bill</a>        
-</fieldset>
+  <div class="tab-content" id="pdfTools">
+    <button id="mergePdfBtn">Merge PDFs</button>
+    <button id="downloadFirstPages">First Pages Only</button>
+    <button id="cropPdf">Crop PDF</button>
+    <button id="twopagecrop">Two Page Crop</button>
+    <button id="generatePdf">Images to PDF</button>
+    <label for="filename">PDF Name: <input id="filename" value="" /></label>
+    <button id="ManualdoublesideWithBlanks">Manual Double Side</button>
+    <button id="ManualBookletWithBlanks">Manual Booklet</button>
+  </div>
+
+  <div class="tab-content" id="printTools">
+    <button id="noofprint" onclick="generatefidaPDF()">Pending Page Slip</button>
+    <button id="generatepptx">Download A4 PPTX</button>
+    <button onclick='window.location.href="camscanner://scan"'>Open CamScanner</button>
+    <button onclick="openWhatsApp()">Chat on WhatsApp</button>
+    <button onclick="googletranslate()">Translate Urdu → English</button>
+  </div>
+
+  <div class="tab-content" id="canvasTools">
+    <label for="rotationSlider">Rotation (degrees): </label>
+    <input type="range" id="rotationSlider" min="-45" max="45" value="0">
+    <span id="angleValue">0°</span><br /><br />
+    <label for="refno">Reference No.:</label>
+    <input type="text" id="refno" placeholder="e.g. 20151746013001" />
+    <a href="#" id="openBillLink" class="btn btn-lg btn-success">Open My Bill</a>
+  </div>
+
   
 </div>
   <div><canvas id="canvas"></canvas>
 </div>
 <div>
-
+</div>
   <div id="array">
                     <table>
                       <tbody><tr><td></td><td></td></tr>
@@ -194,6 +255,7 @@
   </div>
 </div>
 
+
   <script>
     const upload = document.getElementById("upload");
     const imageSelector = document.getElementById("imageSelector");
@@ -209,11 +271,19 @@
     class ImageObject {
       constructor(img) {
         this.img = img;
+        /*
         this.points = [
           { x: 10, y: 10 },
           { x: img.width - 10, y: 10 },
           { x: img.width - 10, y: img.height - 10 },
           { x: 10, y: img.height - 10 }
+        ];
+        */
+        this.points = [
+          { x: 0, y: 0 },
+          { x: img.width, y: 0 },
+          { x: img.width, y: img.height },
+          { x: 0, y: img.height }
         ];
         this.imageData = null;
       }
@@ -243,6 +313,7 @@
   }
   await renderPdfWithTextOverlay(pdfBytes, file.name);
   */
+  await processPdf(file, useTextOverlay = true);
 
       const pdfBytes = await file.arrayBuffer();
       const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
@@ -282,6 +353,7 @@
   updateImageSelector();
   loadCurrentImage();
   console.log(fileListPdf);
+  document.querySelector('#svg-container').style.display = "none";
 });
 
     function updateImageSelector() {
@@ -297,7 +369,6 @@
   canvas.height = current.img.height;
   draw(); // Draw the image with the current points on the canvas
 }
-
 
     function draw() {
   const current = images[currentImageIndex];
@@ -530,8 +601,11 @@ async function dropHandler(event) {
         const file = event.dataTransfer.items[i].getAsFile();
         if (file.type.startsWith('image/')) {
           await processFile(file); // process image
-        } else if (file.type === 'application/pdf') {
-          await processPdf(file); // process PDF pages
+          console.log("image");
+        } else if (file.type === 'application/pdf') {          
+          fileListPdf.push({ file });
+          await processPdf(file, useTextOverlay = true)
+          console.log("pdf");
         }
       }
     }
@@ -553,8 +627,7 @@ function processFile(file) {
   });
 }
 
-async function processPdf(file, useTextOverlay = false) {
-  fileListPdf.push({ file });
+async function processPdf(file, useTextOverlay = false) {  
 
   const pdfBytes = await file.arrayBuffer();
   const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
@@ -587,6 +660,7 @@ if (!container) {
   container = document.createElement('div');
   container.id = 'svg-container';
   document.body.appendChild(container); // or another parent element
+  console.log("svgcontainer");
 }
 
       const title = document.createElement('h2');
@@ -630,6 +704,7 @@ if (!container) {
         textLayerDiv.style.height = `${viewport.height}px`;
         textLayerDiv.style.position = 'relative';
         textLayerDiv.style.marginTop = '10px';
+        textLayerDiv.style.display = 'none';
 
         for (const item of textContent.items) {
           const transform = pdfjsLib.Util.transform(viewport.transform, item.transform);
@@ -668,6 +743,7 @@ document.addEventListener('paste', async (e) => {
       if (file.type.startsWith('image/')) {
         promises.push(processFile(file));
       } else if (file.type === 'application/pdf') {
+        fileListPdf.push({ file });
         promises.push(processPdf(file, useTextOverlay = true));
       }
     }
@@ -1068,7 +1144,8 @@ if (printType) {
   clonedNode.style.paddingTop = '0.1in';
 
   // Append the cloned node
-  document.querySelector("#array").appendChild(clonedNode);
+  await document.querySelector("#array").appendChild(clonedNode);
+
   window.print();
 } else{
   window.print();
@@ -2123,113 +2200,6 @@ function applyMagicFilter(threshold = 180) {
 
     ctx.putImageData(imageData, 0, 0);
 }
-
-function equalizeHSVValueHistogramWithMask(canvas = document.querySelector("canvas"), blendFactor = 0.5, mask = null) {
-  const ctx = canvas.getContext("2d");
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-
-  const width = canvas.width;
-  const height = canvas.height;
-
-  const vHistogram = new Array(256).fill(0);
-  const vValues = [];
-
-  // Step 1: Build V histogram only from masked pixels
-  for (let i = 0; i < data.length; i += 4) {
-    const pixelIndex = i / 4;
-
-    if (mask && !mask[pixelIndex]) continue;
-
-    const r = data[i] / 255;
-    const g = data[i + 1] / 255;
-    const b = data[i + 2] / 255;
-
-    const { h, s, v } = rgbToHsv(r, g, b);
-    const vInt = Math.floor(v * 255);
-    vHistogram[vInt]++;
-    vValues.push({ h, s, v, index: i });
-  }
-
-  // Step 2: Compute CDF for masked region
-  const cdf = new Array(256).fill(0);
-  cdf[0] = vHistogram[0];
-  for (let i = 1; i < 256; i++) {
-    cdf[i] = cdf[i - 1] + vHistogram[i];
-  }
-
-  const cdfMin = cdf.find(v => v > 0);
-  const total = cdf[255];
-  const lookup = cdf.map(v =>
-    total > cdfMin ? ((v - cdfMin) / (total - cdfMin)) : 0
-  );
-
-  // Step 3: Apply equalization only to masked pixels
-  for (const { h, s, v, index } of vValues) {
-    const vEq = lookup[Math.floor(v * 255)];
-    const vBlended = blendFactor * vEq + (1 - blendFactor) * v;
-    const { r, g, b } = hsvToRgb(h, s, vBlended);
-
-    data[index] = Math.round(r * 255);
-    data[index + 1] = Math.round(g * 255);
-    data[index + 2] = Math.round(b * 255);
-    // alpha remains unchanged
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-}
-
-
-function rgbToHsv(r, g, b) {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const delta = max - min;
-
-  let h = 0;
-  if (delta !== 0) {
-    if (max === r) {
-      h = ((g - b) / delta) % 6;
-    } else if (max === g) {
-      h = (b - r) / delta + 2;
-    } else {
-      h = (r - g) / delta + 4;
-    }
-    h *= 60;
-    if (h < 0) h += 360;
-  }
-
-  const s = max === 0 ? 0 : delta / max;
-  const v = max;
-  return { h, s, v };
-}
-
-function hsvToRgb(h, s, v) {
-  const c = v * s;
-  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-  const m = v - c;
-
-  let r = 0, g = 0, b = 0;
-  if (0 <= h && h < 60) {
-    [r, g, b] = [c, x, 0];
-  } else if (60 <= h && h < 120) {
-    [r, g, b] = [x, c, 0];
-  } else if (120 <= h && h < 180) {
-    [r, g, b] = [0, c, x];
-  } else if (180 <= h && h < 240) {
-    [r, g, b] = [0, x, c];
-  } else if (240 <= h && h < 300) {
-    [r, g, b] = [x, 0, c];
-  } else {
-    [r, g, b] = [c, 0, x];
-  }
-
-  return {
-    r: r + m,
-    g: g + m,
-    b: b + m
-  };
-}
-
 
 function applyBiHistogramEqualizationWithEdgePreservation() {
     const canvas = document.querySelector("canvas");
@@ -5360,13 +5330,26 @@ document.getElementById('ManualBookletWithBlanks').addEventListener('click', asy
 
 
 document.querySelector('#centercontent').addEventListener("click", function() {
-  const parent = document.querySelector('#array').parentElement;
+  const parent = document.querySelector('#array');
   
   // Toggle between empty and "0 auto"
   if (parent.style.margin === "") {
     parent.style.margin = "0 auto"; // center horizontally    
   } else {
     parent.style.margin = ""; // reset to default
+  }
+
+  document.querySelector('#array table').style.borderSpacing = "0px";
+});
+
+document.querySelector('#togglesvg').addEventListener("click", function() {
+  const parent = document.querySelector('#svg-container');
+  
+  // Toggle between empty and "0 auto"
+  if (parent.style.display === "none") {
+    parent.style.display = "block"; // center horizontally    
+  } else {
+    parent.style.display = "none"; // reset to default
   }
 });
 
@@ -6007,9 +5990,117 @@ function autoTrimWhiteSpace(canvas = document.querySelector("canvas")) {
   const trimmedData = ctx.getImageData(left, top, trimmedWidth, trimmedHeight);
 
   // Resize canvas and draw the trimmed image
-  canvas.width = trimmedWidth;
-  canvas.height = trimmedHeight;
-  ctx.putImageData(trimmedData, 0, 0);
+  //canvas.width = trimmedWidth;
+  //canvas.height = trimmedHeight;
+  //ctx.putImageData(trimmedData, 0, 0);
+
+  // Step 1: Create a temporary canvas element in memory (not shown in the DOM)
+const tempcanvas = document.createElement('canvas');
+const tempctx = tempcanvas.getContext('2d');
+
+// Step 2: Get the current image
+const current = images[currentImageIndex];
+
+// Step 3: Set the tempcanvas size to match the image
+tempcanvas.width = current.img.width;
+tempcanvas.height = current.img.height;
+
+// Step 4: Draw the image onto the temporary canvas
+tempctx.drawImage(current.img, 0, 0);
+
+const trimmedDatatemp = tempctx.getImageData(left, top, trimmedWidth, trimmedHeight);
+
+tempcanvas.width = trimmedWidth;
+  tempcanvas.height = trimmedHeight;
+  tempctx.putImageData(trimmedDatatemp, 0, 0);
+
+
+  // Create new image object with rotated image and updated points
+  const newImg = new Image();
+  newImg.src = tempcanvas.toDataURL();
+  newImg.onload = () => {
+    images[currentImageIndex] = new ImageObject(newImg);
+
+    // pointsDrawn = true;  // Don’t auto-show the points
+    loadCurrentImage();
+  };
+}
+
+function autoTrimblackSpace(canvas = document.querySelector("canvas")) {
+  if (!canvas) {
+    console.error("Canvas element not found.");
+    return;
+  }
+
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+
+  let top = null, bottom = null, left = null, right = null;
+
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const index = (y * canvas.width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const a = data[index + 3];
+
+      // Consider pixel "non-white" if it's not almost pure white (tolerance: 250+)
+      if (!(r < 5 && g < 5 && b < 5 && a > 0)) {
+        if (top === null || y < top) top = y;
+        if (bottom === null || y > bottom) bottom = y;
+        if (left === null || x < left) left = x;
+        if (right === null || x > right) right = x;
+      }
+    }
+  }
+
+  if (top === null) {
+    console.warn("No non-white content found. Skipping trim.");
+    return;
+  }
+
+  const trimmedWidth = right - left + 1;
+  const trimmedHeight = bottom - top + 1;
+
+  const trimmedData = ctx.getImageData(left, top, trimmedWidth, trimmedHeight);
+
+  // Resize canvas and draw the trimmed image
+  //canvas.width = trimmedWidth;
+  //canvas.height = trimmedHeight;
+  //ctx.putImageData(trimmedData, 0, 0);
+
+  // Step 1: Create a temporary canvas element in memory (not shown in the DOM)
+const tempcanvas = document.createElement('canvas');
+const tempctx = tempcanvas.getContext('2d');
+
+// Step 2: Get the current image
+const current = images[currentImageIndex];
+
+// Step 3: Set the tempcanvas size to match the image
+tempcanvas.width = current.img.width;
+tempcanvas.height = current.img.height;
+
+// Step 4: Draw the image onto the temporary canvas
+tempctx.drawImage(current.img, 0, 0);
+
+const trimmedDatatemp = tempctx.getImageData(left, top, trimmedWidth, trimmedHeight);
+
+tempcanvas.width = trimmedWidth;
+  tempcanvas.height = trimmedHeight;
+  tempctx.putImageData(trimmedDatatemp, 0, 0);
+
+
+  // Create new image object with rotated image and updated points
+  const newImg = new Image();
+  newImg.src = tempcanvas.toDataURL();
+  newImg.onload = () => {
+    images[currentImageIndex] = new ImageObject(newImg);
+
+    // pointsDrawn = true;  // Don’t auto-show the points
+    loadCurrentImage();
+  };
 }
 
 document.querySelector('#heightresize').addEventListener("click", function(){
@@ -6080,90 +6171,386 @@ function contrastStretchingWithHistogramClipping(canvas = document.querySelector
   ctx.putImageData(imageData, 0, 0);
 }
 
-
-  </script>
-  <h1>Cache Locally</h1>
-  <p>This PWA accepts shared content from Android.</p>
-
-  <!-- 🔘 Custom Install Button -->
-  <button id="installBtn" style="display:none;">Install App</button>
-
-  <h1>Received Shared Content</h1>
-  <div id="output"></div>
-
-  <script>
-    async function getFormData() {
-      const formData = await navigator?.serviceWorker?.ready.then(reg => {
-        reg.navigationPreload?.getState();
-      });
-
-      if (!formData) {
-        console.warn("No preload form data.");
-        return;
-      }
-
-      const data = await formData.formData();
-      const title = data.get('title');
-      const text = data.get('text');
-      const url = data.get('url');
-      const file = data.get('media');
-
-      const output = document.getElementById('output');
-      output.innerHTML = `
-        <p><strong>Title:</strong> ${title}</p>
-        <p><strong>Text:</strong> ${text}</p>
-        <p><strong>URL:</strong> ${url}</p>
-      `;
-
-      if (file && file.type.startsWith('image/')) {
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(file);
-        img.style.maxWidth = '300px';
-        output.appendChild(img);
-      }
-    }
-
-    window.addEventListener('DOMContentLoaded', getFormData);
-  </script>
-  
-  <script>
-    if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/service-worker.js")
-    .then(() => console.log("SW registered"))
-    .catch(err => console.error("SW registration failed:", err));
+function googletranslate() {
+  const text = document.querySelector('#refno').value.trim();
+  if (text) {
+    const encodedText = encodeURIComponent(text);
+    const url = `https://translate.google.com/?hl=en&sl=ur&tl=en&text=${encodedText}&op=translate`;
+    window.open(url, '_blank'); // Opens in a new tab
+  } else {
+    alert("Please enter some text.");
+  }
 }
 
-    // Handle install prompt
-    let deferredPrompt;
-    const installBtn = document.getElementById('installBtn');
+document.getElementById('removetag').addEventListener("click", function () {
+  document.querySelector('#svg-container').style.display = "block";
 
-    window.addEventListener('beforeinstallprompt', (e) => {
-      // Stop the automatic prompt
-      e.preventDefault();
-      deferredPrompt = e;
+      document.querySelectorAll("[x='524']").forEach(e => e.parentElement.remove());
+      document.querySelectorAll("[width='225px']").forEach(e => e.remove());
 
-      // Show the custom install button
-      installBtn.style.display = 'inline';
+document.querySelectorAll('h4').forEach(el => {
+  if (el.textContent.trim() === 'Page 2') {
+    if (el.nextElementSibling) {
+      el.nextElementSibling.remove(); // remove sibling first
+    }
+    el.remove(); // then remove the <h4>
+  }
+});
 
-      installBtn.addEventListener('click', () => {
-        installBtn.style.display = 'none';
-        deferredPrompt.prompt();
+document.querySelectorAll("[font-size='45px']").forEach(function(e){
+    e.remove();
+});
 
-        deferredPrompt.userChoice.then((choiceResult) => {
-          if (choiceResult.outcome === 'accepted') {
-            console.log('User accepted the install prompt');
-          } else {
-            console.log('User dismissed the install prompt');
-          }
-          deferredPrompt = null;
-        });
-      });
+      generatefidaPDF();
     });
+
+    document.querySelector("#pdfpagetocanvas").addEventListener("click", async function(e){  
+
+  const loadPromises = fileListPdf.map(async (file) => {
+    if (file.type === "application/pdf") {
+       
+      const pdfBytes = await file.arrayBuffer();
+      const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+      const pageImages = [];
+
+      for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+        const page = await pdfDoc.getPage(pageNum);
+
+        const viewport = page.getViewport({ scale: 2 }); // Adjust scale as needed
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: context, viewport }).promise;
+
+        // Optionally convert canvas to Image
+        const img = new Image();
+        img.src = canvas.toDataURL("image/png");
+        await new Promise((res) => img.onload = res);
+
+        pageImages.push(new ImageObject(img, file));
+      }
+
+      return pageImages;
+
+    } else {
+      return []; // to avoid undefined entries in results
+    }
+  });
+
+  // Flatten the array of arrays (because PDFs return arrays)
+  const nestedImages = await Promise.all(loadPromises);  
+  images = nestedImages.flat();
+
+  currentImageIndex = 0;
+  updateImageSelector();
+  loadCurrentImage();
+  console.log(fileListPdf);  
+    })
+
+    function applyDynamicHistogramEqualization() {
+    const canvas = document.querySelector("canvas");
+    if (!canvas) {
+        console.error("Canvas element not found.");
+        return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    const { width, height } = canvas;
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+
+    const histogram = new Uint32Array(256); // Use typed array for speed
+    const lightnessArray = new Float32Array(data.length / 4);
+    const hslArray = new Array(data.length / 4);
+
+    // Step 1: Compute lightness and histogram
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+        const r = data[i] / 255;
+        const g = data[i + 1] / 255;
+        const b = data[i + 2] / 255;
+
+        const [h, s, l] = rgbToHsl(r, g, b);
+        const lum = Math.round(l * 255);
+
+        histogram[lum]++;
+        lightnessArray[j] = l;
+        hslArray[j] = [h, s]; // Save only h and s; recompute l later
+    }
+
+    // Step 2: Smooth histogram
+    const smoothHistogram = smoothArray(histogram, 5);
+
+    // Step 3: Detect local minima
+    const segments = [0];
+    for (let i = 1; i < 255; i++) {
+        if (smoothHistogram[i] < smoothHistogram[i - 1] &&
+            smoothHistogram[i] < smoothHistogram[i + 1]) {
+            segments.push(i);
+        }
+    }
+    segments.push(255);
+
+    // Step 4: Build lightness mapping
+    const map = new Uint8Array(256);
+
+    for (let s = 0; s < segments.length - 1; s++) {
+        const start = segments[s];
+        const end = segments[s + 1];
+
+        const segmentHist = histogram.slice(start, end + 1);
+        const total = segmentHist.reduce((sum, val) => sum + val, 0);
+        if (total === 0) {
+            for (let i = start; i <= end; i++) map[i] = i;
+            continue;
+        }
+
+        let cdf = 0;
+        for (let i = 0; i < segmentHist.length; i++) {
+            cdf += segmentHist[i];
+            const normalized = Math.round((cdf / total) * (end - start));
+            map[start + i] = Math.min(start + normalized, 255);
+        }
+    }
+
+    // Step 5: Apply mapping and update pixels
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+        const [h, s] = hslArray[j];
+        const lOld = lightnessArray[j];
+        const lum = Math.round(lOld * 255);
+        const newL = map[lum] / 255;
+
+        const [r, g, b] = hslToRgb(h, s, newL);
+        data[i] = Math.round(r * 255);
+        data[i + 1] = Math.round(g * 255);
+        data[i + 2] = Math.round(b * 255);
+        // Alpha remains unchanged
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+}
+
+// Smooth array with moving average kernel
+function smoothArray(arr, kernelSize = 5) {
+    const smoothed = new Float32Array(arr.length);
+    const half = Math.floor(kernelSize / 2);
+
+    for (let i = 0; i < arr.length; i++) {
+        let sum = 0, count = 0;
+        for (let k = -half; k <= half; k++) {
+            const idx = i + k;
+            if (idx >= 0 && idx < arr.length) {
+                sum += arr[idx];
+                count++;
+            }
+        }
+        smoothed[i] = sum / count;
+    }
+    return smoothed;
+}
+
+// RGB to HSL conversion (normalized input: 0-1)
+function rgbToHsl(r, g, b) {
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+
+    if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = ((g - b) / d + (g < b ? 6 : 0)); break;
+            case g: h = ((b - r) / d + 2); break;
+            case b: h = ((r - g) / d + 4); break;
+        }
+        h /= 6;
+    }
+
+    return [h, s, l];
+}
+
+// HSL to RGB conversion (normalized output: 0-1)
+function hslToRgb(h, s, l) {
+    if (s === 0) return [l, l, l]; // Achromatic
+
+    const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+    };
+
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+
+    return [
+        hue2rgb(p, q, h + 1 / 3),
+        hue2rgb(p, q, h),
+        hue2rgb(p, q, h - 1 / 3)
+    ];
+}
+
+function wienerFilterColor(canvas, kernelSize = 5, noiseVar = null) {
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+
+    const channels = [new Float32Array(width * height), new Float32Array(width * height), new Float32Array(width * height)];
+
+    // Split RGB channels
+    for (let i = 0; i < data.length; i += 4) {
+        const idx = i / 4;
+        channels[0][idx] = data[i];     // R
+        channels[1][idx] = data[i + 1]; // G
+        channels[2][idx] = data[i + 2]; // B
+    }
+
+    const half = Math.floor(kernelSize / 2);
+    const outputChannels = [];
+
+    for (let c = 0; c < 3; c++) {
+        const channel = channels[c];
+        const integral = new Float32Array((width + 1) * (height + 1));
+        const integralSq = new Float32Array((width + 1) * (height + 1));
+
+        // Compute integral and squared integral images
+        for (let y = 1; y <= height; y++) {
+            for (let x = 1; x <= width; x++) {
+                const i = (y - 1) * width + (x - 1);
+                const idx = y * (width + 1) + x;
+                const val = channel[i];
+
+                const above = integral[idx - (width + 1)];
+                const left = integral[idx - 1];
+                const aboveLeft = integral[idx - (width + 2)];
+
+                const aboveSq = integralSq[idx - (width + 1)];
+                const leftSq = integralSq[idx - 1];
+                const aboveLeftSq = integralSq[idx - (width + 2)];
+
+                integral[idx] = val + above + left - aboveLeft;
+                integralSq[idx] = val * val + aboveSq + leftSq - aboveLeftSq;
+            }
+        }
+
+        // Estimate noise variance if not provided
+        let localNoiseVar = noiseVar;
+        if (noiseVar === null) {
+            let sum = 0, sumSq = 0;
+            for (let i = 0; i < channel.length; i++) {
+                sum += channel[i];
+                sumSq += channel[i] * channel[i];
+            }
+            const mean = sum / channel.length;
+            const variance = sumSq / channel.length - mean * mean;
+            localNoiseVar = variance * 0.05; // 5% of variance assumed to be noise
+        }
+
+        const filtered = new Float32Array(width * height);
+
+        // Helper to compute sum in box region using integral image
+        function getBoxSum(img, x1, y1, x2, y2) {
+            const w = width + 1;
+            const A = img[y1 * w + x1];
+            const B = img[y1 * w + x2 + 1];
+            const C = img[(y2 + 1) * w + x1];
+            const D = img[(y2 + 1) * w + (x2 + 1)];
+            return D - B - C + A;
+        }
+
+        // Apply Wiener filter
+        for (let y = 0; y < height; y++) {
+            const y1 = Math.max(0, y - half);
+            const y2 = Math.min(height - 1, y + half);
+
+            for (let x = 0; x < width; x++) {
+                const x1 = Math.max(0, x - half);
+                const x2 = Math.min(width - 1, x + half);
+                const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+
+                const sum = getBoxSum(integral, x1, y1, x2, y2);
+                const sumSq = getBoxSum(integralSq, x1, y1, x2, y2);
+
+                const mean = sum / area;
+                const variance = Math.max(sumSq / area - mean * mean, 0);
+
+                const pixel = channel[y * width + x];
+                const ratio = variance / (variance + localNoiseVar);
+                filtered[y * width + x] = mean + ratio * (pixel - mean);
+            }
+        }
+
+        outputChannels[c] = filtered;
+    }
+
+    // Merge filtered channels back
+    for (let i = 0; i < width * height; i++) {
+        const r = Math.max(0, Math.min(255, outputChannels[0][i]));
+        const g = Math.max(0, Math.min(255, outputChannels[1][i]));
+        const b = Math.max(0, Math.min(255, outputChannels[2][i]));
+
+        const idx = i * 4;
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+}
+
+function showTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      const clickedTab = Array.from(document.querySelectorAll('.tab')).find(tab => tab.onclick.toString().includes(tabId));
+      if (clickedTab) clickedTab.classList.add('active');
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      showTab('imageProcessing');
+    });
+
+    const scrollContainer = document.getElementById('tabsScroll');
+    let isDown = false, startX, scrollLeft;
+
+    scrollContainer.addEventListener('mousedown', (e) => {
+      isDown = true;
+      startX = e.pageX - scrollContainer.offsetLeft;
+      scrollLeft = scrollContainer.scrollLeft;
+    });
+
+    scrollContainer.addEventListener('mouseleave', () => isDown = false);
+    scrollContainer.addEventListener('mouseup', () => isDown = false);
+    scrollContainer.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - scrollContainer.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      scrollContainer.scrollLeft = scrollLeft - walk;
+    });
+
+    scrollContainer.addEventListener('touchstart', (e) => {
+      isDown = true;
+      startX = e.touches[0].pageX - scrollContainer.offsetLeft;
+      scrollLeft = scrollContainer.scrollLeft;
+    });
+
+    scrollContainer.addEventListener('touchmove', (e) => {
+      if (!isDown) return;
+      const x = e.touches[0].pageX - scrollContainer.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      scrollContainer.scrollLeft = scrollLeft - walk;
+    });
+
+    scrollContainer.addEventListener('touchend', () => isDown = false);
+
   </script>
-</body>
-</html>
 
 
-
-
-
+</body></html>
