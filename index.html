@@ -188,7 +188,7 @@ td{
 
     #output {
       margin-top: 20px;
-      max-width: 800px;
+      max-width: 90%;
       margin-left: auto;
       margin-right: auto;
       text-align: left;
@@ -7640,16 +7640,17 @@ async function ocrimagecanvas() {
     return;
   }
 
-  outputDiv.textContent = 'Processing image from canvas...';
-
   // Copy the drawn image from #canvas to #processedcanvas
   processedcanvas.width = canvas.width;
   processedcanvas.height = canvas.height;
   ctxp.drawImage(canvas, 0, 0);
 
-  // Remove any old bounding boxes
+  // Remove bounding boxes from wrapper (not from output)
   wrapper.querySelectorAll('.text-box').forEach(box => box.remove());
-  outputDiv.textContent = 'Running OCR...';
+
+  const status = document.createElement('div');
+  status.textContent = 'Running OCR...';
+  outputDiv.appendChild(status);
 
   try {
     const result = await Tesseract.recognize(processedcanvas, 'eng', {
@@ -7659,32 +7660,64 @@ async function ocrimagecanvas() {
 
     const words = result.data.words || [];
     const fullText = result.data.text.trim() || 'No text detected.';
-    outputDiv.innerHTML = ''; // Clear previous content
 
-    // Display parsed text
+    // --- create a new block for this OCR result ---
+    const block = document.createElement('div');
+    block.className = 'ocr-result';
+    block.style.display = 'flex';
+    block.style.alignItems = 'flex-start';
+    block.style.gap = '10px';
+    block.style.margin = '12px 0';
+    block.style.borderTop = '1px solid #ddd';
+    block.style.paddingTop = '10px';
+
+    // left column = image
+    const imgCol = document.createElement('div');
+    const img = document.createElement('img');
+    img.src = processedcanvas.toDataURL();
+    img.style.maxWidth = '250px';
+    img.style.border = '1px solid #ccc';
+    img.style.borderRadius = '6px';
+    imgCol.appendChild(img);
+
+    // right column = text output
+    const textCol = document.createElement('div');
+    textCol.style.flex = '1';
+    textCol.style.fontFamily = 'monospace';
+    textCol.style.whiteSpace = 'pre-wrap';
+    textCol.style.fontSize = '13px';
+    textCol.style.lineHeight = '1.4';
+
+    // add parsed text or table formatting
     const lines = fullText.split('\n');
     lines.forEach(line => {
       if (line.includes('|')) {
         const table = document.createElement('table');
         const row = document.createElement('tr');
-        line.split('|')
-          .map(cell => cell.trim())
-          .filter(Boolean)
-          .forEach(cell => {
-            const td = document.createElement('td');
-            td.textContent = cell;
-            row.appendChild(td);
-          });
+        line.split('|').map(c => c.trim()).filter(Boolean).forEach(cell => {
+          const td = document.createElement('td');
+          td.textContent = cell;
+          td.style.border = '1px solid #ccc';
+          td.style.padding = '2px 6px';
+          row.appendChild(td);
+        });
         table.appendChild(row);
-        outputDiv.appendChild(table);
+        textCol.appendChild(table);
       } else if (line.trim()) {
         const p = document.createElement('p');
         p.textContent = line.trim();
-        outputDiv.appendChild(p);
+        textCol.appendChild(p);
       }
     });
 
-        // Bounding box drawing (same as upload logic)
+    block.appendChild(imgCol);
+    block.appendChild(textCol);
+    outputDiv.appendChild(block);
+
+    // remove temporary status
+    status.remove();
+
+    // --- draw bounding boxes on wrapper as before ---
     const rect = processedcanvas.getBoundingClientRect();
     const scaleX = rect.width / processedcanvas.width;
     const scaleY = rect.height / processedcanvas.height;
@@ -7706,47 +7739,49 @@ async function ocrimagecanvas() {
       const fontSize = boxH * 0.75;
 
       let newBox = { left: boxX, top: boxY, right: boxX + boxW, bottom: boxY + boxH };
-
-      const maxAttempts = 10;
-      let attempt = 0;
       const offset = 2;
-
-      while (placedBoxes.some(existing => boxesOverlap(existing, newBox)) && attempt < maxAttempts) {
+      let attempts = 0;
+      while (placedBoxes.some(b => boxesOverlap(b, newBox)) && attempts < 10) {
         boxY += offset;
         newBox.top += offset;
         newBox.bottom += offset;
-        attempt++;
+        attempts++;
       }
-
       placedBoxes.push({ ...newBox });
 
       const box = document.createElement('div');
       box.className = 'text-box';
       box.textContent = text;
-
       Object.assign(box.style, {
+        position: 'absolute',
         left: `${boxX}px`,
         top: `${boxY}px`,
         width: `${boxW}px`,
         height: `${boxH}px`,
         fontSize: `${fontSize}px`,
         lineHeight: `${fontSize}px`,
+        background: 'rgba(255,255,255,0.6)',
+        border: '1px solid rgba(0,0,0,0.1)',
+        borderRadius: '3px',
         userSelect: 'text',
         padding: '0 4px',
       });
-
       wrapper.appendChild(box);
     });
 
   } catch (err) {
     console.error(err);
-    outputDiv.textContent = 'OCR failed: ' + err.message;
+    const errDiv = document.createElement('div');
+    errDiv.textContent = 'OCR failed: ' + err.message;
+    errDiv.style.color = 'red';
+    outputDiv.appendChild(errDiv);
   }
-  // Optional: your existing passport MRZ parser
-    if (typeof parsePassportMRZ === 'function') {
-      parsePassportMRZ();
-    }
+
+  if (typeof parsePassportMRZ === 'function') {
+    parsePassportMRZ();
+  }
 }
+
 
 
 </script>
@@ -7755,7 +7790,14 @@ async function ocrimagecanvas() {
     const textInput = document.getElementById("textInput");
     const receivedText = document.getElementById("receivedText");
 
-    let pc = new RTCPeerConnection();
+    //let pc = new RTCPeerConnection();
+    let pc = new RTCPeerConnection({
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:global.stun.twilio.com:3478" }
+  ]
+});
+
     let dataChannel;
     let iceCandidates = [];
 
@@ -7840,8 +7882,4 @@ async function ocrimagecanvas() {
     }
     
   </script>
-
-
-
-
 </body></html>
