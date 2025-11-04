@@ -9,7 +9,7 @@
     body {
   font-family: Arial, sans-serif;
   margin: 0;
-  background: linear-gradient(130deg, #654ea3 0%, #eaafc8 50%, #94bbe9 100%);
+  background: linear-gradient(130deg, #ffffff 20%, #0ea5a4 50%, #0ea5a4 100%);
   overflow-x: hidden;
   position: relative;
   padding:0;
@@ -96,6 +96,9 @@ td{
 @media print {
   button, select, input, h3, canvas, label, span, fieldset, h2, h4, .tab-container, .tab-content.active {
     display: none !important;
+  }
+  svg{
+    display: none;
   }
   div#array img {
     width: 100%;
@@ -216,9 +219,29 @@ td{
 </head>
 <body ondrop="dropHandler(event);" ondragover="dragOverHandler(event);">
   <div>
-    <h3 style="text-align: center;background:white;font-size: 26pt;">Atauxel Hybrid App for Images &amp; Pdfs</h3>
+    <!-- <h3 style="text-align: center;background:white;font-size: 26pt;">Atauxel Hybrid App for Images &amp; Pdfs</h3> -->
+    <svg xmlns="http://www.w3.org/2000/svg" width="600" height="250" viewBox="20 20 600 250">
+  <!-- Icon (left) -->
+  <g transform="translate(60,60)">
+    <rect width="160" height="160" rx="28" fill="#0EA5A4"></rect>
+    <g transform="translate(20,20)" fill="#fff">
+      <!-- A shape -->
+      <path d="M20 120 L60 10 L100 120 L80 120 L67 86 L53 86 L40 120 Z"></path>
+      <!-- X shape crossing A -->
+      <path d="M110 20 L90 40 L130 80 L90 120 L110 140 L150 100 L190 140 L210 120 L170 80 L210 40 L190 20 L150 60 Z" opacity="0.0"></path>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(260,120)">
+    <text x="0" y="26" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="600" fill="#0F172A">Atauxel</text>
+    <text x="0" y="76" font-family="Inter, Arial, sans-serif" font-size="20" fill="#2563EB">Cross-Platform Hybrid App</text>
+    <!-- pure JavaScript Universal Environment -->
+  </g>
+</svg>
   <input type="file" id="upload" multiple="">
   <select id="imageSelector"></select>
+  <button id="pasteButton">Paste Load Images</button>
   <!-- TAB MENU -->
   <div class="tab-container">
     <div class="tabs-scroll" id="tabsScroll">
@@ -250,6 +273,7 @@ td{
     <button onclick="zoomIn()">Zoom In</button>
     <button onclick="zoomOut()">Zoom Out</button>
     <button onclick="resetZoom()">Reset</button>
+    <button onclick="ocrimagecanvas()">OCR Of Image</button>
   </div>
 
   <div class="tab-content" id="imageAnalysis">
@@ -302,6 +326,7 @@ td{
     <button id="idcardcapture">Capture 3.4x2.2in</button>
     <button id="idcardsgenerate">Generate ID Card</button>        
     <button id="idcard">Resize to ID Card</button>
+    <button id="oneidcard">1 Copy of Each Card</button>
     <button id="idcardstacked">Resize to ID Card (Stacked)</button>
   </div>
 
@@ -693,7 +718,7 @@ function loadCurrentImage() {
     });
     */
 
-    let pointsDrawn = true; // Flag to control if points and lines should be drawn
+    let pointsDrawn = false; // Flag to control if points and lines should be drawn
 
 warpBtn.addEventListener("click", () => {
   applyPerspectiveWarp();
@@ -966,6 +991,57 @@ document.addEventListener('paste', async (e) => {
   }
   console.log(fileListPdf);
 }, false);
+
+
+async function handleClipboardFiles(files) {
+  const promises = [];
+
+  for (const file of files) {
+    if (file.type.startsWith('image/')) {
+      promises.push(processFile(file));
+    } else if (file.type === 'application/pdf') {
+      fileListPdf.push({ file });
+      promises.push(processPdf(file, true));
+    }
+  }
+
+  try {
+    await Promise.all(promises);
+    console.log('✅ All files processed:', files);
+  } catch (error) {
+    console.error('❌ Error processing files:', error);
+  }
+}
+
+// 🧩 Handle button click (secure clipboard access)
+document.querySelector("#pastebutton").addEventListener('click', async () => {
+  try {
+    const clipboardItems = await navigator.clipboard.read();
+    const files = [];
+
+    for (const clipboardItem of clipboardItems) {
+      for (const type of clipboardItem.types) {
+        const blob = await clipboardItem.getType(type);
+
+        // Only handle images or PDFs
+        if (type.startsWith('image/') || type === 'application/pdf') {
+          const extension = type.split('/')[1] || 'bin';
+          const file = new File([blob], `clipboard_${Date.now()}.${extension}`, { type });
+          files.push(file);
+        }
+      }
+    }
+
+    if (files.length > 0) {
+      await handleClipboardFiles(files);
+    } else {
+      alert('No supported files (image/pdf) found in clipboard.');
+    }
+  } catch (err) {
+    console.error('❌ Clipboard read failed:', err);
+    alert('Clipboard access not allowed or not supported in this browser.');
+  }
+});
 
 
 // Attach drop and dragover event listeners
@@ -1331,6 +1407,60 @@ document.querySelector('#print').addEventListener("click", function() {
     window.print();
 });
 
+document.querySelector("#oneidcard").addEventListener("click", function(){
+  document.querySelectorAll("img").forEach(function(e){
+      e.style.width = "3.4in";
+      e.style.height = "2.2in";
+    });
+    document.querySelector("table").style.margin = "0 auto";
+    document.querySelector("table").style.borderSpacing = "45px 15px";
+    document.querySelector("table").style.pageBreakAfter = "always";
+
+    // Clone the table node
+  const clonedNode = document.querySelector('#array table').cloneNode(true);
+  // Set padding style
+  clonedNode.style.paddingTop = '0.1in';
+  // Append the cloned node
+  document.querySelector("#array").appendChild(clonedNode);
+
+  document.querySelectorAll("#array table:nth-child(1) tr td:nth-child(1) img").forEach(function(e){
+    e.parentElement.style.width = "3.4in";    
+    e.remove();    
+    
+    
+    let imgs = document.querySelectorAll("#array table:nth-child(1) img");
+
+for (let i = 0; i < (imgs.length - 1) / 2; i++) {
+  let tds = document.querySelectorAll("#array table:nth-child(1) td:nth-child(1)");
+  let emptyTd = Array.from(tds).find(td => !td.querySelector("img"));
+  if (emptyTd) {
+    emptyTd.replaceChildren(imgs[imgs.length - 1]);
+  }
+}
+
+
+});
+
+document.querySelectorAll("#array table:last-child tr td:nth-child(2) img").forEach(function(e){
+    e.parentElement.style.width = "3.4in";
+    e.remove();
+    //e.parentElement.replaceChildren(e.closest("tr").nextElementSibling.querySelector("td:nth-child(1) img"))
+
+    let imgs = [...document.querySelectorAll("#array table:nth-of-type(2) img")];
+let tds = [...document.querySelectorAll("#array table:nth-of-type(2) td:nth-child(2)")];
+
+for (let i = 0; i < (imgs.length - 1) / 2; i++) {
+  let emptyTd = tds.find(td => !td.querySelector("img"));
+  if (emptyTd) {
+    emptyTd.replaceChildren(imgs[imgs.length - 1]);
+  }
+}
+
+
+});
+
+})
+
 document.querySelector('#idcard').addEventListener("click", async function() {
   await generatePortraitPDF();
 
@@ -1390,6 +1520,23 @@ document.querySelectorAll("img")[1].style.scale = "-1";
 
 
 document.querySelector('#resizeimage').addEventListener("click", function(){
+if (document.querySelector('.selected')){
+  document.querySelector('.selected').style.outline = '';  
+
+  //images.push(document.querySelector('.selected').src);   
+  
+  const selectedImg = document.querySelector('.selected')
+  images.push(new ImageObject(selectedImg, selectedImg.file || null));  
+
+  document.querySelector('.selected').classList.remove('selected');
+  currentImageIndex = images.length - 1;
+  images[currentImageIndex].points = []; // Clear points
+  pointsDrawn = false;  // Enable drawing points/lines after switching images
+  
+  updateImageSelector();
+  loadCurrentImage();
+}
+  
   const originalCanvas = document.querySelector('canvas');
 const targetSizeKB = parseFloat(prompt("Enter target size in KB:")-0.2);
 
@@ -2025,7 +2172,7 @@ window.open(blobUrl, '_blank');
   document.querySelector('#resizetoA4').addEventListener("click", function(){
     document.querySelectorAll("img").forEach(function(e){
       e.style.width = "210mm";
-      e.style.height = "297mm";
+      e.style.height = "290mm";
     })
   })
 
@@ -3760,10 +3907,16 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   pptx.defineLayout({ name: 'A4', width: slideWidth, height: slideHeight });
   pptx.layout = 'A4';
 
-  const images = document.querySelectorAll('img');
   const DPI = 96; // standard screen DPI
+  const imagesarray = document.querySelectorAll('img');  
+  
+  if (!imagesarray.length){
+    images.forEach(function(e){
+      imagesarray = e.img.src
+    })
+  }
 
-  for (let img of images) {
+  for (let img of imagesarray) {
     if (img.src.startsWith("data:image")) {
       const imgWidthPx = img.naturalWidth;
       const imgHeightPx = img.naturalHeight;
@@ -7119,8 +7272,7 @@ document.querySelector('#output').style.fontFamily = "Jameel Noori Nastaleeq";
             outputDiv.appendChild(p);
           }
         });
-
-        parsePassportMRZ();
+      
 
         // Draw bounding boxes with collision avoidance
         const rect = processedcanvas.getBoundingClientRect();
@@ -7179,11 +7331,11 @@ document.querySelector('#output').style.fontFamily = "Jameel Noori Nastaleeq";
 
           wrapper.appendChild(box);
         });
-
       } catch (err) {
         console.error(err);
         outputDiv.textContent = 'OCR failed: ' + err.message;
       }
+      parsePassportMRZ();
     };
   });
 
@@ -7400,61 +7552,47 @@ function parsePassportMRZ() {
   if (!raw.trim()) {
     console.warn("❌ Empty #output");
     return null;
-  }
+  }  
 
-  // 1️⃣ Normalize hidden characters and flatten newlines
-  let clean = raw
-    .normalize('NFKC')                 // unify Unicode forms
-    .replace(/[^\x20-\x7E\n]/g, '')    // remove non-ASCII chars
-    .replace(/\r/g, '')
-    .replace(/\n{2,}/g, '\n')
-    .trim();
+  // 2️⃣ Extract data using regex patterns
+  const passportNumber =
+    (raw.match(/\b[A-Z]\d{7,9}\b/))?.[0] || '';
 
-  // 2️⃣ Find two MRZ lines near the end of text
-  const mrzMatch = clean.match(/P<[A-Z]{3}[A-Z<]{5,}\n?[A-Z0-9<]{40,}/i);
-  if (!mrzMatch) {
-    console.warn("⚠️ MRZ not found — showing last 200 chars:");
-    console.log(clean.slice(-200));
-    return null;
-  }
+  const cnic = (raw.match(/(\d{13})(?=<|$)/) || [])[1] || '';
 
-  // 3️⃣ Split into MRZ lines (handle glued OCR output)
-  let mrz = mrzMatch[0].replace(/\s+/g, '\n').trim();
-  let [line1, line2] = mrz.split(/\n/);
-  if (!line2) {
-    const possibleSplit = mrz.match(/(.{44})(.{44,})/);
-    if (possibleSplit) [, line1, line2] = possibleSplit;
-  }
+  const nameLine =
+    raw.match(/P<[A-Z]{3}[A-Z<]+/i)?.[0] ||
+    raw.match(/[A-Z]{3,}<<[A-Z<]+/i)?.[0] ||
+    '';
 
-  if (!line1 || !line2) {
-    console.warn("⚠️ Couldn’t separate MRZ lines");
-    return null;
-  }
-
-  // 4️⃣ Parse core MRZ fields
-  const country = line1.substring(2, 5);
-  const names = line1.substring(5).split('<');
-  const lastName = names[0].replace(/<+/g, '');
-  const firstName = names.slice(2).join(' ').replace(/<+/g, '');
+  const country = nameLine.substring(2, 5) || 'UNK';
+  const names = nameLine.substring(5).split('<');
+  const lastName = names[0]?.replace(/<+/g, '') || '';
+  const firstName = names.slice(2).join(' ').replace(/<+/g, '') || '';
   const fullName = (firstName + ' ' + lastName).trim();
 
-  const passportNumber = line2.substring(0, 9).replace(/<+/g, '');
-  const nationality = line2.substring(10, 13);
-  const dob = line2.substring(13, 19);
-  const gender = line2.substring(20, 21);
-  const expiry = line2.substring(21, 27);
+  const nationality = (raw.match(/\bPAK\b/i))[0].toUpperCase();
 
-  // ✅ CNIC extraction — fix for trailing <
-  const cnic = (line2.match(/(\d{13})(?=<|$)/)?.[1] || '');
+  const gender = (raw.match(/\bM\b|\bF\b/i)?.[0] || '').toUpperCase();
+// DOB: digits between PAK and M/F
+const dobMatch = raw.match(/PAK[A-Z0-9<]*?(\d{6})[A-Z0-9<]*?[MF]/i);
+const dob = dobMatch ? dobMatch[1] : '';
 
-  const fmt = yymmdd => {
-    if (!yymmdd || yymmdd.length !== 6) return '';
-    const y = +yymmdd.slice(0, 2),
-      m = yymmdd.slice(2, 4),
-      d = yymmdd.slice(4, 6);
-    return `${d}-${m}-${y > 30 ? 1900 + y : 2000 + y}`;
-  };
+// Gender + Expiry: M/F followed by 6 digits
+const genderExpiryMatch = raw.match(/(?<!\s)[MF](\d{6})/i);
+const expiry = genderExpiryMatch ? genderExpiryMatch[1] : '';
 
+
+// Format helper (YYMMDD → DD-MM-YYYY)
+const fmt = yymmdd => {
+  if (!yymmdd || yymmdd.length !== 6) return '';
+  const y = +yymmdd.slice(0, 2),
+        m = yymmdd.slice(2, 4),
+        d = yymmdd.slice(4, 6);
+  return `${d}-${m}-${y > 30 ? 1900 + y : 2000 + y}`;
+};
+
+  // 3️⃣ Construct parsed object
   const parsed = {
     country,
     fullName,
@@ -7466,30 +7604,150 @@ function parsePassportMRZ() {
     cnic
   };
 
-  const output = document.querySelector("#output");
-
-// Show in console as a table (optional)
-console.table(parsed);
-
-// Append a readable version to the page
-// 🧱 Build HTML table for single object
-const htmlTable = `
-  <table border="1" style="border-collapse:collapse; margin-top:10px; width:100%; font-family:sans-serif;">
-    <thead>
-      <tr><th>Field</th><th>Value</th></tr>
-    </thead>
-    <tbody>
-      ${Object.entries(parsed)
-        .map(([key, value]) => `<tr><td>${key}</td><td>${value}</td></tr>`)
-        .join("")}
-    </tbody>
-  </table>
-`;
-
-output.innerHTML += htmlTable;
-
+  renderTable(parsed);
   return parsed;
 }
+
+
+// 🧱 Helper to show result in HTML
+function renderTable(parsed) {
+  console.table(parsed);
+  const output = document.querySelector("#output");
+  const htmlTable = `
+    <table border="1" style="border-collapse:collapse; margin-top:10px; width:100%; font-family:sans-serif;">
+      <thead>
+        <tr><th>Field</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        ${Object.entries(parsed)
+          .map(([key, value]) => `<tr><td>${key}</td><td>${value}</td></tr>`)
+          .join("")}
+      </tbody>
+    </table>
+  `;
+  output.innerHTML += htmlTable;
+}
+
+async function ocrimagecanvas() {
+  const canvas = document.getElementById('canvas');
+  const processedcanvas = document.getElementById('processedCanvas');
+  const outputDiv = document.getElementById('output');
+  const wrapper = document.getElementById('wrapper');
+  const ctxp = processedcanvas.getContext('2d');
+
+  if (!canvas || !processedcanvas || !ctxp) {
+    console.error('Canvas or processed canvas missing!');
+    return;
+  }
+
+  outputDiv.textContent = 'Processing image from canvas...';
+
+  // Copy the drawn image from #canvas to #processedcanvas
+  processedcanvas.width = canvas.width;
+  processedcanvas.height = canvas.height;
+  ctxp.drawImage(canvas, 0, 0);
+
+  // Remove any old bounding boxes
+  wrapper.querySelectorAll('.text-box').forEach(box => box.remove());
+  outputDiv.textContent = 'Running OCR...';
+
+  try {
+    const result = await Tesseract.recognize(processedcanvas, 'eng', {
+      logger: m => console.log(m),
+      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+    });
+
+    const words = result.data.words || [];
+    const fullText = result.data.text.trim() || 'No text detected.';
+    outputDiv.innerHTML = ''; // Clear previous content
+
+    // Display parsed text
+    const lines = fullText.split('\n');
+    lines.forEach(line => {
+      if (line.includes('|')) {
+        const table = document.createElement('table');
+        const row = document.createElement('tr');
+        line.split('|')
+          .map(cell => cell.trim())
+          .filter(Boolean)
+          .forEach(cell => {
+            const td = document.createElement('td');
+            td.textContent = cell;
+            row.appendChild(td);
+          });
+        table.appendChild(row);
+        outputDiv.appendChild(table);
+      } else if (line.trim()) {
+        const p = document.createElement('p');
+        p.textContent = line.trim();
+        outputDiv.appendChild(p);
+      }
+    });
+
+        // Bounding box drawing (same as upload logic)
+    const rect = processedcanvas.getBoundingClientRect();
+    const scaleX = rect.width / processedcanvas.width;
+    const scaleY = rect.height / processedcanvas.height;
+    const placedBoxes = [];
+
+    function boxesOverlap(a, b) {
+      return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+    }
+
+    words.forEach(word => {
+      const { text, bbox } = word;
+      if (!text.trim()) return;
+
+      const { x0, y0, x1, y1 } = bbox;
+      let boxX = x0 * scaleX;
+      let boxY = y0 * scaleY;
+      const boxW = (x1 - x0) * scaleX;
+      const boxH = (y1 - y0) * scaleY;
+      const fontSize = boxH * 0.75;
+
+      let newBox = { left: boxX, top: boxY, right: boxX + boxW, bottom: boxY + boxH };
+
+      const maxAttempts = 10;
+      let attempt = 0;
+      const offset = 2;
+
+      while (placedBoxes.some(existing => boxesOverlap(existing, newBox)) && attempt < maxAttempts) {
+        boxY += offset;
+        newBox.top += offset;
+        newBox.bottom += offset;
+        attempt++;
+      }
+
+      placedBoxes.push({ ...newBox });
+
+      const box = document.createElement('div');
+      box.className = 'text-box';
+      box.textContent = text;
+
+      Object.assign(box.style, {
+        left: `${boxX}px`,
+        top: `${boxY}px`,
+        width: `${boxW}px`,
+        height: `${boxH}px`,
+        fontSize: `${fontSize}px`,
+        lineHeight: `${fontSize}px`,
+        userSelect: 'text',
+        padding: '0 4px',
+      });
+
+      wrapper.appendChild(box);
+    });
+
+  } catch (err) {
+    console.error(err);
+    outputDiv.textContent = 'OCR failed: ' + err.message;
+  }
+  // Optional: your existing passport MRZ parser
+    if (typeof parsePassportMRZ === 'function') {
+      parsePassportMRZ();
+    }
+}
+
 
 </script>
 <script>
@@ -7580,10 +7838,10 @@ output.innerHTML += htmlTable;
         pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
       });
     }
+    
   </script>
 
 
 
 
 </body></html>
-
