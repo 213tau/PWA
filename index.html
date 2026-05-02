@@ -9,6 +9,27 @@
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.11.0/dist/pptxgen.bundle.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
+        :root { --primary: #007bff; --success: #28a745; --bg: #f4f7f6; --dark: #2c3e50; }        
+        h1 { font-size: 1.6rem; border-bottom: 2px solid #ddd; padding-bottom: 10px; color: var(--dark); display: flex; align-items: center; gap: 10px; }
+        .box { border: 1px solid #ddd; padding: 20px; margin-top: 15px; border-radius: 10px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .tabs { margin-top: 20px; display: flex; gap: 4px; overflow-x: auto; border-bottom: 2px solid #ddd; }
+        .tabs button { padding: 12px 20px; cursor: pointer; border: 1px solid #ddd; border-bottom: none; background: #eee; border-radius: 8px 8px 0 0; font-weight: 600; color: #666; transition: 0.3s; }
+        .tabs button.active { background: #fff; color: var(--primary); border-top: 3px solid var(--primary); padding-bottom: 14px; margin-bottom: -2px; }
+        button { padding: 10px 18px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc; background: #fff; font-weight: 500; }
+        button.primary { background: var(--primary); color: white; border-color: #0056b3; }
+        button.success { background: var(--success); color: white; border-color: #1e7e34; }
+        input, select { padding: 9px; border: 1px solid #ccc; border-radius: 6px; margin: 5px 0; }
+        pre { background: #1e1e1e; color: #9cdcfe; padding: 15px; max-height: 200px; overflow: auto; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 0.85rem; }
+        #imageGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; max-height: 450px; overflow-y: auto; padding: 10px; background: #f9f9f9; border-radius: 8px; }
+        .img-item { border: 2px solid transparent; padding: 8px; border-radius: 8px; cursor: pointer; text-align: center; background: white; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .img-item:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .img-item.selected { border-color: var(--primary); background: #eef7ff; }
+        .img-item img { width: 100%; height: 110px; object-fit: contain; border-radius: 4px; }
+        .date-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; }
+        .date-table th, .date-table td { border: 1px solid #eee; padding: 10px; text-align: left; }
+        .identity-card { background: #f0f7ff; padding: 20px; border-left: 5px solid var(--primary); border-radius: 8px; margin: 10px 0; }
+    </style>
+  <style>
 span{
   display:block;
 }
@@ -190,6 +211,7 @@ span{
     background-color: lightgrey;    
 }
   </style>
+  
 </head>
 
 <body ondrop="dropHandler(event);">
@@ -264,6 +286,7 @@ span{
         <div class="tab" onclick="showTab('pdfTools')">📄 PDF</div>
         <div class="tab" onclick="showTab('printTools')">🖨️ Print</div>
         <div class="tab" onclick="showTab('canvasTools')">🌀 Canvas</div>
+        <div class="tab" onclick="showTab('jszipTools')">JSzip Tools</div>
         <div class="tab" onclick="showTab('TabTools')">Tabs</div>
         <div class="tab" onclick="showTab('SharedTools')">Web Share Api</div>
         <div class="tab" onclick="showTab('electronTools')" style="display:none;">💎 Electron Tools</div>
@@ -426,6 +449,94 @@ span{
     <div class="tab-content" id="SharedTools">
       File Shared via Socket.IO
     </div>
+    <div class="tab-content" id="jszipTools">
+      <h1>📊 PPTX Multi Tool Pro <small style="font-weight: normal; font-size: 0.9rem; opacity: 0.7;">v2.0 Robust</small></h1>
+
+<div class="box">
+    <strong>Step 1: Load Presentation</strong><br>
+    <input type="file" id="jsfileInput" accept=".pptx" style="width: 100%; max-width: 400px;">
+</div>
+
+<div class="tabs">
+    <button onclick="switchTab('date')" id="tabDate" class="active">Dates</button>
+    <button onclick="switchTab('bold')" id="tabBold">Identity Sync</button>
+    <button onclick="switchTab('text')" id="tabText">Global Text</button>
+    <button onclick="switchTab('image')" id="tabImage">Image Swap</button>
+    <button onclick="switchTab('extra')" id="tabExtra">Notes & Extraction</button>
+</div>
+
+<div id="dateTool" class="box">
+    <h3>Date Mapping</h3>
+    <p>Map dates from all slides to the master list on Slide 1.</p>
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <div>
+            <label>Start Date:</label><br>
+            <input type="date" id="startGenDate">
+        </div>
+        <div>
+            <label>Month Gap:</label><br>
+            <input type="number" id="monthGap" value="3">
+        </div>
+        <div>
+            <label>Duration For Work (Days):</label><br>
+            <input type="number" id="dayGap" value="365">
+        </div>
+    </div>
+    <button onclick="generateDateList()" class="primary">Generate Date Pairs</button>
+    <div id="dateEditor" style="display:none; margin-top:15px;">
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
+            <table class="date-table">
+                <thead><tr><th>Slide</th><th>Start (DD-MM-YYYY)</th><th>End (DD-MM-YYYY)</th></tr></thead>
+                <tbody id="dateListBody"></tbody>
+            </table>
+        </div>
+        <button onclick="applyManualDates()" class="success" style="margin-top:10px; width: 100%;">Sync All Dates to Presentation</button>
+    </div>
+</div>
+
+<div id="boldTool" class="box" style="display:none">
+    <h3>Identity Sync</h3>
+    <p>Detects <b>Name S/O Father Name</b> on Slide 2 and applies it everywhere.</p>
+    <button onclick="showMasterIdentity()">Scan Slide 2 for Identity</button>
+    <div id="boldBox"></div>
+    <button onclick="applyGlobalIdentity()" class="primary" id="syncIdentBtn" style="display:none">Apply to All Slides</button>
+</div>
+
+<div id="textTool" class="box" style="display:none">
+    <h3>Global Search & Replace</h3>
+    <div style="display: flex; gap: 10px; flex-direction: column;">
+        <select id="textSelect"></select>
+        <input id="newText" placeholder="Replace with...">
+        <button onclick="addRule()" class="primary">Add Replacement Rule</button>
+    </div>
+    <ul id="rules" style="margin-top: 15px;"></ul>
+    <button onclick="applyTextReplace()" class="success" style="width: 100%;">Run Global Replacement</button>
+</div>
+
+<div id="imageTool" class="box" style="display:none">
+    <h3>Image Gallery</h3>
+    <div id="imageGrid">Upload a file to view media...</div>
+    <div id="imageReplaceActions" style="display:none; margin-top:20px; padding: 15px; background: #eef7ff; border-radius: 8px;">
+        <strong>Replace: <span id="selectedImgName" style="color:var(--primary)"></span></strong><br>
+        <input type="file" id="newImgInput" accept="image/*">
+        <button onclick="processImageReplace()" class="primary">Upload & Swap</button>
+    </div>
+</div>
+
+<div id="extraTool" class="box" style="display:none">
+    <h3>Notes Extractor</h3>
+    <button onclick="extractNotes()" class="primary">Extract Speaker Notes</button>
+    <textarea id="notesArea" rows="10" style="width:100%; margin-top:10px; border-radius: 8px;" placeholder="Notes will appear here..."></textarea>
+</div>
+
+<div class="box" style="background: #2c3e50; color: white; text-align: center;">
+    <strong>Final Step: Export</strong><br>
+    <button onclick="downloadFinal()" class="success" style="font-size: 1.2rem; margin-top: 10px; padding: 15px 30px;">💾 Download Updated PPTX</button>
+</div>
+
+<h3>System Console</h3>
+<pre id="log">Awaiting file upload...</pre>
+    </div>
     <div class="tab-content" id="electronTools">
       <label>Enter Website to Open:</label><br />
       <input id="nameInput" placeholder="Your name" />            
@@ -463,19 +574,11 @@ span{
       <div id="saved" contenteditable="true" style=font-size:16pt>
         <div>Muhammad&nbsp;</div>
         <div>0123456789</div>
+        <div>ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
         <div>Multan1@</div>
-        <div>71705</div>
-        <div>Multanm@6557</div>  
-        <div>36302-6062579-1</div>  
-        <div>123</div>  
         <div>Multan</div>  
         <div>Pakistan</div>  
-        <div></div>  
-        <div>05090113830244</div>
-        <div>Meezan Bank</div>
-        <div>Munawar Hussain</div>
-        <div>36303-3005848-5</div>
-        <div>chrome://settings/content/microphone</div>
+        <div></div>
         <br>
       </div>            
     </div>
@@ -10353,7 +10456,321 @@ document.getElementById('printMonoBtn').addEventListener('click', () => sendPrin
 document.getElementById('printColorBtn').addEventListener('click', () => sendPrintJob('color'));
 
 </script>
+<script>
+let app = { 
+    zip: null, slides: [], cache: {}, doms: {}, 
+    imageUrls: [], rules: [], dates: [], selectedImagePath: null 
+};
 
+const log = (msg) => {
+    const el = document.getElementById("log");
+    el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+    el.scrollTop = el.scrollHeight;
+};
+
+// --- DOM UTILS ---
+function getSlideDOM(path) {
+    if (!app.doms[path]) {
+        const parser = new DOMParser();
+        app.doms[path] = parser.parseFromString(app.cache[path], "application/xml");
+    }
+    return app.doms[path];
+}
+
+function syncDOMToZip(path) {
+    if (!app.doms[path]) return;
+    const serializer = new XMLSerializer();
+    const xmlStr = serializer.serializeToString(app.doms[path]);
+    app.cache[path] = xmlStr;
+    app.zip.file(path, xmlStr);
+}
+
+// --- FILE LOADING ---
+document.getElementById("jsfileInput").addEventListener("change", async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        log("Parsing PPTX structure...");
+        app.zip = await JSZip.loadAsync(await file.arrayBuffer());
+        
+        // Sort slides numerically (slide1, slide2, slide10...)
+        app.slides = Object.keys(app.zip.files)
+            .filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+            .sort((a,b) => {
+                const numA = parseInt(a.match(/\d+/)[0]);
+                const numB = parseInt(b.match(/\d+/)[0]);
+                return numA - numB;
+            });
+
+        for (let s of app.slides) {
+            app.cache[s] = await app.zip.file(s).async("string");
+        }
+
+        log(`Loaded ${app.slides.length} slides successfully.`);
+        refreshTextList();
+        loadImagesToGallery();
+    } catch (err) { log("Error: " + err.message); }
+});
+
+// --- IMAGE TOOL ---
+async function loadImagesToGallery() {
+    const grid = document.getElementById("imageGrid");
+    grid.innerHTML = "Scanning media...";
+    app.imageUrls.forEach(url => URL.revokeObjectURL(url));
+    app.imageUrls = [];
+
+    const media = Object.keys(app.zip.files).filter(f => f.startsWith("ppt/media/"));
+    if (!media.length) { grid.innerHTML = "No images found."; return; }
+
+    grid.innerHTML = "";
+    for (let path of media) {
+        const blob = await app.zip.file(path).async("blob");
+        const url = URL.createObjectURL(blob);
+        app.imageUrls.push(url);
+
+        const item = document.createElement("div");
+        item.className = "img-item";
+        item.onclick = () => {
+            app.selectedImagePath = path;
+            document.querySelectorAll(".img-item").forEach(el => el.classList.remove("selected"));
+            item.classList.add("selected");
+            document.getElementById("imageReplaceActions").style.display = "block";
+            document.getElementById("selectedImgName").textContent = path.split('/').pop();
+        };
+        item.innerHTML = `<img src="${url}" loading="lazy"><div style="font-size:10px; margin-top:5px;">${path.split('/').pop()}</div>`;
+        grid.appendChild(item);
+    }
+}
+
+async function processImageReplace() {
+    const file = document.getElementById("newImgInput").files[0];
+    if (!app.selectedImagePath || !file) return;
+    app.zip.file(app.selectedImagePath, await file.arrayBuffer());
+    log("Swapped: " + app.selectedImagePath);
+    loadImagesToGallery();
+}
+
+// --- IDENTITY TOOL ---
+function showMasterIdentity() {
+    if (!app.slides.length) return;
+    const doc = getSlideDOM(app.slides[1]);
+    const runs = [...doc.getElementsByTagName("a:r")];
+    let name = "", father = "";
+
+    for (let i = 0; i < runs.length; i++) {
+        const txt = runs[i].textContent || "";
+        if (txt.toUpperCase().includes("S/O")) {
+            name = runs[i-1]?.textContent.trim() || "";
+            father = runs[i+1]?.textContent.trim() || "";
+            break;
+        }
+    }
+
+    if (name) {
+        document.getElementById("boldBox").innerHTML = `
+            <div class="identity-card">
+                <strong>Found Pattern:</strong><br>
+                Name: <input id="masterName" value="${name}"><br>
+                Father: <input id="masterFather" value="${father}">
+            </div>`;
+        document.getElementById("syncIdentBtn").style.display = "block";
+    } else {
+        document.getElementById("boldBox").innerHTML = "<p style='color:red'>Could not find 'Name S/O Father' pattern on Slide 1.</p>";
+    }
+}
+
+function applyGlobalIdentity() {
+    const name = document.getElementById("masterName").value;
+    const father = document.getElementById("masterFather").value;
+
+    app.slides.forEach(path => {
+        const doc = getSlideDOM(path);
+        const runs = [...doc.getElementsByTagName("a:r")];
+        let changed = false;
+        for (let i = 0; i < runs.length; i++) {
+            const tNode = runs[i].getElementsByTagName("a:t")[0];
+            if (tNode && tNode.textContent.toUpperCase().includes("S/O")) {
+                if (runs[i-1]?.getElementsByTagName("a:t")[0]) runs[i-1].getElementsByTagName("a:t")[0].textContent = name + " ";
+                if (runs[i+1]?.getElementsByTagName("a:t")[0]) runs[i+1].getElementsByTagName("a:t")[0].textContent = father;
+                changed = true;
+            }
+        }
+        if (changed) syncDOMToZip(path);
+    });
+    log("Identity updated across all slides.");
+}
+
+// --- DATE LOGIC ---
+// --- UPDATED DATE LOGIC ---
+function generateDateList() {
+    const startVal = document.getElementById("startGenDate").value;
+    if (!startVal || app.slides.length < 2) return alert("Select start date and load file.");
+    
+    const mGap = parseInt(document.getElementById("monthGap").value);
+    const dGap = parseInt(document.getElementById("dayGap").value);
+    const dateRegex = /\b\d{1,2}[-\/. ]\d{1,2}[-\/. ]\d{2,4}\b/; // Pattern to detect a date
+
+    let currentStart = new Date(startVal);
+    const tbody = document.getElementById("dateListBody");
+    tbody.innerHTML = "";
+    
+    // Clear any previous mapping
+    app.activeDateSlides = []; 
+
+    // Skip Slide 1 (index 0) and check others
+    for (let i = 1; i < app.slides.length; i++) {
+        const path = app.slides[i];
+        const doc = getSlideDOM(path);
+        const hasDate = [...doc.getElementsByTagName("a:t")].some(node => dateRegex.test(node.textContent));
+
+        // SKIP LOGIC: If no date pattern is found, skip this slide
+        if (!hasDate) {
+            log(`Skipping Slide ${i+1}: No date pattern found.`);
+            continue;
+        }
+
+        // Keep track of which slide index we are actually using
+        app.activeDateSlides.push(path);
+
+        // Calculate Dates
+        let currentEnd = new Date(currentStart);
+        currentEnd.setDate(currentEnd.getDate() + dGap);
+        
+        const tr = document.createElement("tr");
+        tr.setAttribute("data-slide-path", path); // Store path for sync
+        tr.innerHTML = `
+            <td>Slide ${i+1}</td>
+            <td><input type="date" class="m-start" value="${currentStart.toISOString().split('T')[0]}"></td>
+            <td><input type="date" class="m-end" value="${currentEnd.toISOString().split('T')[0]}"></td>`;
+        tbody.appendChild(tr);
+
+        // Set next Start Date
+        let nextStart = new Date(currentEnd);
+        nextStart.setMonth(nextStart.getMonth() + mGap);
+        currentStart = nextStart; 
+    }
+    
+    if (app.activeDateSlides.length === 0) {
+        log("No slides with dates were found.");
+    } else {
+        document.getElementById("dateEditor").style.display = "block";
+    }
+}
+
+function applyManualDates() {
+    const rows = document.querySelectorAll("#dateListBody tr");
+    const regex = /\b\d{1,2}[-\/. ]\d{1,2}[-\/. ]\d{2,4}\b/g;
+    let globalDates = [];
+
+    const fmt = (v) => v.split('-').reverse().join('-');
+
+    rows.forEach((row) => {
+        const sInput = row.querySelector(".m-start").value;
+        const eInput = row.querySelector(".m-end").value;
+        const path = row.getAttribute("data-slide-path");
+
+        const s = fmt(sInput), e = fmt(eInput);
+        globalDates.push(s, e);
+
+        // Apply to the specific slide
+        const doc = getSlideDOM(path);
+        let changed = false;
+        [...doc.getElementsByTagName("a:t")].forEach(node => {
+            if (regex.test(node.textContent)) {
+                let toggle = 0;
+                node.textContent = node.textContent.replace(regex, () => (toggle++ % 2 === 0 ? s : e));
+                changed = true;
+            }
+        });
+        if (changed) syncDOMToZip(path);
+    });
+
+    // Update Slide 1 Summary
+    const masterDoc = getSlideDOM(app.slides[0]);
+    let idx = 0;
+    [...masterDoc.getElementsByTagName("a:t")].forEach(node => {
+        if(regex.test(node.textContent)) {
+            node.textContent = node.textContent.replace(regex, () => globalDates[idx++] || "---");
+        }
+    });
+    syncDOMToZip(app.slides[0]);
+    log(`Dates synced for ${rows.length} slides.`);
+}
+
+// --- TEXT TOOL ---
+function refreshTextList() {
+    const set = new Set();
+    app.slides.forEach(s => {
+        const doc = getSlideDOM(s);
+        [...doc.getElementsByTagName("a:t")].forEach(t => { if(t.textContent.trim()) set.add(t.textContent.trim()); });
+    });
+    const sel = document.getElementById("textSelect");
+    sel.innerHTML = [...set].sort().map(t => `<option value="${t}">${t.substring(0,60)}</option>`).join("");
+}
+
+function addRule() {
+    const oldV = document.getElementById("textSelect").value;
+    const newV = document.getElementById("newText").value;
+    if (!newV) return;
+    app.rules.push({old: oldV, new: newV});
+    const li = document.createElement("li"); li.textContent = `${oldV} → ${newV}`;
+    document.getElementById("rules").appendChild(li);
+}
+
+function applyTextReplace() {
+    app.slides.forEach(s => {
+        const doc = getSlideDOM(s);
+        let changed = false;
+        [...doc.getElementsByTagName("a:t")].forEach(node => {
+            app.rules.forEach(r => { if(node.textContent.trim() === r.old) { node.textContent = r.new; changed = true; }});
+        });
+        if (changed) syncDOMToZip(s);
+    });
+    log("Global text replacement finished.");
+}
+
+// --- EXTRA ---
+async function extractNotes() {
+    let out = []; // Use an array for cleaner joining
+    const notes = Object.keys(app.zip.files)
+        .filter(f => f.includes("notesSlide"))
+        .sort((a, b) => a.localeCompare(b, undefined, {numeric: true})); // Proper numeric sort
+
+    for (let f of notes) {
+        const xml = await app.zip.file(f).async("string");
+        const doc = new DOMParser().parseFromString(xml, "application/xml");
+        
+        const txt = [...doc.getElementsByTagName("a:t")]
+            .filter(t => t.parentNode.tagName !== "a:fld") // Skip slide numbers
+            .map(t => t.textContent)
+            .join("")
+            .trim(); // Remove leading/trailing whitespace
+
+        // Only add to output if the slide actually has note text
+        if (txt.length > 0) {
+            out.push(txt);
+        }
+    }
+    
+    document.getElementById("notesArea").value = out.join("\n"); 
+}
+
+async function downloadFinal() {
+    if (!app.zip) return;
+    const blob = await app.zip.generateAsync({type:"blob"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "updated_pro_presentation.pptx";
+    a.click();
+}
+
+function switchTab(t) {
+    document.querySelectorAll('.box').forEach(b => { if(b.id.includes("Tool")) b.style.display="none"; });
+    document.querySelectorAll('.tabs button').forEach(b => b.classList.remove("active"));
+    document.getElementById(t + "Tool").style.display = "block";
+    document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1)).classList.add("active");
+}
+</script>
 </body>
 
 </html>
