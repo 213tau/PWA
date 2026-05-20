@@ -242,7 +242,7 @@ span{
 
     <input type="file" id="upload" multiple="">
     <select id="imageSelector"></select>
-    <button id="pasteButton">Paste Load Images</button>
+    <button id="pasteButton">Paste Load Images & Text</button>
     <button id="delete">Delete Current Image</button>
     <button id="duplicate">Duplicate Current Image</button>
     <button id="stepDown">Move Up</button>
@@ -447,7 +447,38 @@ span{
         Learning</button>
     </div>
     <div class="tab-content" id="SharedTools">
-      File Shared via Socket.IO
+      <h2>Live Text + File Sync (P2P)</h2>
+
+<p><b>Your ID:</b> <span id="myId">...</span></p>
+<button onclick="copyId()">Copy My ID</button>
+
+<p><b>Share this link:</b></p>
+<input id="shareLink" readonly style="width:100%">
+
+<br><br>
+
+<input id="peerIdInput" placeholder="Enter peer ID">
+<button onclick="connect()">Connect</button>
+
+<br><br>
+
+<textarea id="editor1" placeholder="Start typing..."></textarea>
+
+<br><br>
+
+<input type="file" id="fileInput">
+<button onclick="sendFile()">Send File</button>
+
+<h3>Received Files:</h3>
+<ul id="fileList"></ul>
+
+<h3>Transfer Progress</h3>
+
+<p>Sending:</p>
+<progress id="sendProgress" value="0" max="100"></progress>
+
+<p>Receiving:</p>
+<progress id="recvProgress" value="0" max="100"></progress>
     </div>
     <div class="tab-content" id="jszipTools">
       <h1>📊 PPTX Multi Tool Pro <small style="font-weight: normal; font-size: 0.9rem; opacity: 0.7;">v2.0 Robust</small></h1>
@@ -1625,6 +1656,13 @@ lines.forEach(line => {
           for (const type of clipboardItem.types) {
             const blob = await clipboardItem.getType(type);
 
+// Handle text
+        if (type === 'text/plain') {
+          const blob = await clipboardItem.getType(type);          
+          document.querySelector("#output").innerHTML +=await blob.text();
+        }
+
+
             // Only handle images or PDFs
             if (type.startsWith('image/') || type === 'application/pdf') {
               const extension = type.split('/')[1] || 'bin';
@@ -1636,9 +1674,10 @@ lines.forEach(line => {
 
         if (files.length > 0) {
           await handleClipboardFiles(files);
-        } else {
-          alert('No supported files (image/pdf) found in clipboard.');
         }
+        //else {
+          //alert('No supported files (image/pdf) found in clipboard.');
+        //}
       } catch (err) {
         console.error('❌ Clipboard read failed:', err);
         alert('Clipboard access not allowed or not supported in this browser.');
@@ -7750,7 +7789,8 @@ if (outputEl && outputEl.textContent.trim() !== '') {
       for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
         const page = await pdfDoc.getPage(pageNum);
 
-        const viewport = page.getViewport({ scale: 1 });
+        // 1. Keep scale at 2 for crisp text rendering on the canvas
+        const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
 
@@ -7760,7 +7800,11 @@ if (outputEl && outputEl.textContent.trim() !== '') {
         await page.render({ canvasContext: context, viewport }).promise;
 
         const img = new Image();
-        img.src = canvas.toDataURL("image/png");
+        
+        // 2. CHANGE HERE: Use image/jpeg (or image/webp) and set quality to 0.85
+        // This keeps text sharp but aggressively drops the file size.
+        img.src = canvas.toDataURL("image/jpeg", 0.85); 
+        
         await new Promise(res => (img.onload = res));
 
         pageImages.push(new ImageObject(img, file));
@@ -10341,7 +10385,7 @@ function removePicker() {
 }
 }
 
-const editor = document.getElementById("output");
+//const editor = document.getElementById("output");
 
 function createLine(text = "") {
   const div = document.createElement("div");
@@ -10381,46 +10425,248 @@ editor.addEventListener("keydown", function(e) {
 
 });
   </script>
-  <!-- Socket.IO CDN -->
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
 <script>
-    const socket = io(); // automatically connects to same host & port
 
-    const textarea = document.getElementById("output");
+const CHUNK_SIZE = 16 * 1024;
 
-    // Update textarea with server text
-    socket.on("syncText", (text) => {
-      textarea.innerText = text;
-    });
-
-    // Broadcast changes    
-    textarea.addEventListener("input", () => {
-  if (socket.connected) {
-    socket.emit("updateText", textarea.innerText);
-  } else {
-    console.warn("Socket disconnected – changes not sent.");
-  }
-});
-
-// --- IMAGE SYNC ---
-// When server sends updated images
-socket.on("syncImages", (serverImages) => {
-  images = serverImages; // update local array
-  loadCurrentImage(); // optionally update the DOM
-  console.log("tauseef");
-});
-
-// When you modify images array:
-function syncImages() {
-  socket.emit("updateImages", images);
+// Peer setup
+function generateShortId() {
+  return Math.random().toString(36).substring(2, 8);
 }
 
-    socket.on("connect", () => {
-  console.log("Reconnected to server");
-  // Optionally request latest text or re-send unsent changes
-  socket.emit("requestSync");
+const peer = new Peer(generateShortId(), {
+  config: {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" }
+    ]
+  }
 });
-  </script>
+let conn = null;
+
+let myPeerId = null;
+let isRemoteUpdate = false;
+
+let incomingFiles = {};
+let incomingText = {};
+
+// UI
+const editor = document.getElementById("output");
+const myIdEl = document.getElementById("myId");
+const peerIdInput = document.getElementById("peerIdInput");
+const shareLinkInput = document.getElementById("shareLink");
+
+// INIT
+peer.on("open", (id) => {
+  myPeerId = id;
+  myIdEl.innerText = id;
+
+  const url = `${window.location.origin}${window.location.pathname}?peer=${id}`;
+  shareLinkInput.value = url;
+});
+
+// CONNECTION
+peer.on("connection", (connection) => {
+  conn = connection;
+  setupConn();
+});
+
+function connect() {
+  const peerId = peerIdInput.value.trim();
+
+  if (!peerId) return alert("Enter peer ID");
+  if (peerId === myPeerId) return alert("Cannot connect to yourself");
+
+  conn = peer.connect(peerId);
+  setupConn();
+}
+
+function setupConn() {
+  if (!conn) return;
+
+  conn.on("open", () => {
+    console.log("Connected to:", conn.peer);
+  });
+
+  conn.on("data", handleData);
+
+  conn.on("close", () => {
+    console.log("Disconnected");
+  });
+}
+
+// RECEIVE DATA
+function handleData(data) {
+  const recvProgress = document.getElementById("recvProgress");
+
+  // FILE META
+  if (data.type === "file-meta") {
+    incomingFiles = {
+      name: data.name,
+      fileType: data.fileType,
+      chunks: [],
+      totalChunks: data.totalChunks
+    };
+    recvProgress.value = 0;
+  }
+
+  // FILE CHUNK
+  else if (data.type === "file-chunk") {
+    incomingFiles.chunks[data.index] = data.chunk;
+
+    const received = incomingFiles.chunks.filter(Boolean).length;
+    recvProgress.value = (received / incomingFiles.totalChunks) * 100;
+  }
+
+  // FILE COMPLETE
+  else if (data.type === "file-complete") {
+    const blob = new Blob(incomingFiles.chunks, {
+      type: incomingFiles.fileType || "application/octet-stream"
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const li = document.createElement("li");
+
+    // IMAGE PREVIEW
+    if (incomingFiles.fileType && incomingFiles.fileType.startsWith("image/")) {
+      const img = document.createElement("img");
+      img.src = url;
+      li.appendChild(img);
+    }
+
+    // DOWNLOAD LINK
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = incomingFiles.name;
+    a.innerText = "Download " + incomingFiles.name;
+
+    li.appendChild(a);
+    document.getElementById("fileList").appendChild(li);
+  }
+
+  // TEXT META
+  else if (data.type === "text-meta") {
+    incomingText = {
+      chunks: [],
+      totalChunks: data.totalChunks
+    };
+  }
+
+  // TEXT CHUNK
+  else if (data.type === "text-chunk") {
+    incomingText.chunks[data.index] = data.chunk;
+  }
+
+  // TEXT COMPLETE
+  else if (data.type === "text-complete") {
+    isRemoteUpdate = true;
+    editor.innerHTML = incomingText.chunks.join("");
+    isRemoteUpdate = false;
+  }
+}
+
+// TEXT SYNC
+editor.addEventListener("input", () => {
+  if (!conn || !conn.open || isRemoteUpdate) return;
+
+  const text = editor.innerHTML;
+  const totalChunks = Math.ceil(text.length / CHUNK_SIZE);
+
+  conn.send({ type: "text-meta", totalChunks });
+
+  for (let i = 0; i < totalChunks; i++) {
+    const chunk = text.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+
+    conn.send({
+      type: "text-chunk",
+      chunk,
+      index: i
+    });
+  }
+
+  conn.send({ type: "text-complete" });
+});
+
+// FILE SEND
+document.getElementById("fileInput").addEventListener("change", sendFile);
+
+function sendFile() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file || !conn || !conn.open) {
+    return alert("Select file & connect first");
+  }
+
+  const sendProgress = document.getElementById("sendProgress");
+  sendProgress.value = 0;
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    const buffer = reader.result;
+    const totalChunks = Math.ceil(buffer.byteLength / CHUNK_SIZE);
+
+    conn.send({
+      type: "file-meta",
+      name: file.name,
+      fileType: file.type,
+      totalChunks
+    });
+
+    let offset = 0;
+    let index = 0;
+
+    function sendChunk() {
+      const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
+
+      conn.send({
+        type: "file-chunk",
+        chunk,
+        index
+      });
+
+      offset += CHUNK_SIZE;
+      index++;
+
+      sendProgress.value = (index / totalChunks) * 100;
+
+      if (offset < buffer.byteLength) {
+        setTimeout(sendChunk, 0);
+      } else {
+        conn.send({ type: "file-complete" });
+      }
+    }
+
+    sendChunk();
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+// COPY ID
+function copyId() {
+  navigator.clipboard.writeText(myPeerId);
+  alert("Copied!");
+}
+
+// URL AUTO CONNECT
+const params = new URLSearchParams(window.location.search);
+const peerFromURL = params.get("peer");
+
+if (peerFromURL) {
+  peerIdInput.value = peerFromURL;
+  
+  // Wait a split second for PeerJS to fully open its own connection before dialing out
+  peer.on("open", () => {
+    connect();
+  });
+}
+
+</script>
+
   <script>
 const pdfInput = document.getElementById('upload');
 const printerSelect = document.getElementById('printerSelect');
