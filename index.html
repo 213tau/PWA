@@ -6994,6 +6994,7 @@ if (outputEl && outputEl.textContent.trim() !== '') {
       // Clean up
       document.body.removeChild(form);
     });
+
     document.getElementById('openLink').addEventListener('click', function (e) {
       e.preventDefault(); // Prevent normal <a> behavior
 
@@ -9963,33 +9964,67 @@ div.ondragstart = () => false;
   loadCurrentImage();
 });
 
+async function embedImages(svg) {
+    const images = svg.querySelectorAll("image, svg\\:image");
 
+    for (const img of images) {
 
-    document.querySelector("#svgdownload").addEventListener("click", function () {
-      // Select all SVG elements
-      const svgs = document.querySelectorAll("svg");
+        const href =
+            img.getAttribute("href") ||
+            img.getAttribute("xlink:href");
 
-      svgs.forEach((svg, index) => {
-        // Serialize the SVG to a string
-        const serializer = new XMLSerializer();
-        const svgString = serializer.serializeToString(svg);
+        if (!href || href.startsWith("data:"))
+            continue;
 
-        // Create a Blob with the SVG data
-        const blob = new Blob([svgString], { type: "image/svg+xml" });
+        const response = await fetch(href);
+        const blob = await response.blob();
 
-        // Create a download link
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `image_${index + 1}.svg`;
+        const reader = new FileReader();
 
-        // Trigger download
-        link.click();
+        const base64 = await new Promise(resolve => {
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
 
-        // Release object URL
-        URL.revokeObjectURL(link.href);
-      });
+        img.setAttribute("href", base64);
+        img.setAttributeNS(
+            "http://www.w3.org/1999/xlink",
+            "xlink:href",
+            base64
+        );
+    }
+}
 
-    });
+    document.querySelector("#svgdownload").addEventListener("click", async () => {
+
+    const svgs = document.querySelectorAll(
+        "svg:not(#logo), svg\\:svg:not(#logo)"
+    );
+
+    for (const [index, svg] of [...svgs].entries()) {
+
+        await embedImages(svg);
+
+        svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        svg.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+        const svgString = new XMLSerializer().serializeToString(svg);
+
+        const blob = new Blob([svgString], {
+            type: "image/svg+xml;charset=utf-8"
+        });
+
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `image_${index + 1}.svg`;
+
+        a.click();
+
+        URL.revokeObjectURL(url);
+    }
+});
 
     const { ipcRenderer } = require('electron');
 
