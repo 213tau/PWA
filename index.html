@@ -310,6 +310,7 @@ span{
       <button onclick="applyBrightnessAdjustment()">Adjust Brightness</button>
       <button id="resizeimage">Resize Image (KB)</button>
       <button onclick="downscaleImage(canvas, 1024, 1024);">Downscale Image</button>
+      <button onclick="downscaleAllImages(1024,1024);">Downscale All Image</button>
       <button onclick="upscaleAndSharpen(canvas, 1024, 1024);">Upscale Image</button>
       <button id="ocrrequired">Canvas to Text</button>      
       <label for="rotationSlider">Rotation (degrees): </label>
@@ -3949,6 +3950,38 @@ images.forEach(function (e, index) {
         loadCurrentImage();
       };
     }
+
+    async function downscaleAllImages(maxWidth, maxHeight) {
+    for (let i = 0; i < images.length; i++) {
+        const img = images[i].img || images[i]; // supports ImageObject or Image
+
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+
+        downscaleImage(canvas, maxWidth, maxHeight);
+
+        await new Promise((resolve) => {
+            const newImg = new Image();
+
+            newImg.onload = () => {
+                if (images[i] instanceof ImageObject) {
+                    images[i] = new ImageObject(newImg);
+                } else {
+                    images[i] = newImg;
+                }
+                resolve();
+            };
+
+            newImg.src = canvas.toDataURL("image/png");
+        });
+    }
+
+    loadCurrentImage();
+}
 
     function upscaleAndSharpen(canvas, maxWidth, maxHeight) {
       const originalWidth = canvas.width;
