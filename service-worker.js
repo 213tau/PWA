@@ -1,6 +1,8 @@
 const CACHE_NAME = "my-pwa-cache-v1";
 const ASSETS = [
   "/",                     // serves index.html on Vercel
+  "/index.html",
+  "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png"
 ];
