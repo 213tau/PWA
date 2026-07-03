@@ -11017,6 +11017,22 @@ function switchTab(t) {
     document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1)).classList.add("active");
 }
 </script>
+<link rel="manifest" href="/manifest.json">
+
+<meta name="theme-color" content="#ffffff">
+
+<script>
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", async () => {
+        try {
+            const reg = await navigator.serviceWorker.register("/sw.js");
+            console.log("SW Registered", reg);
+        } catch (err) {
+            console.error(err);
+        }
+    });
+}
+</script>
 </body>
 
 </html>
