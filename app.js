@@ -6046,7 +6046,7 @@ if (outputEl && outputEl.textContent.trim() !== '') {
       if (phoneNumber) {
         const message = encodeURIComponent("Tanveer Studio!"); // Optional pre-filled message
         //const whatsappUrl = `https://wa.me/${phoneNumber}?text=${message}`;
-        const whatsappUrl = `whatsapp://send?phone=92${phoneNumber}?text=${message}`;        
+        const whatsappUrl = `whatsapp://send?phone=92${phoneNumber}&text=${message}`;        
         //window.location.href = whatsappUrl
 
         window.open(whatsappUrl, '_blank'); // Opens in a new tab
