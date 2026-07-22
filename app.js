@@ -8419,24 +8419,36 @@ function moveLineDown() {
 }
 
 function svgdownloadBtn() {
-    // 1. Select the SVG element
-    const svgElement = document.querySelector("#output svg");
+    const outputElement = document.querySelector("#output");
     
-    if (!svgElement) {
-        console.error("No SVG found inside #output");
+    if (!outputElement) {
+        console.error("No #output element found");
         return;
     }
 
-    // 2. Serialize the SVG node to a string
+    // 1. Get the text content which contains the raw SVG markup
+    const rawText = outputElement.textContent || outputElement.innerText;
+
+    // 2. Parse the text string into a real DOM/SVG document
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawText, "image/svg+xml");
+    const svgElement = doc.querySelector("svg");
+
+    if (!svgElement) {
+        console.error("No valid SVG markup found inside #output text");
+        return;
+    }
+
+    // 3. Serialize the parsed SVG node back to a clean string
     const serializer = new XMLSerializer();
     let svgString = serializer.serializeToString(svgElement);
 
-    // 3. Ensure proper XML namespaces are present
-    if(!svgString.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)){
+    // 4. Ensure proper XML namespaces are present
+    if (!svgString.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
         svgString = svgString.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
     }
 
-    // 4. Create a Blob and download link
+    // 5. Create a Blob and trigger the download
     const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     
@@ -8444,7 +8456,6 @@ function svgdownloadBtn() {
     downloadLink.href = url;
     downloadLink.download = "downloaded-image.svg";
     
-    // 5. Trigger download and cleanup
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
