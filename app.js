@@ -8417,3 +8417,36 @@ function moveLineDown() {
         setCaretPosition(editor, charCount + lines[lineIndex + 1].length + 1);
     }
 }
+
+function svgdownloadBtn() {
+    // 1. Select the SVG element
+    const svgElement = document.querySelector("#output svg");
+    
+    if (!svgElement) {
+        console.error("No SVG found inside #output");
+        return;
+    }
+
+    // 2. Serialize the SVG node to a string
+    const serializer = new XMLSerializer();
+    let svgString = serializer.serializeToString(svgElement);
+
+    // 3. Ensure proper XML namespaces are present
+    if(!svgString.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)){
+        svgString = svgString.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+
+    // 4. Create a Blob and download link
+    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    
+    const downloadLink = document.createElement("a");
+    downloadLink.href = url;
+    downloadLink.download = "downloaded-image.svg";
+    
+    // 5. Trigger download and cleanup
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+}
