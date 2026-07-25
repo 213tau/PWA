@@ -2721,69 +2721,24 @@ if ('launchQueue' in window) {
   launchQueue.setConsumer(async (launchParams) => {
     if (!launchParams.files.length) return;
 
-    // Reset UI before processing new files
-    resetViewerUI();
+
+    const fileInput = document.getElementById('upload');
+    const dataTransfer = new DataTransfer();
 
     for (const fileHandle of launchParams.files) {
       const file = await fileHandle.getFile();
       console.log(`Opened file: ${file.name}, Size: ${file.size} bytes`);
-      handleIncomingFile(file);
+      
+      // Add each file to the DataTransfer object
+      dataTransfer.items.add(file);
     }
+
+    // Assign the collected files to the file input element
+    fileInput.files = dataTransfer.files;
+
+    // Optional: Trigger a 'change' event if other parts of your app listen for file selection
+    fileInput.dispatchEvent(new Event('change'));
   });
-}
-
-function resetViewerUI() {
-  const img = document.getElementById('my-image');
-  const pdf = document.getElementById('pdf-viewer');
-  const svg = document.getElementById('svg-container');
-  const binary = document.getElementById('binary-container');
-
-  if (img) img.style.display = 'none';
-  if (pdf) pdf.style.display = 'none';
-  if (svg) svg.innerHTML = '';
-  if (binary) binary.innerText = '';
-}
-
-async function handleIncomingFile(file) {
-  const fileType = file.type;
-  const fileName = file.name.toLowerCase();
-
-  // 1. Handle Standard Images
-  if (fileType.startsWith('image/') && !fileName.endsWith('.svg')) {
-    const imageUrl = URL.createObjectURL(file);
-    const imgTag = document.getElementById('my-image');
-    imgTag.src = imageUrl;
-    imgTag.style.display = 'block';
-    console.log('Image ready to display:', imageUrl);
-  } 
-  
-  // 2. Handle SVGs
-  else if (fileName.endsWith('.svg') || fileType === 'image/svg+xml') {
-    const svgText = await file.text();
-    document.getElementById('svg-container').innerHTML = svgText;
-    console.log('SVG content loaded');
-  } 
-  
-  // 3. Handle PDFs
-  else if (fileType === 'application/pdf') {
-    const pdfUrl = URL.createObjectURL(file);
-    const iframe = document.getElementById('pdf-viewer');
-    iframe.src = pdfUrl;
-    iframe.style.display = 'block';
-    console.log('PDF URL generated:', pdfUrl);
-  } 
-  
-  // 4. Handle PowerPoint (pptx)
-  else if (fileName.endsWith('.pptx')) {
-    const arrayBuffer = await file.arrayBuffer();
-    document.getElementById('binary-container').innerText = 
-      `Loaded PowerPoint: ${file.name} (${arrayBuffer.byteLength} bytes raw data parsed).`;
-    console.log('PowerPoint ArrayBuffer loaded.');
-  } 
-  
-  else {
-    console.warn('Unsupported file format received:', fileType);
-  }
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
