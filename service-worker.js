@@ -88,12 +88,13 @@ self.addEventListener("fetch", (event) => {
         return Response.redirect("/?share=true", 303);
 
       } catch (err) {
-        console.error(err);
+  console.error("Share Target Error:", err);
 
-        return new Response("Share failed", {
-          status: 500
-        });
-      }
+  return new Response(
+    "Share failed:\n" + err.message,
+    { status: 500 }
+  );
+}
     })());
 
     return;
