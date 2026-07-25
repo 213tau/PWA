@@ -136,14 +136,38 @@ for (const img of SELimages) {
 
         } else if (file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
 
-  const zip = await JSZip.loadAsync(file);
   const output = document.querySelector("#output");
   output.innerHTML = "";
+
+  try {
+    log("Parsing PPTX structure...");
+    app.zip = await JSZip.loadAsync(await file.arrayBuffer());
+
+    // Sort slides numerically (slide1, slide2, slide10...)
+    app.slides = Object.keys(app.zip.files)
+      .filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+      .sort((a, b) => {
+        const numA = parseInt(a.match(/\d+/)[0]);
+        const numB = parseInt(b.match(/\d+/)[0]);
+        return numA - numB;
+      });
+
+    for (let s of app.slides) {
+      app.cache[s] = await app.zip.file(s).async("string");
+    }
+
+    log(`Loaded ${app.slides.length} slides successfully.`);
+    if (typeof refreshTextList === "function") refreshTextList();
+    if (typeof loadImagesToGallery === "function") loadImagesToGallery();
+
+  } catch (err) {
+    log("Error: " + err.message);
+  }
 
   const images = [];
 
   /* -------------------- IMAGE EXTRACTION -------------------- */
-  for (const entry of Object.values(zip.files)) {
+  for (const entry of Object.values(app.zip.files)) {
     if (entry.name.startsWith("ppt/media/") && !entry.dir) {
       const blob = await entry.async("blob");
 
@@ -156,12 +180,8 @@ for (const img of SELimages) {
   }
 
   /* -------------------- SLIDE TEXT + TABLES -------------------- */
-  const slideFiles = Object.values(zip.files)
-    .filter(f => f.name.startsWith("ppt/slides/slide") && f.name.endsWith(".xml"));
-
-  for (const slideFile of slideFiles) {
-
-    const xmlText = await slideFile.async("text");
+  for (const slidePath of app.slides) {
+    const xmlText = app.cache[slidePath];
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlText, "application/xml");
 
@@ -172,7 +192,6 @@ for (const img of SELimages) {
     const paragraphs = xmlDoc.getElementsByTagName("a:p");
 
     for (const p of paragraphs) {
-
       const pElement = document.createElement("p");
 
       /* ----- TEXT ALIGNMENT ----- */
@@ -190,7 +209,6 @@ for (const img of SELimages) {
       const runs = p.getElementsByTagName("a:r");
 
       for (const r of runs) {
-
         const textNode = r.getElementsByTagName("a:t")[0];
         if (!textNode) continue;
 
@@ -200,7 +218,6 @@ for (const img of SELimages) {
         const rPr = r.getElementsByTagName("a:rPr")[0];
 
         if (rPr) {
-
           if (rPr.getAttribute("b") === "1")
             span.style.fontWeight = "bold";
 
@@ -232,7 +249,6 @@ for (const img of SELimages) {
     const tables = xmlDoc.getElementsByTagName("a:tbl");
 
     for (const tbl of tables) {
-
       const table = document.createElement("table");
       table.style.borderCollapse = "collapse";
       table.style.marginTop = "20px";
@@ -240,12 +256,10 @@ for (const img of SELimages) {
       const rows = tbl.getElementsByTagName("a:tr");
 
       for (const row of rows) {
-
         const tr = document.createElement("tr");
         const cells = row.getElementsByTagName("a:tc");
 
         for (const cell of cells) {
-
           const td = document.createElement("td");
           td.style.border = "1px solid #333";
           td.style.padding = "8px";
@@ -253,7 +267,6 @@ for (const img of SELimages) {
           const cellParagraphs = cell.getElementsByTagName("a:p");
 
           for (const cp of cellParagraphs) {
-
             const cellP = document.createElement("p");
 
             const cpPr = cp.getElementsByTagName("a:pPr")[0];
@@ -270,7 +283,6 @@ for (const img of SELimages) {
             const runs = cp.getElementsByTagName("a:r");
 
             for (const r of runs) {
-
               const textNode = r.getElementsByTagName("a:t")[0];
               if (!textNode) continue;
 
@@ -280,7 +292,6 @@ for (const img of SELimages) {
               const rPr = r.getElementsByTagName("a:rPr")[0];
 
               if (rPr) {
-
                 if (rPr.getAttribute("b") === "1")
                   span.style.fontWeight = "bold";
 
@@ -309,7 +320,8 @@ for (const img of SELimages) {
     output.appendChild(slideDiv);
   }
 
-  document.querySelector("canvas").style.display = "block";
+  const canvas = document.querySelector("canvas");
+  if (canvas) canvas.style.display = "block";
 
   return images;
 } else if (file.name.endsWith('.zip') || file.type === 'application/zip') {
