@@ -40,7 +40,6 @@ function makeSvgTextEditable(svgElement) {
             // Prevent multiple input boxes if clicked again
             if (document.getElementById("active-svg-input")) return;
 
-            const rect = this.getBoundingClientRect();
             const computedStyle = window.getComputedStyle(this);
 
             // Create an HTML input element
@@ -49,36 +48,45 @@ function makeSvgTextEditable(svgElement) {
             input.id = "active-svg-input";
             input.value = this.textContent;
 
-            // Match input styling precisely to the SVG text
+            // Style input temporarily hidden to compute bounding box accurately
             input.style.position = "absolute";
-            input.style.left = (rect.left + window.scrollX) + "px";
-            input.style.top = (rect.top + window.scrollY) + "px";
-            input.style.width = Math.max(rect.width, 100) + "px";
-            input.style.height = rect.height ? rect.height + "px" : "auto";
+            input.style.zIndex = "9999";
             input.style.fontSize = computedStyle.fontSize;
             input.style.fontFamily = computedStyle.fontFamily;
-            input.style.zIndex = "9999";
-            
+            input.style.border = "1px solid #007bff";
+            input.style.padding = "2px";
+            input.style.background = "white";
+
             document.body.appendChild(input);
-            input.focus();
-            input.select();
+
+            // Use requestAnimationFrame to ensure getBoundingClientRect has valid layout data
+            requestAnimationFrame(() => {
+                const rect = this.getBoundingClientRect();
+                input.style.left = (rect.left + window.scrollX) + "px";
+                input.style.top = (rect.top + window.scrollY) + "px";
+                input.style.width = Math.max(rect.width, 100) + "px";
+                input.style.height = rect.height ? rect.height + "px" : "auto";
+                
+                input.focus();
+                input.select();
+            });
 
             let isSaved = false;
 
             const saveChanges = () => {
                 if (isSaved) return;
                 isSaved = true;
-                textElement.textContent = input.value;
+                this.textContent = input.value;
                 input.remove();
             };
 
-            // Save on Enter key or when clicking outside (blur)
+            // Save on Enter key or cancel on Escape
             input.addEventListener("keydown", function(e) {
                 if (e.key === "Enter") {
                     saveChanges();
                 } else if (e.key === "Escape") {
                     isSaved = true;
-                    input.remove(); // Cancel changes on Escape
+                    input.remove();
                 }
             });
 
