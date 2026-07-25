@@ -3,9 +3,6 @@
   "short_name": "AtauxelPWA",
   "start_url": "/index.html",
   "display": "standalone",
-  //"launch_handler": {
-    //"client_mode": "focus-existing"
-  //},
   "icons": [
     {
       "src": "/icons/icon-192.png",
