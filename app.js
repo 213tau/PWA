@@ -30,6 +30,63 @@
       }
     }
 
+function makeSvgTextEditable(svgElement) {
+    const textElements = svgElement.querySelectorAll("text, tspan");
+
+    textElements.forEach(function(textElement) {
+        textElement.addEventListener("click", function(e) {
+            e.stopPropagation();
+            
+            // Prevent multiple input boxes if clicked again
+            if (document.getElementById("active-svg-input")) return;
+
+            const rect = this.getBoundingClientRect();
+            const computedStyle = window.getComputedStyle(this);
+
+            // Create an HTML input element
+            const input = document.createElement("input");
+            input.type = "text";
+            input.id = "active-svg-input";
+            input.value = this.textContent;
+
+            // Match input styling precisely to the SVG text
+            input.style.position = "absolute";
+            input.style.left = (rect.left + window.scrollX) + "px";
+            input.style.top = (rect.top + window.scrollY) + "px";
+            input.style.width = Math.max(rect.width, 100) + "px";
+            input.style.height = rect.height ? rect.height + "px" : "auto";
+            input.style.fontSize = computedStyle.fontSize;
+            input.style.fontFamily = computedStyle.fontFamily;
+            input.style.zIndex = "9999";
+            
+            document.body.appendChild(input);
+            input.focus();
+            input.select();
+
+            let isSaved = false;
+
+            const saveChanges = () => {
+                if (isSaved) return;
+                isSaved = true;
+                textElement.textContent = input.value;
+                input.remove();
+            };
+
+            // Save on Enter key or when clicking outside (blur)
+            input.addEventListener("keydown", function(e) {
+                if (e.key === "Enter") {
+                    saveChanges();
+                } else if (e.key === "Escape") {
+                    isSaved = true;
+                    input.remove(); // Cancel changes on Escape
+                }
+            });
+
+            input.addEventListener("blur", saveChanges);
+        });
+    });
+}
+
     let fileListPdf = [];
 
     upload.addEventListener("change", async (e) => {
@@ -38,23 +95,26 @@
 
       const loadPromises = files.map(async (file) => {
         if (file.type === "image/svg+xml" || file.name.endsWith(".svg")) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
 
-    reader.onload = () => {
-      const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(reader.result, "image/svg+xml");
-      const svgElement = svgDoc.querySelector("svg");
+      reader.onload = () => {
+        const parser = new DOMParser();
+        const svgDoc = parser.parseFromString(reader.result, "image/svg+xml");
+        const svgElement = svgDoc.querySelector("svg");
 
-      // Insert SVG directly into the DOM
-      document.body.appendChild(svgElement);
+        // Insert SVG directly into the DOM
+        document.body.appendChild(svgElement);
 
-      resolve([svgElement]); // return SVG element for further use
-    };
+        // Enable inline text editing for this specific SVG element
+        makeSvgTextEditable(svgElement);
 
-    reader.readAsText(file);
-  });
-} else if (file.type.startsWith("image/")) {
+        resolve([svgElement]); 
+      };
+
+      reader.readAsText(file);
+    });
+  } else if (file.type.startsWith("image/")) {
           return new Promise((resolve) => {
             const img = new Image();
             img.src = URL.createObjectURL(file);
