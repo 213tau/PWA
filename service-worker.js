@@ -1,4 +1,7 @@
 const CACHE_NAME = "my-pwa-cache-v1";
+const DB_NAME = "share-target-db";
+const STORE_NAME = "sharedFiles";
+
 const ASSETS = [
   "/",                     // serves index.html on Vercel
   "/index.html",
