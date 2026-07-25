@@ -112,7 +112,7 @@ function makeSvgTextEditable(svgElement) {
         const svgElement = svgDoc.querySelector("svg");
 
         // Insert SVG directly into the DOM
-        document.body.appendChild(svgElement);
+        document.querySelector("#svgTools").appendChild(svgElement);
 
         // Enable inline text editing for this specific SVG element
         makeSvgTextEditable(svgElement);
