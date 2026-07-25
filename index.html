@@ -541,6 +541,8 @@ span{
     <div style="display: flex; gap: 10px; flex-direction: column;">
         <select id="textSelect"></select>
         <input id="newText" placeholder="Replace with...">
+      <button id="copyselect">Copy Text from Select</button>    
+        <button id="randomizedate">Randomize Date</button>
         <button onclick="addRule()" class="primary">Add Replacement Rule</button>
     </div>
     <ul id="rules" style="margin-top: 15px;"></ul>
@@ -552,8 +554,10 @@ span{
     <div id="imageGrid">Upload a file to view media...</div>
     <div id="imageReplaceActions" style="display:none; margin-top:20px; padding: 15px; background: #eef7ff; border-radius: 8px;">
         <strong>Replace: <span id="selectedImgName" style="color:var(--primary)"></span></strong><br>
-        <input type="file" id="newImgInput" accept="image/*">
-        <button onclick="processImageReplace()" class="primary">Upload & Swap</button>
+        <input type="file" id="newImgInput" accept="image/*">        
+      <button onclick="processImageReplace('file')" class="primary">Upload & Swap</button>
+            <span>OR</span>
+            <button id="pasteImgBtn" class="primary">Paste from Clipboard</button>
     </div>
 </div>
 
@@ -2689,11 +2693,16 @@ async function extractNotes() {
 
 async function downloadFinal() {
     if (!app.zip) return;
-    const blob = await app.zip.generateAsync({type:"blob"});
+    const blob = await app.zip.generateAsync({ type: "blob" });
+    const now = new Date();
+    const iso = now.toISOString().replace(/:/g, "-").split(".")[0];
+    const finalName = `${filename || "presentation"}_${iso}.pptx`;
+
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "updated_pro_presentation.pptx";
+    a.download = finalName;
     a.click();
+    URL.revokeObjectURL(a.href);
 }
 
 function switchTab(t) {
@@ -2702,6 +2711,68 @@ function switchTab(t) {
     document.getElementById(t + "Tool").style.display = "block";
     document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1)).classList.add("active");
 }
+  document.getElementById('pasteImgBtn').addEventListener('click', async () => {
+    try {
+        const clipboardItems = await navigator.clipboard.read();
+        for (const clipboardItem of clipboardItems) {
+            for (const type of clipboardItem.types) {
+                if (type.startsWith('image/')) {
+                    const blob = await clipboardItem.getType(type);
+                    processImageReplace('clipboard', blob);
+                    return;
+                }
+            }
+        }
+        alert("No image found on clipboard.");
+    } catch (err) {
+        console.error('Failed to read clipboard contents: ', err);
+        alert("Failed to read clipboard. Make sure you've granted permission.");
+    }
+});
+
+async function processImageReplace(source, data) {
+    let fileBuffer;
+    if (source === 'file') {
+        const fileInput = document.getElementById("newImgInput");
+        if (!fileInput.files.length) return;
+        fileBuffer = await fileInput.files[0].arrayBuffer();
+    } else if (source === 'clipboard') {
+        if (!data) return;
+        fileBuffer = await data.arrayBuffer();
+    }
+
+    if (!app.selectedImagePath || !fileBuffer) return;
+
+    app.zip.file(app.selectedImagePath, fileBuffer);
+    log("Swapped: " + app.selectedImagePath);
+    loadImagesToGallery();
+    document.getElementById("imageReplaceActions").style.display = "none";
+}
+
+document.getElementById("copyselect").addEventListener("click", function(){
+    const textSelect = document.getElementById('textSelect');
+    const selectedIndex = textSelect.selectedIndex;
+    if(textSelect.length > 0){
+        document.getElementById('newText').value = textSelect.options[selectedIndex].text;
+    }
+});
+
+document.querySelector("#randomizedate").addEventListener("click", function(){
+    const el = document.querySelector("#newText");
+    const dateStr = el.value || el.textContent;
+    if(!dateStr || !dateStr.includes("-")) return;
+
+    let [day, month, year] = dateStr.split("-");
+    day = String(Math.floor(Math.random() * 28) + 1).padStart(2, "0");
+    month = String(Math.floor(Math.random() * 12) + 1).padStart(2, "0");
+    const newDate = `${day}-${month}-${year}`;
+
+    if (el.value !== undefined) {
+        el.value = newDate;
+    } else {
+        el.textContent = newDate;
+    }
+});
 </script>
 
 <script>
