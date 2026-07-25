@@ -30,6 +30,25 @@
       }
     }
 
+async function uploadAndForwardToEditor(file) {
+    if (!file) return;
+
+    // 1. Sync file to your existing #jsfileInput element (used by the editor script)
+    const jsFileInput = document.getElementById("jsfileInput");
+    if (jsFileInput) {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        jsFileInput.files = dataTransfer.files;
+        
+        // Dispatch change event so the editor's pipeline triggers
+        jsFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // 2. Process through your main multi-type handler if needed
+    const container = document.getElementById("upload");
+    // (Optional) You can directly call your parsing sequence or let your change listener handle it
+}
+
 function makeSvgTextEditable(svgElement) {
     const textElements = svgElement.querySelectorAll("text, tspan");
 
@@ -203,6 +222,8 @@ for (const img of SELimages) {
    return images; // <-- this is crucial
 
         } else if (file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
+            await uploadAndForwardToEditor(file);
+            
   const zip = await JSZip.loadAsync(file);
   const output = document.querySelector("#output");
   output.innerHTML = "";
