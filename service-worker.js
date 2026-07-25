@@ -81,6 +81,19 @@ async function getAndClearFiles() {
   });
 }
 
+// Listen for messages from index.html to fetch stored files from IndexedDB
+self.addEventListener("message", async (event) => {
+  if (event.data && event.data.action === "GET_SHARED_FILES") {
+    try {
+      const files = await getAndClearFiles();
+      event.ports[0].postMessage({ files });
+    } catch (err) {
+      console.error("Failed to retrieve shared files from IndexedDB:", err);
+      event.ports[0].postMessage({ files: [] });
+    }
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
