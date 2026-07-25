@@ -2716,6 +2716,110 @@ if ("serviceWorker" in navigator) {
         }
     });
 }
+  // Launch Queue Consumer to catch 'Open with...' OS events
+if ('launchQueue' in window) {
+  launchQueue.setConsumer(async (launchParams) => {
+    if (!launchParams.files.length) return;
+
+    // Reset UI before processing new files
+    resetViewerUI();
+
+    for (const fileHandle of launchParams.files) {
+      const file = await fileHandle.getFile();
+      console.log(`Opened file: ${file.name}, Size: ${file.size} bytes`);
+      handleIncomingFile(file);
+    }
+  });
+}
+
+function resetViewerUI() {
+  const img = document.getElementById('my-image');
+  const pdf = document.getElementById('pdf-viewer');
+  const svg = document.getElementById('svg-container');
+  const binary = document.getElementById('binary-container');
+
+  if (img) img.style.display = 'none';
+  if (pdf) pdf.style.display = 'none';
+  if (svg) svg.innerHTML = '';
+  if (binary) binary.innerText = '';
+}
+
+async function handleIncomingFile(file) {
+  const fileType = file.type;
+  const fileName = file.name.toLowerCase();
+
+  // 1. Handle Standard Images
+  if (fileType.startsWith('image/') && !fileName.endsWith('.svg')) {
+    const imageUrl = URL.createObjectURL(file);
+    const imgTag = document.getElementById('my-image');
+    imgTag.src = imageUrl;
+    imgTag.style.display = 'block';
+    console.log('Image ready to display:', imageUrl);
+  } 
+  
+  // 2. Handle SVGs
+  else if (fileName.endsWith('.svg') || fileType === 'image/svg+xml') {
+    const svgText = await file.text();
+    document.getElementById('svg-container').innerHTML = svgText;
+    console.log('SVG content loaded');
+  } 
+  
+  // 3. Handle PDFs
+  else if (fileType === 'application/pdf') {
+    const pdfUrl = URL.createObjectURL(file);
+    const iframe = document.getElementById('pdf-viewer');
+    iframe.src = pdfUrl;
+    iframe.style.display = 'block';
+    console.log('PDF URL generated:', pdfUrl);
+  } 
+  
+  // 4. Handle PowerPoint (pptx)
+  else if (fileName.endsWith('.pptx')) {
+    const arrayBuffer = await file.arrayBuffer();
+    document.getElementById('binary-container').innerText = 
+      `Loaded PowerPoint: ${file.name} (${arrayBuffer.byteLength} bytes raw data parsed).`;
+    console.log('PowerPoint ArrayBuffer loaded.');
+  } 
+  
+  else {
+    console.warn('Unsupported file format received:', fileType);
+  }
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  
+  if (urlParams.has('share') && 'serviceWorker' in navigator) {
+    const registration = await navigator.serviceWorker.ready;
+    
+    // Set up a MessageChannel to receive the data from the Service Worker
+    const messageChannel = new MessageChannel();
+    
+    messageChannel.port1.onmessage = (event) => {
+      const sharedFiles = event.data.files;
+      
+      if (sharedFiles && sharedFiles.length > 0) {
+        resetViewerUI();
+        
+        sharedFiles.forEach(fileData => {
+          // Reconstruct the raw ArrayBuffer back into a standard File object
+          const reconstructedFile = new File([fileData.buffer], fileData.name, {
+            type: fileData.type
+          });
+          
+          console.log(`Retrieved shared file: ${reconstructedFile.name}`);
+          handleIncomingFile(reconstructedFile);
+        });
+      }
+    };
+
+    // Ask the active Service Worker for the files
+    registration.active.postMessage({ action: 'GET_SHARED_FILES' }, [messageChannel.port2]);
+    
+    // Clean up the URL bar so refreshing doesn't trigger it again
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+});
 </script>
 </body>
 
