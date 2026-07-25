@@ -15,8 +15,21 @@
       "type": "image/png"
     }
   ],
+  "file_handlers": [
+    {
+      "action": "/",
+      "name": "Open with Bun PWA",
+      "accept": {
+        "image/jpeg": [".jpg", ".jpeg"],
+        "image/png": [".png"],
+        "image/svg+xml": [".svg"],
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+        "application/pdf": [".pdf"]
+      }
+    }
+  ],
   "share_target": {
-    "action": "/share-target",
+    "action": "/",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
@@ -25,8 +38,14 @@
       "url": "url",
       "files": [
         {
-          "name": "media",
-          "accept": ["image/*"]
+          "name": "shared_files",
+          "accept": [
+            "image/jpeg",
+            "image/png",
+            "image/svg+xml",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/pdf"
+          ]
         }
       ]
     }
