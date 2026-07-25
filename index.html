@@ -2746,31 +2746,44 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (urlParams.has('share') && 'serviceWorker' in navigator) {
     const registration = await navigator.serviceWorker.ready;
     
-    // Set up a MessageChannel to receive the data from the Service Worker
+    // Set up a MessageChannel to request the files from the Service Worker
     const messageChannel = new MessageChannel();
     
     messageChannel.port1.onmessage = (event) => {
       const sharedFiles = event.data.files;
       
       if (sharedFiles && sharedFiles.length > 0) {
-        resetViewerUI();
-        
+        const fileInput = document.getElementById('upload');
+        const dataTransfer = new DataTransfer();
+
         sharedFiles.forEach(fileData => {
-          // Reconstruct the raw ArrayBuffer back into a standard File object
+          // Reconstruct raw ArrayBuffer back into a standard File object
           const reconstructedFile = new File([fileData.buffer], fileData.name, {
             type: fileData.type
           });
           
-          console.log(`Retrieved shared file: ${reconstructedFile.name}`);
-          handleIncomingFile(reconstructedFile);
+          console.log(`Loaded shared file from IndexedDB: ${reconstructedFile.name}, Size: ${reconstructedFile.size} bytes`);
+          
+          // Add file to DataTransfer object
+          dataTransfer.items.add(reconstructedFile);
         });
+
+        if (fileInput) {
+          // Assign collected files to the file input element
+          fileInput.files = dataTransfer.files;
+          
+          // Trigger change event so your app's listeners pick up the files
+          fileInput.dispatchEvent(new Event('change'));
+        }
       }
     };
 
-    // Ask the active Service Worker for the files
-    registration.active.postMessage({ action: 'GET_SHARED_FILES' }, [messageChannel.port2]);
+    // Ask the active Service Worker for the shared files
+    if (registration.active) {
+      registration.active.postMessage({ action: 'GET_SHARED_FILES' }, [messageChannel.port2]);
+    }
     
-    // Clean up the URL bar so refreshing doesn't trigger it again
+    // Clean up the URL bar so refreshing doesn't trigger share handling again
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 });
