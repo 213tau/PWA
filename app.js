@@ -135,361 +135,135 @@ for (const img of SELimages) {
    return images; // <-- this is crucial
 
         } else if (file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
-
-
-
   const zip = await JSZip.loadAsync(file);
-
   const output = document.querySelector("#output");
-
   output.innerHTML = "";
-
-
-
   const images = [];
 
-
-
   /* -------------------- IMAGE EXTRACTION -------------------- */
-
   for (const entry of Object.values(zip.files)) {
-
     if (entry.name.startsWith("ppt/media/") && !entry.dir) {
-
       const blob = await entry.async("blob");
-
-
-
       const img = new Image();
-
       img.src = URL.createObjectURL(blob);
-
       await new Promise(res => img.onload = res);
-
-
-
       images.push(new ImageObject(img, file));
-
     }
-
   }
 
-
-
   /* -------------------- SLIDE TEXT + TABLES -------------------- */
-
   const slideFiles = Object.values(zip.files)
-
     .filter(f => f.name.startsWith("ppt/slides/slide") && f.name.endsWith(".xml"));
 
-
-
   for (const slideFile of slideFiles) {
-
-
-
     const xmlText = await slideFile.async("text");
-
     const parser = new DOMParser();
-
     const xmlDoc = parser.parseFromString(xmlText, "application/xml");
 
-
-
     const slideDiv = document.createElement("div");
-
     slideDiv.className = "slide";
 
-
-
     /* ---------- TEXT SHAPES ---------- */
-
     const paragraphs = xmlDoc.getElementsByTagName("a:p");
 
-
-
     for (const p of paragraphs) {
-
-
-
       const pElement = document.createElement("p");
 
-
-
       /* ----- TEXT ALIGNMENT ----- */
-
       const pPr = p.getElementsByTagName("a:pPr")[0];
-
       if (pPr && pPr.getAttribute("algn")) {
-
-        const alignMap = {
-
-          l: "left",
-
-          ctr: "center",
-
-          r: "right",
-
-          just: "justify"
-
-        };
-
+        const alignMap = { l: "left", ctr: "center", r: "right", just: "justify" };
         pElement.style.textAlign = alignMap[pPr.getAttribute("algn")] || "left";
-
       }
-
-
 
       const runs = p.getElementsByTagName("a:r");
 
-
-
       for (const r of runs) {
-
-
-
         const textNode = r.getElementsByTagName("a:t")[0];
-
         if (!textNode) continue;
 
-
-
         const span = document.createElement("span");
-
         span.textContent = textNode.textContent;
-
-
-
         const rPr = r.getElementsByTagName("a:rPr")[0];
 
-
-
         if (rPr) {
-
-
-
-          if (rPr.getAttribute("b") === "1")
-
-            span.style.fontWeight = "bold";
-
-
-
-          if (rPr.getAttribute("i") === "1")
-
-            span.style.fontStyle = "italic";
-
-
-
-          if (rPr.getAttribute("u"))
-
-            span.style.textDecoration = "underline";
-
-
-
+          if (rPr.getAttribute("b") === "1") span.style.fontWeight = "bold";
+          if (rPr.getAttribute("i") === "1") span.style.fontStyle = "italic";
+          if (rPr.getAttribute("u")) span.style.textDecoration = "underline";
           if (rPr.getAttribute("sz")) {
-
             const size = parseInt(rPr.getAttribute("sz")) / 100;
-
             span.style.fontSize = size + "pt";
-
           }
-
-
-
           const colorNode = rPr.getElementsByTagName("a:srgbClr")[0];
-
           if (colorNode) {
-
             span.style.color = "#" + colorNode.getAttribute("val");
-
           }
-
         }
-
-
-
         pElement.appendChild(span);
-
       }
 
-
-
       if (pElement.textContent.trim() !== "")
-
         slideDiv.appendChild(pElement);
-
     }
 
-
-
     /* ---------- TABLE EXTRACTION ---------- */
-
     const tables = xmlDoc.getElementsByTagName("a:tbl");
 
-
-
     for (const tbl of tables) {
-
-
-
       const table = document.createElement("table");
-
       table.style.borderCollapse = "collapse";
-
       table.style.marginTop = "20px";
-
-
-
       const rows = tbl.getElementsByTagName("a:tr");
 
-
-
       for (const row of rows) {
-
-
-
         const tr = document.createElement("tr");
-
         const cells = row.getElementsByTagName("a:tc");
 
-
-
         for (const cell of cells) {
-
-
-
           const td = document.createElement("td");
-
           td.style.border = "1px solid #333";
-
           td.style.padding = "8px";
-
-
-
           const cellParagraphs = cell.getElementsByTagName("a:p");
 
-
-
           for (const cp of cellParagraphs) {
-
-
-
             const cellP = document.createElement("p");
-
-
-
             const cpPr = cp.getElementsByTagName("a:pPr")[0];
 
             if (cpPr && cpPr.getAttribute("algn")) {
-
-              const alignMap = {
-
-                l: "left",
-
-                ctr: "center",
-
-                r: "right",
-
-                just: "justify"
-
-              };
-
+              const alignMap = { l: "left", ctr: "center", r: "right", just: "justify" };
               cellP.style.textAlign = alignMap[cpPr.getAttribute("algn")] || "left";
-
             }
-
-
 
             const runs = cp.getElementsByTagName("a:r");
 
-
-
             for (const r of runs) {
-
-
-
               const textNode = r.getElementsByTagName("a:t")[0];
-
               if (!textNode) continue;
 
-
-
               const span = document.createElement("span");
-
               span.textContent = textNode.textContent;
-
-
-
               const rPr = r.getElementsByTagName("a:rPr")[0];
 
-
-
               if (rPr) {
-
-
-
-                if (rPr.getAttribute("b") === "1")
-
-                  span.style.fontWeight = "bold";
-
-
-
-                if (rPr.getAttribute("i") === "1")
-
-                  span.style.fontStyle = "italic";
-
-
-
-                if (rPr.getAttribute("u"))
-
-                  span.style.textDecoration = "underline";
-
+                if (rPr.getAttribute("b") === "1") span.style.fontWeight = "bold";
+                if (rPr.getAttribute("i") === "1") span.style.fontStyle = "italic";
+                if (rPr.getAttribute("u")) span.style.textDecoration = "underline";
               }
-
-
-
               cellP.appendChild(span);
-
             }
-
-
-
             td.appendChild(cellP);
-
           }
-
-
-
           tr.appendChild(td);
-
         }
-
-
-
         table.appendChild(tr);
-
       }
-
-
-
       slideDiv.appendChild(table);
-
     }
-
-
-
     output.appendChild(slideDiv);
-
   }
 
-
-
   document.querySelector("canvas").style.display = "block";
-
-
-
   return images;
-
 } else if (file.name.endsWith('.zip') || file.type === 'application/zip') {
     const jszip = new JSZip();
     const zip = await jszip.loadAsync(file);
