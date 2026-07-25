@@ -32,13 +32,13 @@ self.addEventListener("activate", event => {
   self.clients.claim(); // control all clients immediately
 });
 
+// Helper: Open IndexedDB inside Service Worker
 function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
 
     request.onupgradeneeded = () => {
       const db = request.result;
-
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, {
           keyPath: "id",
@@ -52,30 +52,43 @@ function openDB() {
   });
 }
 
+// Helper: Save files to IndexedDB
 async function saveFiles(files) {
   const db = await openDB();
-
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
-
     files.forEach(file => store.add(file));
-
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Helper: Get files from IndexedDB and clear them out
+async function getAndClearFiles() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const files = request.result;
+      store.clear();
+      resolve(files);
+    };
+    request.onerror = () => reject(request.error);
   });
 }
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // 1. Handle Web Share Target (POST request)
-  // Handle Share Target POST
+ // 1. Handle Web Share Target (POST request)
   if (event.request.method === "POST" && url.pathname === "/") {
     event.respondWith((async () => {
       try {
         const form = await event.request.formData();
-
         const shared = [];
 
         for (const file of form.getAll("shared_files")) {
@@ -87,19 +100,12 @@ self.addEventListener("fetch", (event) => {
         }
 
         await saveFiles(shared);
-
         return Response.redirect("/?share=true", 303);
-
       } catch (err) {
-  console.error("Share Target Error:", err);
-
-  return new Response(
-    "Share failed:\n" + err.message,
-    { status: 500 }
-  );
-}
+        console.error("Share Target Error:", err);
+        return new Response("Share failed:\n" + err.message, { status: 500 });
+      }
     })());
-
     return;
   }
 
