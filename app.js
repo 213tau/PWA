@@ -973,18 +973,28 @@ function processSvgFile(file) {
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
 
-        // Handle direct SVG string data payloads
+        // 1. Handle SVG sent as a string/text payload (image/svg+xml)
         if (item.kind === 'string' && item.type === 'image/svg+xml') {
             promises.push(new Promise((resolve) => {
                 item.getAsString(async (svgString) => {
-                    console.log('Pasted SVG String:', svgString);
+                    console.log('Pasted SVG Code:', svgString);
+                    
+                    // Display raw SVG code inside #output element
+                    const output = document.querySelector("#output");
+                    if (output) {
+                        const pre = document.createElement("pre");
+                        pre.textContent = svgString;
+                        output.appendChild(pre);
+                    }
+
+                    // Convert string to File object for your existing SVG processor
                     const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
                     const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
                     resolve(await processSvgFile(svgFile));
                 });
             }));
         } 
-        // Handle HTML / Office markup fallbacks
+        // 2. Handle HTML / Office markup fallbacks
         else if (item.kind === 'string' && item.type === 'text/html') {
             promises.push(new Promise((resolve) => {
                 item.getAsString(async (html) => {
@@ -993,7 +1003,16 @@ function processSvgFile(file) {
                     const svgElement = doc.querySelector('svg');
 
                     if (svgElement) {
-                        const svgBlob = new Blob([svgElement.outerHTML], { type: 'image/svg+xml' });
+                        const svgCode = svgElement.outerHTML;
+                        
+                        const output = document.querySelector("#output");
+                        if (output) {
+                            const pre = document.createElement("pre");
+                            pre.textContent = svgCode;
+                            output.appendChild(pre);
+                        }
+
+                        const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
                         const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
                         resolve(await processSvgFile(svgFile));
                     } else {
@@ -1002,7 +1021,7 @@ function processSvgFile(file) {
                 });
             }));
         } 
-        // Handle standard file items (SVGs, PDFs, images)
+        // 3. Handle standard files (PDFs, fallback images)
         else if (item.kind === 'file') {
             const file = item.getAsFile();
             if (!file) continue;
@@ -1016,7 +1035,7 @@ function processSvgFile(file) {
                 promises.push(processFile(file));
             }
         } 
-        // Handle plain text
+        // 4. Handle plain text
         else if (item.kind === 'string' && item.type === 'text/plain') {
             promises.push(new Promise((resolve) => {
                 item.getAsString((text) => {
