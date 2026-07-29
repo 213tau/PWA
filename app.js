@@ -131,10 +131,8 @@ function makeSvgTextEditable(svgElement) {
                         const parser = new DOMParser();
                         const svgDoc = parser.parseFromString(rawSvgText, "image/svg+xml");
                         
-                        // Check for parsing errors
                         const parserError = svgDoc.querySelector("parsererror");
                         if (parserError) {
-                            console.error("Invalid SVG file:", parserError.textContent);
                             return reject(new Error("Invalid SVG format"));
                         }
 
@@ -143,30 +141,41 @@ function makeSvgTextEditable(svgElement) {
                             return reject(new Error("No <svg> root element found"));
                         }
 
-                        // Add responsive class and viewBox fallback
+                        // Responsive setup
                         svgElement.classList.add("editable-svg-canvas");
                         if (!svgElement.getAttribute("viewBox") && svgElement.getAttribute("width") && svgElement.getAttribute("height")) {
                             svgElement.setAttribute("viewBox", `0 0 ${parseFloat(svgElement.getAttribute("width"))} ${parseFloat(svgElement.getAttribute("height"))}`);
                         }
 
-                        // Insert SVG directly into the DOM container
-                        const container = document.querySelector("#svgTools");
-                        container.appendChild(svgElement);
+                        // Insert visual SVG into DOM
+                        document.querySelector("#svgTools").appendChild(svgElement);
 
-                        // Output the raw SVG code into #output
-                        const outputElement = document.querySelector("#output");
-                        if (outputElement) {
-                            outputElement.textContent = rawSvgText;
+                        // Format code with line structures for #output
+                        const codeElement = document.querySelector("#output");
+                        if (codeElement) {
+                            codeElement.innerHTML = ""; // Clear old output
+                            
+                            // Escape HTML entities safely to prevent rendering tags
+                            const escapedText = rawSvgText
+                                .replace(/&/g, "&amp;")
+                                .replace(/</g, "&lt;")
+                                .replace(/>/g, "&gt;");
+                            
+                            const lines = escapedText.split("\n");
+                            lines.forEach(lineContent => {
+                                const lineSpan = document.createElement("span");
+                                lineSpan.className = "code-line";
+                                lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
+                                codeElement.appendChild(lineSpan);
+                            });
                         }
 
-                        // Enable inline text editing for this specific SVG element
                         if (typeof makeSvgTextEditable === "function") {
                             makeSvgTextEditable(svgElement);
                         }
 
                         resolve(svgElement);
                     } catch (err) {
-                        console.error("Error processing SVG:", err);
                         reject(err);
                     }
                 };
