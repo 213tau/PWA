@@ -127,8 +127,9 @@ function makeSvgTextEditable(svgElement) {
 
                 reader.onload = (event) => {
                     try {
+                        const rawSvgText = event.target.result;
                         const parser = new DOMParser();
-                        const svgDoc = parser.parseFromString(event.target.result, "image/svg+xml");
+                        const svgDoc = parser.parseFromString(rawSvgText, "image/svg+xml");
                         
                         // Check for parsing errors
                         const parserError = svgDoc.querySelector("parsererror");
@@ -142,15 +143,21 @@ function makeSvgTextEditable(svgElement) {
                             return reject(new Error("No <svg> root element found"));
                         }
 
-                        // Add a responsive class or default attributes if missing
+                        // Add responsive class and viewBox fallback
                         svgElement.classList.add("editable-svg-canvas");
                         if (!svgElement.getAttribute("viewBox") && svgElement.getAttribute("width") && svgElement.getAttribute("height")) {
                             svgElement.setAttribute("viewBox", `0 0 ${parseFloat(svgElement.getAttribute("width"))} ${parseFloat(svgElement.getAttribute("height"))}`);
                         }
 
-                        // Insert SVG directly into the container
+                        // Insert SVG directly into the DOM container
                         const container = document.querySelector("#svgTools");
                         container.appendChild(svgElement);
+
+                        // Output the raw SVG code into #output
+                        const outputElement = document.querySelector("#output");
+                        if (outputElement) {
+                            outputElement.textContent = rawSvgText;
+                        }
 
                         // Enable inline text editing for this specific SVG element
                         if (typeof makeSvgTextEditable === "function") {
