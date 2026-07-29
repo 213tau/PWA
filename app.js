@@ -967,211 +967,115 @@ function processSvgFile(file) {
 }
 
      document.addEventListener('paste', async (e) => {
-
-        // 2. Stop the browser from performing its default paste action (prevents double pasting)
-
+    // Stop the browser from performing its default paste action
     e.preventDefault();
-
         
+    const clipboardData = e.clipboardData || e.originalEvent.clipboardData;
+    if (!clipboardData) return;
 
-    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-
+    const items = clipboardData.items;
     const promises = [];
-
-
+    const output = document.querySelector("#output");
 
     for (let i = 0; i < items.length; i++) {
-
         const item = items[i];
 
-
-
-        // 1. Handle SVG sent as a string/text payload (image/svg+xml)
-
+        // 1. Handle SVG sent directly as string payload (image/svg+xml)
         if (item.kind === 'string' && item.type === 'image/svg+xml') {
-
             promises.push(new Promise((resolve) => {
-
                 item.getAsString(async (svgString) => {
-
                     console.log('Pasted SVG Code:', svgString);
-
                     
-
-                    // Display raw SVG code inside #output element
-
-                    const output = document.querySelector("#output");
-
                     if (output) {
-
                         const pre = document.createElement("pre");
-
                         pre.textContent = svgString;
-
                         output.appendChild(pre);
-
                     }
-
-
-
-                    // Convert string to File object for your existing SVG processor
 
                     const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
-
                     const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
-
-                    resolve(await processSvgFile(svgFile));
-
+                    
+                    try {
+                        resolve(await processSvgFile(svgFile));
+                    } catch (err) {
+                        resolve({ type: 'error', error: err });
+                    }
                 });
-
             }));
-
         } 
-
-        // 2. Handle HTML / Office markup fallbacks
-
+        // 2. Handle HTML markup fallbacks (Most common when copying vectors from browsers/apps)
         else if (item.kind === 'string' && item.type === 'text/html') {
-
             promises.push(new Promise((resolve) => {
-
                 item.getAsString(async (html) => {
-
                     const parser = new DOMParser();
-
                     const doc = parser.parseFromString(html, 'text/html');
-
                     const svgElement = doc.querySelector('svg');
 
-
-
                     if (svgElement) {
-
                         const svgCode = svgElement.outerHTML;
-
+                        console.log('Extracted SVG from HTML:', svgCode);
                         
-
-                        const output = document.querySelector("#output");
-
+                        // FIX: Appending raw SVG code to #output element
                         if (output) {
-
                             const pre = document.createElement("pre");
-
                             pre.textContent = svgCode;
-
                             output.appendChild(pre);
-
                         }
 
-
-
                         const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
-
                         const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
-
-                        resolve(await processSvgFile(svgFile));
-
+                        
+                        try {
+                            resolve(await processSvgFile(svgFile));
+                        } catch (err) {
+                            resolve({ type: 'error', error: err });
+                        }
                     } else {
-
                         resolve({ type: 'html', content: html });
-
                     }
-
                 });
-
             }));
-
         } 
-
-        // 3. Handle standard files (PDFs, fallback images)
-
+        // 3. Handle standard files (Dragged/Pasted files)
         else if (item.kind === 'file') {
-
             const file = item.getAsFile();
-
             if (!file) continue;
 
-
-
             if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
-
                 promises.push(processSvgFile(file));
-
             } else if (file.type === 'application/pdf') {
-
-                fileListPdf.push({ file });
-
+                if (typeof fileListPdf !== 'undefined') {
+                    fileListPdf.push({ file });
+                }
                 promises.push(processPdf(file, true));
-
             } else if (file.type.startsWith('image/')) {
-
                 promises.push(processFile(file));
-
             }
-
         } 
-
-        // 4. Handle plain text
-
+        // 4. Handle plain text fallback
         else if (item.kind === 'string' && item.type === 'text/plain') {
-
             promises.push(new Promise((resolve) => {
-
                 item.getAsString((text) => {
-
-                    const output = document.querySelector("#output");
-
-                    const lines = text.split(/\r?\n/);
-
-                    lines.forEach(line => {
-
-                        const div = document.createElement("div");
-
-                        div.textContent = line;
-
-                        output.appendChild(div);
-
-                    });
-
+                    if (output) {
+                        const lines = text.split(/\r?\n/);
+                        lines.forEach(line => {
+                            const div = document.createElement("div");
+                            div.textContent = line;
+                            output.appendChild(div);
+                        });
+                    }
                     resolve({ type: 'text', content: text });
-
                 });
-
             }));
-
         }
-
     }
-
-
 
     try {
-
         const results = await Promise.all(promises);
-
         console.log('All clipboard items processed:', results);
-
-
-
-        if (fileListPdf.length > 0) {
-
-            const firstPdfName = fileListPdf[0].file.name;
-
-            const filenameInput = document.querySelector("#filename");
-
-            if (filenameInput) {
-
-                filenameInput.value = firstPdfName;
-
-            }
-
-        }
-
     } catch (error) {
-
         console.error('Error processing clipboard items:', error);
-
     }
-
 }, false);
 
 
