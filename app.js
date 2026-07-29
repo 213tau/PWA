@@ -973,26 +973,43 @@ function processSvgFile(file) {
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
 
-        if (item.kind === 'file') {
+        if (item.kind === 'string' && item.type === 'text/html') {
+            // Priority 1: Check HTML/Office Markup first (catches PPTX vector wrappers)
+            promises.push(new Promise((resolve) => {
+                item.getAsString(async (html) => {
+                    console.log('Pasted HTML/Office Markup:', html);
+                    
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const svgElement = doc.querySelector('svg');
+
+                    if (svgElement) {
+                        const svgBlob = new Blob([svgElement.outerHTML], { type: 'image/svg+xml' });
+                        const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
+                        resolve(await processSvgFile(svgFile));
+                    } else {
+                        resolve({ type: 'html', content: html });
+                    }
+                });
+            }));
+        } else if (item.kind === 'file') {
             const file = item.getAsFile();
             if (!file) continue;
 
             if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
                 promises.push(processSvgFile(file));
-            } else if (file.type.startsWith('image/')) {
-                promises.push(processFile(file)); // Your existing image handler
             } else if (file.type === 'application/pdf') {
                 fileListPdf.push({ file });
-                promises.push(processPdf(file, true)); // Your existing PDF handler
+                promises.push(processPdf(file, true));
+            } else if (file.type.startsWith('image/')) {
+                // Priority 2: Raster images (handled last so they don't override SVG/HTML)
+                promises.push(processFile(file));
             }
         } else if (item.kind === 'string') {
-            // Handle plain text
             if (item.type === 'text/plain') {
                 promises.push(new Promise((resolve) => {
                     item.getAsString((text) => {
                         const output = document.querySelector("#output");
-
-                        // Split by line breaks (handles Windows + Mac + Linux)
                         const lines = text.split(/\r?\n/);
 
                         lines.forEach(line => {
@@ -1004,28 +1021,6 @@ function processSvgFile(file) {
                     });
                 }));
             }
-            // Handle HTML content (PowerPoint / Office clipboard markup)
-            else if (item.type === 'text/html') {
-                promises.push(new Promise((resolve) => {
-                    item.getAsString(async (html) => {
-                        console.log('Pasted HTML/Office Markup:', html);
-                        
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(html, 'text/html');
-                        
-                        // Look for standard <svg> tags or Office-embedded shape containers
-                        const svgElement = doc.querySelector('svg');
-
-                        if (svgElement) {
-                            const svgBlob = new Blob([svgElement.outerHTML], { type: 'image/svg+xml' });
-                            const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
-                            resolve(await processSvgFile(svgFile));
-                        } else {
-                            resolve({ type: 'html', content: html });
-                        }
-                    });
-                }));
-            }
         }
     }
 
@@ -1033,7 +1028,6 @@ function processSvgFile(file) {
         const results = await Promise.all(promises);
         console.log('All clipboard items processed:', results);
 
-        // Set first PDF file name to input
         if (fileListPdf.length > 0) {
             const firstPdfName = fileListPdf[0].file.name;
             const filenameInput = document.querySelector("#filename");
