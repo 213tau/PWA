@@ -973,12 +973,21 @@ function processSvgFile(file) {
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
 
-        if (item.kind === 'string' && item.type === 'text/html') {
-            // Priority 1: Check HTML/Office Markup first (catches PPTX vector wrappers)
+        // Handle direct SVG string data payloads
+        if (item.kind === 'string' && item.type === 'image/svg+xml') {
+            promises.push(new Promise((resolve) => {
+                item.getAsString(async (svgString) => {
+                    console.log('Pasted SVG String:', svgString);
+                    const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+                    const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
+                    resolve(await processSvgFile(svgFile));
+                });
+            }));
+        } 
+        // Handle HTML / Office markup fallbacks
+        else if (item.kind === 'string' && item.type === 'text/html') {
             promises.push(new Promise((resolve) => {
                 item.getAsString(async (html) => {
-                    console.log('Pasted HTML/Office Markup:', html);
-                    
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, 'text/html');
                     const svgElement = doc.querySelector('svg');
@@ -992,7 +1001,9 @@ function processSvgFile(file) {
                     }
                 });
             }));
-        } else if (item.kind === 'file') {
+        } 
+        // Handle standard file items (SVGs, PDFs, images)
+        else if (item.kind === 'file') {
             const file = item.getAsFile();
             if (!file) continue;
 
@@ -1002,25 +1013,23 @@ function processSvgFile(file) {
                 fileListPdf.push({ file });
                 promises.push(processPdf(file, true));
             } else if (file.type.startsWith('image/')) {
-                // Priority 2: Raster images (handled last so they don't override SVG/HTML)
                 promises.push(processFile(file));
             }
-        } else if (item.kind === 'string') {
-            if (item.type === 'text/plain') {
-                promises.push(new Promise((resolve) => {
-                    item.getAsString((text) => {
-                        const output = document.querySelector("#output");
-                        const lines = text.split(/\r?\n/);
-
-                        lines.forEach(line => {
-                            const div = document.createElement("div");
-                            div.textContent = line;
-                            output.appendChild(div);
-                        });
-                        resolve({ type: 'text', content: text });
+        } 
+        // Handle plain text
+        else if (item.kind === 'string' && item.type === 'text/plain') {
+            promises.push(new Promise((resolve) => {
+                item.getAsString((text) => {
+                    const output = document.querySelector("#output");
+                    const lines = text.split(/\r?\n/);
+                    lines.forEach(line => {
+                        const div = document.createElement("div");
+                        div.textContent = line;
+                        output.appendChild(div);
                     });
-                }));
-            }
+                    resolve({ type: 'text', content: text });
+                });
+            }));
         }
     }
 
@@ -1033,15 +1042,11 @@ function processSvgFile(file) {
             const filenameInput = document.querySelector("#filename");
             if (filenameInput) {
                 filenameInput.value = firstPdfName;
-                console.log('First PDF filename set to input:', firstPdfName);
             }
         }
-
     } catch (error) {
         console.error('Error processing clipboard items:', error);
     }
-
-    console.log('PDF files so far:', fileListPdf);
 }, false);
 
 
