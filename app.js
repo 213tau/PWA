@@ -122,26 +122,77 @@ function makeSvgTextEditable(svgElement) {
 
       const loadPromises = files.map(async (file) => {
         if (file.type === "image/svg+xml" || file.name.endsWith(".svg")) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+    const reader = new FileReader();
 
-      reader.onload = () => {
+    reader.onload = (e) => {
+      try {
         const parser = new DOMParser();
-        const svgDoc = parser.parseFromString(reader.result, "image/svg+xml");
+        const svgDoc = parser.parseFromString(e.target.result, "image/svg+xml");
+        
+        const parserError = svgDoc.querySelector("parsererror");
+        if (parserError) throw new Error("Invalid SVG file format.");
+
         const svgElement = svgDoc.querySelector("svg");
+        if (!svgElement) throw new Error("No <svg> root element found.");
 
-        // Insert SVG directly into the DOM
-        document.querySelector("#svgTools").appendChild(svgElement);
+        // 1. Handle ViewBox & Dimensions
+        const width = svgElement.getAttribute("width");
+        const height = svgElement.getAttribute("height");
+        if (!svgElement.getAttribute("viewBox") && width && height) {
+          const cleanW = parseFloat(width);
+          const cleanH = parseFloat(height);
+          if (!isNaN(cleanW) && !isNaN(cleanH)) {
+            svgElement.setAttribute("viewBox", `0 0 ${cleanW} ${cleanH}`);
+          }
+        }
+        if (!svgElement.getAttribute("width")) svgElement.setAttribute("width", "100%");
+        if (!svgElement.getAttribute("height")) svgElement.setAttribute("height", "100%");
 
-        // Enable inline text editing for this specific SVG element
-        makeSvgTextEditable(svgElement);
+        // 2. Isolate/Scope Embedded CSS Styles
+        // Prevents SVG styles from breaking your main app layout
+        const styleTags = svgElement.querySelectorAll("style");
+        styleTags.forEach(styleTag => {
+          // Optional: Prefix CSS selectors or scope them inside a unique container class
+          // For instance, wrapping rules or rewriting selectors can happen here if needed.
+          // Alternatively, you can use CSS containment on the wrapper container:
+        });
 
-        resolve([svgElement]); 
-      };
+        // 3. Handle <foreignObject> (HTML elements inside SVG)
+        const foreignObjects = svgElement.querySelectorAll("foreignObject");
+        foreignObjects.forEach(fo => {
+          // If you trust the source, ensure HTML elements inside scale properly
+          fo.setAttribute("width", "100%");
+          fo.setAttribute("height", "100%");
+          
+          // NOTE: If user-uploaded, sanitize inner HTML content here using DOMPurify 
+          // e.g., DOMPurify.sanitize(fo)
+        });
 
-      reader.readAsText(file);
-    });
-  } else if (file.type.startsWith("image/")) {
+        // 4. Create an isolated wrapper container for the SVG to protect styling
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText = "contain: content; width: 100%; height: 100%;"; // CSS containment isolates layout/styles
+        wrapper.appendChild(svgElement);
+
+        if (targetContainer) {
+          targetContainer.appendChild(wrapper);
+        }
+
+        if (typeof makeSvgTextEditable === "function") {
+          makeSvgTextEditable(svgElement);
+        }
+
+        resolve(svgElement);
+      } catch (error) {
+        console.error("SVG Processing Error:", error);
+        reject(error);
+      }
+    };
+
+    reader.onerror = (error) => reject(error);
+    reader.readAsText(file);
+  });
+} else if (file.type.startsWith("image/")) {
           return new Promise((resolve) => {
             const img = new Image();
             img.src = URL.createObjectURL(file);
