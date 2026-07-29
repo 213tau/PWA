@@ -1016,11 +1016,13 @@ function processSvgFile(file) {
                         console.log('Extracted SVG from HTML:', svgCode);
                         
                         // FIX: Appending raw SVG code to #output element
-                        if (output) {
-                            const pre = document.createElement("pre");
-                            pre.textContent = svgCode;
-                            output.appendChild(pre);
-                        }
+                       if (output) {
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    code.textContent = svgString; // or svgCode
+    pre.appendChild(code);
+    output.appendChild(pre);
+}
 
                         const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
                         const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
