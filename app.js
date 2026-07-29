@@ -934,6 +934,38 @@ for (const img of SELimages) {
   }
 }
 
+function processSvgFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = (event) => {
+            const svgContent = event.target.result;
+            
+            // Find your output container
+            const outputContainer = document.querySelector('#output');
+            
+            if (outputContainer) {
+                // Option A: Insert raw SVG markup directly into the DOM
+                outputContainer.innerHTML = svgContent;
+                
+                // Optional: Ensure the SVG scales properly inside the container
+                const svgElement = outputContainer.querySelector('svg');
+                if (svgElement) {
+                    if (!svgElement.getAttribute('width')) svgElement.setAttribute('width', '100%');
+                    if (!svgElement.getAttribute('height')) svgElement.setAttribute('height', '100%');
+                }
+            }
+            
+            resolve();
+        };
+        
+        reader.onerror = (error) => reject(error);
+        
+        // Read the SVG file as text string
+        reader.readAsText(file);
+    });
+}
+
     document.addEventListener('paste', async (e) => {
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
       const promises = [];
@@ -945,7 +977,9 @@ for (const img of SELimages) {
           const file = item.getAsFile();
           if (!file) continue;
 
-          if (file.type.startsWith('image/')) {
+          if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+    promises.push(processSvgFile(file));
+} else if (file.type.startsWith('image/')) {
             promises.push(processFile(file)); // Your existing image handler
           } else if (file.type === 'application/pdf') {
             fileListPdf.push({ file });
