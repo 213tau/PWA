@@ -967,59 +967,59 @@ function processSvgFile(file) {
 }
 
     document.addEventListener('paste', async (e) => {
-      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-      const promises = [];
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    const promises = [];
 
-      for (let i = 0; i < items.length; i++) {
+    for (let i = 0; i < items.length; i++) {
         const item = items[i];
 
         if (item.kind === 'file') {
-          const file = item.getAsFile();
-          if (!file) continue;
+            const file = item.getAsFile();
+            if (!file) continue;
 
-          if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
-    promises.push(processSvgFile(file));
-} else if (file.type.startsWith('image/')) {
-            promises.push(processFile(file)); // Your existing image handler
-          } else if (file.type === 'application/pdf') {
-            fileListPdf.push({ file });
-            promises.push(processPdf(file, true)); // Your existing PDF handler
-          }
+            if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+                promises.push(processSvgFile(file));
+            } else if (file.type.startsWith('image/')) {
+                promises.push(processFile(file)); // Your existing image handler
+            } else if (file.type === 'application/pdf') {
+                fileListPdf.push({ file });
+                promises.push(processPdf(file, true)); // Your existing PDF handler
+            }
         } else if (item.kind === 'string') {
-          // Handle plain text
-          if (item.type === 'text/plain') {
-  promises.push(new Promise((resolve) => {
-    item.getAsString((text) => {
-            const output = document.querySelector("#output");
-
-      // Split by line breaks (handles Windows + Mac + Linux)
-      const lines = text.split(/\r?\n/);
-
-lines.forEach(line => {
-  const div = document.createElement("div");
-  div.textContent = line;
-  output.appendChild(div);
-});
-      resolve({ type: 'text', content: text });
-    });
-  }));
-}
-          // Handle HTML content
-          else if (item.type === 'text/html') {
+            // Handle plain text
+            if (item.type === 'text/plain') {
                 promises.push(new Promise((resolve) => {
-                    item.getAsString((html) => {
+                    item.getAsString((text) => {
+                        const output = document.querySelector("#output");
+
+                        // Split by line breaks (handles Windows + Mac + Linux)
+                        const lines = text.split(/\r?\n/);
+
+                        lines.forEach(line => {
+                            const div = document.createElement("div");
+                            div.textContent = line;
+                            output.appendChild(div);
+                        });
+                        resolve({ type: 'text', content: text });
+                    });
+                }));
+            }
+            // Handle HTML content (PowerPoint / Office clipboard markup)
+            else if (item.type === 'text/html') {
+                promises.push(new Promise((resolve) => {
+                    item.getAsString(async (html) => {
                         console.log('Pasted HTML/Office Markup:', html);
                         
-                        // Check if PowerPoint/Office embedded an image reference or SVG equivalent block
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(html, 'text/html');
+                        
+                        // Look for standard <svg> tags or Office-embedded shape containers
                         const svgElement = doc.querySelector('svg');
 
                         if (svgElement) {
-                            // If PowerPoint or browser maps clipboard HTML with an inline <svg>
                             const svgBlob = new Blob([svgElement.outerHTML], { type: 'image/svg+xml' });
                             const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
-                            resolve(processSvgFile(svgFile));
+                            resolve(await processSvgFile(svgFile));
                         } else {
                             resolve({ type: 'html', content: html });
                         }
@@ -1027,29 +1027,28 @@ lines.forEach(line => {
                 }));
             }
         }
-      }
+    }
 
-      try {
+    try {
         const results = await Promise.all(promises);
         console.log('All clipboard items processed:', results);
-        // You can now handle results: images, pdfs, text, HTML together
 
         // Set first PDF file name to input
         if (fileListPdf.length > 0) {
-          const firstPdfName = fileListPdf[0].file.name;
-          const filenameInput = document.querySelector("#filename");
-          if (filenameInput) {
-            filenameInput.value = firstPdfName;
-            console.log('First PDF filename set to input:', firstPdfName);
-          }
+            const firstPdfName = fileListPdf[0].file.name;
+            const filenameInput = document.querySelector("#filename");
+            if (filenameInput) {
+                filenameInput.value = firstPdfName;
+                console.log('First PDF filename set to input:', firstPdfName);
+            }
         }
 
-      } catch (error) {
+    } catch (error) {
         console.error('Error processing clipboard items:', error);
-      }
+    }
 
-      console.log('PDF files so far:', fileListPdf);
-    }, false);
+    console.log('PDF files so far:', fileListPdf);
+}, false);
 
 
     async function handleClipboardFiles(files) {
