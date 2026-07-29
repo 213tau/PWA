@@ -8548,3 +8548,47 @@ function svgdownloadBtn() {
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
 }
+
+
+function svgtoclipboardBtn() {
+  const outputElements = document.querySelectorAll(".output");
+  
+  if (outputElements.length === 0) {
+    console.error("No output elements found");
+    return;
+  }
+
+  let combinedSvg = "";
+
+  outputElements.forEach(el => {
+    let text = el.textContent.trim();
+    if (text) {
+      combinedSvg += text + "\n";
+    }
+  });
+
+  if (!combinedSvg) {
+    alert("No SVG content found!");
+    return;
+  }
+
+  // Ensure it has standard SVG wrapper tags if they weren't explicitly typed
+  if (!combinedSvg.includes("<svg")) {
+    combinedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500">\n${combinedSvg}\n</svg>`;
+  }
+
+  // Create a Blob from the SVG text string
+  const blob = new Blob([combinedSvg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  // Automatically trigger a file download so PowerPoint can ingest it easily
+  const downloadLink = document.createElement("a");
+  downloadLink.href = url;
+  downloadLink.download = "graphic.svg";
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+
+  // Clean up object URL
+  URL.revokeObjectURL(url);
+}
