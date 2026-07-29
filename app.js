@@ -7171,10 +7171,10 @@ if (outputElement) {
     previewContainer.id = 'preview-container';
     
     // Styling it so it's clearly separated (Adjust as needed for your UI)
-    previewContainer.style.marginTop = '20px';
-    previewContainer.style.padding = '15px';
-    previewContainer.style.border = '2px dashed #ccc';
-    previewContainer.style.minHeight = '100px';
+    //previewContainer.style.marginTop = '20px';
+    //previewContainer.style.padding = '15px';
+    //previewContainer.style.border = '2px dashed #ccc';
+    //previewContainer.style.minHeight = '100px';
     
     outputElement.parentNode.insertBefore(previewContainer, outputElement.nextSibling);
 
