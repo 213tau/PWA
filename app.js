@@ -967,6 +967,9 @@ function processSvgFile(file) {
 }
 
     document.addEventListener('paste', async (e) => {
+        // 2. Stop the browser from performing its default paste action (prevents double pasting)
+    e.preventDefault();
+        
     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
     const promises = [];
 
