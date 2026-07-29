@@ -966,110 +966,215 @@ function processSvgFile(file) {
     });
 }
 
-    document.addEventListener('paste', async (e) => {
-    // 1. Stop the browser from performing its default paste action
+     document.addEventListener('paste', async (e) => {
+
+        // 2. Stop the browser from performing its default paste action (prevents double pasting)
+
     e.preventDefault();
-    
+
+        
+
     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-    let targetItem = null;
-    let matchType = null;
 
-    // Prioritize formats: SVG string -> HTML SVG -> Files -> Plain Text
+    const promises = [];
+
+
+
     for (let i = 0; i < items.length; i++) {
+
         const item = items[i];
+
+
+
+        // 1. Handle SVG sent as a string/text payload (image/svg+xml)
+
         if (item.kind === 'string' && item.type === 'image/svg+xml') {
-            targetItem = item; matchType = 'svg-string'; break;
-        } else if (item.kind === 'string' && item.type === 'text/html') {
-            targetItem = item; matchType = 'html'; break;
-        } else if (item.kind === 'file') {
-            targetItem = item; matchType = 'file'; break;
-        } else if (item.kind === 'string' && item.type === 'text/plain' && !targetItem) {
-            // Keep plain text as a low-priority fallback if no rich format was found yet
-            targetItem = item; matchType = 'text';
-        }
-    }
 
-    if (!targetItem) return;
+            promises.push(new Promise((resolve) => {
 
-    let result = null;
+                item.getAsString(async (svgString) => {
 
-    try {
-        // Handle based on the single winning priority type
-        if (matchType === 'svg-string') {
-            result = await new Promise((resolve) => {
-                targetItem.getAsString(async (svgString) => {
-                    appendOutputPre(svgString);
+                    console.log('Pasted SVG Code:', svgString);
+
+                    
+
+                    // Display raw SVG code inside #output element
+
+                    const output = document.querySelector("#output");
+
+                    if (output) {
+
+                        const pre = document.createElement("pre");
+
+                        pre.textContent = svgString;
+
+                        output.appendChild(pre);
+
+                    }
+
+
+
+                    // Convert string to File object for your existing SVG processor
+
                     const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+
                     const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
+
                     resolve(await processSvgFile(svgFile));
+
                 });
-            });
+
+            }));
+
         } 
-        else if (matchType === 'html') {
-            result = await new Promise((resolve) => {
-                targetItem.getAsString(async (html) => {
+
+        // 2. Handle HTML / Office markup fallbacks
+
+        else if (item.kind === 'string' && item.type === 'text/html') {
+
+            promises.push(new Promise((resolve) => {
+
+                item.getAsString(async (html) => {
+
                     const parser = new DOMParser();
+
                     const doc = parser.parseFromString(html, 'text/html');
+
                     const svgElement = doc.querySelector('svg');
 
+
+
                     if (svgElement) {
+
                         const svgCode = svgElement.outerHTML;
-                        appendOutputPre(svgCode);
+
+                        
+
+                        const output = document.querySelector("#output");
+
+                        if (output) {
+
+                            const pre = document.createElement("pre");
+
+                            pre.textContent = svgCode;
+
+                            output.appendChild(pre);
+
+                        }
+
+
+
                         const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
+
                         const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
+
                         resolve(await processSvgFile(svgFile));
+
                     } else {
+
                         resolve({ type: 'html', content: html });
+
                     }
+
                 });
-            });
+
+            }));
+
         } 
-        else if (matchType === 'file') {
-            const file = targetItem.getAsFile();
-            if (file) {
-                if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
-                    result = await processSvgFile(file);
-                } else if (file.type === 'application/pdf') {
-                    fileListPdf.push({ file });
-                    result = await processPdf(file, true);
-                    const filenameInput = document.querySelector("#filename");
-                    if (filenameInput) filenameInput.value = file.name;
-                } else if (file.type.startsWith('image/')) {
-                    result = await processFile(file);
-                }
+
+        // 3. Handle standard files (PDFs, fallback images)
+
+        else if (item.kind === 'file') {
+
+            const file = item.getAsFile();
+
+            if (!file) continue;
+
+
+
+            if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+
+                promises.push(processSvgFile(file));
+
+            } else if (file.type === 'application/pdf') {
+
+                fileListPdf.push({ file });
+
+                promises.push(processPdf(file, true));
+
+            } else if (file.type.startsWith('image/')) {
+
+                promises.push(processFile(file));
+
             }
+
         } 
-        else if (matchType === 'text') {
-            result = await new Promise((resolve) => {
-                targetItem.getAsString((text) => {
+
+        // 4. Handle plain text
+
+        else if (item.kind === 'string' && item.type === 'text/plain') {
+
+            promises.push(new Promise((resolve) => {
+
+                item.getAsString((text) => {
+
                     const output = document.querySelector("#output");
-                    if (output) {
-                        text.split(/\r?\n/).forEach(line => {
-                            const div = document.createElement("div");
-                            div.textContent = line;
-                            output.appendChild(div);
-                        });
-                    }
+
+                    const lines = text.split(/\r?\n/);
+
+                    lines.forEach(line => {
+
+                        const div = document.createElement("div");
+
+                        div.textContent = line;
+
+                        output.appendChild(div);
+
+                    });
+
                     resolve({ type: 'text', content: text });
+
                 });
-            });
+
+            }));
+
         }
 
-        console.log('Clipboard item processed:', result);
-    } catch (error) {
-        console.error('Error processing clipboard item:', error);
     }
+
+
+
+    try {
+
+        const results = await Promise.all(promises);
+
+        console.log('All clipboard items processed:', results);
+
+
+
+        if (fileListPdf.length > 0) {
+
+            const firstPdfName = fileListPdf[0].file.name;
+
+            const filenameInput = document.querySelector("#filename");
+
+            if (filenameInput) {
+
+                filenameInput.value = firstPdfName;
+
+            }
+
+        }
+
+    } catch (error) {
+
+        console.error('Error processing clipboard items:', error);
+
+    }
+
 }, false);
 
-// Helper to keep code clean
-function appendOutputPre(content) {
-    const output = document.querySelector("#output");
-    if (output) {
-        const pre = document.createElement("pre");
-        pre.textContent = content;
-        output.appendChild(pre);
-    }
-}
+
 
 
     async function handleClipboardFiles(files) {
