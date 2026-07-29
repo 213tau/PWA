@@ -1006,13 +1006,26 @@ lines.forEach(line => {
 }
           // Handle HTML content
           else if (item.type === 'text/html') {
-            promises.push(new Promise((resolve) => {
-              item.getAsString((html) => {
-                console.log('Pasted HTML:', html);
-                resolve({ type: 'html', content: html });
-              });
-            }));
-          }
+                promises.push(new Promise((resolve) => {
+                    item.getAsString((html) => {
+                        console.log('Pasted HTML/Office Markup:', html);
+                        
+                        // Check if PowerPoint/Office embedded an image reference or SVG equivalent block
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const svgElement = doc.querySelector('svg');
+
+                        if (svgElement) {
+                            // If PowerPoint or browser maps clipboard HTML with an inline <svg>
+                            const svgBlob = new Blob([svgElement.outerHTML], { type: 'image/svg+xml' });
+                            const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
+                            resolve(processSvgFile(svgFile));
+                        } else {
+                            resolve({ type: 'html', content: html });
+                        }
+                    });
+                }));
+            }
         }
       }
 
