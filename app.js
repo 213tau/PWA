@@ -8551,21 +8551,14 @@ function svgdownloadBtn() {
 
 
 function svgtoclipboardBtn() {
-  const outputElements = document.querySelectorAll(".output");
-  
-  if (outputElements.length === 0) {
-    console.error("No output elements found");
+  const outputElement = document.querySelector("#output");
+
+  if (!outputElement) {
+    alert("Output element not found!");
     return;
   }
 
-  let combinedSvg = "";
-
-  outputElements.forEach(el => {
-    let text = el.textContent.trim();
-    if (text) {
-      combinedSvg += text + "\n";
-    }
-  });
+  let combinedSvg = outputElement.textContent.trim();
 
   if (!combinedSvg) {
     alert("No SVG content found!");
