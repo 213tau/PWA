@@ -388,6 +388,42 @@ for (const img of SELimages) {
   }
   document.querySelector("canvas").style.display = "block";
   return images;
+} else if (file.type === "audio/ogg" || file.type === "audio/opus" || file.name.toLowerCase().endsWith(".opus") || file.name.toLowerCase().endsWith(".ogg")) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Create a local object URL for the audio file
+            const audioUrl = URL.createObjectURL(file);
+            
+            // Check for existing player or create one dynamically
+            let audioElement = document.querySelector("#audioPlayer");
+            if (!audioElement) {
+                audioElement = document.createElement("audio");
+                audioElement.id = "audioPlayer";
+                audioElement.controls = true;
+                
+                // Fallback container: append to a specific wrapper, or body if none exists
+                const container = document.querySelector("#audioTools") || document.body;
+                container.appendChild(audioElement);
+            }
+
+            audioElement.src = audioUrl;
+
+            audioElement.onloadedmetadata = () => {
+                resolve({
+                    element: audioElement,
+                    duration: audioElement.duration,
+                    url: audioUrl
+                });
+            };
+
+            audioElement.onerror = (err) => {
+                reject(new Error("Failed to load Opus/Ogg audio stream."));
+            };
+
+        } catch (err) {
+            reject(err);
+        }
+    });
 } else {
           return []; // to avoid undefined entries in results
         }
