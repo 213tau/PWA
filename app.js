@@ -979,8 +979,7 @@ function processSvgFile(file) {
     if (output && (e.target === output || output.contains(e.target))) {
         e.preventDefault();
     } else {
-        // Allow normal default paste behavior for other elements on the page
-        return;
+        // Allow normal default paste behavior for other elements on the page        
     }
 
     for (let i = 0; i < items.length; i++) {
