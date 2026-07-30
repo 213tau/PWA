@@ -67,10 +67,10 @@
             "application/pdf",
             "audio/ogg",
             "audio/opus",
+            "audio/*",
             ".oga",
             ".ogg",
-            ".opus",
-            "audio/*"
+            ".opus"
           ]
         }
       ]
