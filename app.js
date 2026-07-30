@@ -6262,7 +6262,7 @@ if (outputEl && outputEl.textContent.trim() !== '') {
         const whatsappAppUrl = `whatsapp://send?phone=${phoneNumber}&text=${message}`;                
         window.open(whatsappAppUrl, '_blank');
         
-        const whatsappAppUrl1 = `https://wa.me/${phoneNumber}?text=${message}`;
+        const whatsappAppUrl1 = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;        
         window.open(whatsappAppUrl1, '_blank');
     } else {
         alert("Please enter a valid phone number.");
