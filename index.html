@@ -348,8 +348,7 @@
       </select>
     </div>
 
-    <label for="filename">PDF Name: <input id="filename" value="document"></label>
-    <button onclick="openWhatsApp()" class="success">🟢 WhatsApp</button>
+    <label for="filename">PDF Name: <input id="filename" value="document"></label>    
   </div>
 
   <!-- TAB MENU -->
@@ -631,18 +630,6 @@
       <pre id="log">Awaiting file upload...</pre>
     </div>
 
-    <div class="tab-content" id="electronTools">
-      <label>Enter Website to Open:</label><br />
-      <input id="nameInput" placeholder="Your name" style="width:100%; margin-bottom:8px;" />            
-      <button data-script="PowerpointPDF">PowerPoint → PDF</button>      
-      <button id="openBillLinkelectron">Open Bill (Ref #)</button>      
-      <button id="vrcent">VrcentPunjab</button>
-      <button id="vrcentfill">vrcent fill</button>
-      <button id="elicense">DLIMS-E License</button>
-      <button id="imagesgoogle">Images Google</button>
-      <button id="printPdfBtn">Print PDF</button>
-    </div>
-
     <canvas id="canvas"></canvas>
 
     <div class="tab-content" id="textEditing">
@@ -651,6 +638,7 @@
       </div>
       <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;">
         <button onclick="ocrwarp()">OCR Warp</button>
+        <button onclick="openWhatsApp()" class="success">🟢 WhatsApp</button>
         <button onclick="editoutput()">Edit Output</button>
         <button onclick="textup()">TextUp</button>
         <button onclick="moveLineUp()">Move Line Up</button>
