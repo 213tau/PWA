@@ -6236,19 +6236,40 @@ if (outputEl && outputEl.textContent.trim() !== '') {
     })
 
     function openWhatsApp() {
-      const phoneNumber = document.getElementById('filename').value.trim();
+    const elementText = document.querySelector('#output').innerText || "";
 
-      if (phoneNumber) {
-        const message = encodeURIComponent("Tanveer Studio!"); // Optional pre-filled message
-        //const whatsappUrl = `https://wa.me/${phoneNumber}?text=${message}`;
-        const whatsappUrl = `whatsapp://send?phone=92${phoneNumber}&text=${message}`;        
-        //window.location.href = whatsappUrl
+    // Regex to match Pakistani mobile formats (03XX-XXXXXXX, +92 3XX XXXXXXX, etc.)
+    const regex = /(?:\+92|0)?3\d{2}[\s\-]?\d{7}/;
+    const match = elementText.match(regex);
 
-        window.open(whatsappUrl, '_blank'); // Opens in a new tab
-      } else {
+    if (match) {
+        let phoneNumber = match[0];
+
+        // Format to international standard (923XXXXXXXXX)
+        if (phoneNumber.startsWith("0")) {
+            phoneNumber = "92" + phoneNumber.substring(1);
+        } else if (phoneNumber.startsWith("+")) {
+            phoneNumber = phoneNumber.replace("+", "");
+        }
+        
+        // Remove remaining spaces or dashes
+        phoneNumber = phoneNumber.replace(/\D/g, '');
+
+        const message = encodeURIComponent("Tanveer Studio!"); 
+
+        // Choose scheme based on your environment (or use app protocol with web fallback)
+        // If you are strictly inside a Microsoft WinUI/WebView2 app where whatsapp:// is guaranteed to work:
+        const whatsappAppUrl = `whatsapp://send?phone=${phoneNumber}&text=${message}`;
+        const whatsappWebUrl = `https://wa.me/${phoneNumber}?text=${message}`;
+
+        // Example: Trying the app protocol first, falling back to web if needed
+        // Or if you want to explicitly use the Microsoft app scheme as requested:
+        window.open(whatsappAppUrl, '_blank');
+
+    } else {
         alert("Please enter a valid phone number.");
-      }
     }
+}
 
     document.getElementById('ManualdoublesideWithBlanks').addEventListener('click', async () => {
       const combinedPdfDoc = await PDFLib.PDFDocument.create();
