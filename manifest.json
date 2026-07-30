@@ -22,11 +22,29 @@
       "action": "/",
       "name": "Open with Bun PWA",
       "accept": {
-        "image/jpeg": [".jpg", ".jpeg"],
-        "image/png": [".png"],
-        "image/svg+xml": [".svg"],
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
-        "application/pdf": [".pdf"]
+        "image/jpeg": [
+          ".jpg",
+          ".jpeg"
+        ],
+        "image/png": [
+          ".png"
+        ],
+        "image/svg+xml": [
+          ".svg"
+        ],
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+          ".pptx"
+        ],
+        "application/pdf": [
+          ".pdf"
+        ],
+        "audio/ogg": [
+          ".oga",
+          ".ogg"
+        ],
+        "audio/opus": [
+          ".opus"
+        ]
       }
     }
   ],
@@ -46,7 +64,12 @@
             "image/png",
             "image/svg+xml",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "application/pdf"
+            "application/pdf",
+            "audio/ogg",
+            "audio/opus",
+            ".oga",
+            ".ogg",
+            ".opus"
           ]
         }
       ]
