@@ -11,6 +11,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.4.0/dist/svg2pdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.11.0/dist/pptxgen.bundle.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
@@ -474,6 +475,7 @@
       <button id="pdfpageassvg">PDF Page as SVG</button>
       <button onclick="editablesvg()">Editable SVG</button>
       <button id="printBtn" onclick="printSVGElement()">Print / Save PDF</button>
+      <button id="downloadPdfBtn" onclick="exportEditableSvgToPdf()">Download PDF</button>
     </div>
 
     <div class="tab-content" id="pdfTools">
