@@ -104,12 +104,22 @@ self.addEventListener("fetch", (event) => {
         const form = await event.request.formData();
         const shared = [];
 
-        for (const file of form.getAll("shared_files")) {
-          shared.push({
-            name: file.name,
-            type: file.type,
-            buffer: await file.arrayBuffer()
-          });
+       for (const file of form.getAll("shared_files")) {
+          if (file && typeof file === "object" && file.size > 0) {
+            let fileType = file.type;
+            
+            // Fallback: Fix missing/generic MIME types for Ogg/Opus based on file extension
+            if (!fileType || fileType === "application/octet-stream") {
+              if (file.name.endsWith(".opus")) fileType = "audio/opus";
+              else if (file.name.endsWith(".oga") || file.name.endsWith(".ogg")) fileType = "audio/ogg";
+            }
+
+            shared.push({
+              name: file.name,
+              type: fileType,
+              buffer: await file.arrayBuffer()
+            });
+          }
         }
 
         await saveFiles(shared);
