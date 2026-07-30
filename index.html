@@ -2893,17 +2893,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
-  <script type="module">
-        import { EditorView, basicSetup } from "https://esm.sh/codemirror";
-
-        const outputElement = document.querySelector("#output");
-
-        const view = new EditorView({
-            doc: "// Results will appear here...",
-            extensions: [basicSetup],
-            parent: outputElement
-        });
-    </script>
 </body>
 
 </html>
