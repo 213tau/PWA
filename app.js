@@ -6259,12 +6259,10 @@ if (outputEl && outputEl.textContent.trim() !== '') {
 
         // Choose scheme based on your environment (or use app protocol with web fallback)
         // If you are strictly inside a Microsoft WinUI/WebView2 app where whatsapp:// is guaranteed to work:
-        const whatsappAppUrl = `whatsapp://send?phone=${phoneNumber}&text=${message}`;
-        const whatsappWebUrl1 = `https://wa.me/${phoneNumber}?text=${message}`;
-
-        // Example: Trying the app protocol first, falling back to web if needed
-        // Or if you want to explicitly use the Microsoft app scheme as requested:
+        const whatsappAppUrl = `whatsapp://send?phone=${phoneNumber}&text=${message}`;                
         window.open(whatsappAppUrl, '_blank');
+        
+        const whatsappAppUrl1 = `https://wa.me/${phoneNumber}?text=${message}`;
         window.open(whatsappAppUrl1, '_blank');
     } else {
         alert("Please enter a valid phone number.");
