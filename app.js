@@ -8763,3 +8763,44 @@ function svgtoclipboardBtn() {
 
   printWindow.document.close();
 }
+
+
+                                                             async function exportEditableSvgToPdf() {
+  // 1. Select the specific editable SVG canvas
+  const svgElement = document.querySelector("svg.editable-svg-canvas");
+
+  if (!svgElement) {
+    alert("Target SVG canvas not found!");
+    return;
+  }
+
+  try {
+    // 2. Extract dimensions from the SVG viewbox or bounding rect
+    const width = svgElement.viewBox.baseVal.width || svgElement.clientWidth || 800;
+    const height = svgElement.viewBox.baseVal.height || svgElement.clientHeight || 600;
+
+    // 3. Initialize jsPDF (auto orientation matching the canvas aspect ratio)
+    const orientation = width > height ? 'landscape' : 'portrait';
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: orientation,
+      unit: 'pt',
+      format: [width, height]
+    });
+
+    // 4. Render the SVG straight into the PDF engine using svg2pdf
+    await pdf.svg(svgElement, {
+      x: 0,
+      y: 0,
+      width: width,
+      height: height
+    });
+
+    // 5. Trigger download for Android PWA storage/file system
+    pdf.save("editable-canvas.pdf");
+
+  } catch (error) {
+    console.error("PDF generation failed:", error);
+    alert("Could not generate PDF from this canvas.");
+  }
+}
