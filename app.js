@@ -408,6 +408,29 @@ for (const img of SELimages) {
 
             audioElement.src = audioUrl;
 
+            // --- WEB AUDIO API SOUND BOOST SETUP ---
+            if (!window.__audioContextInitialized) {
+                window.__audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                window.__audioSource = window.__audioContext.createMediaElementSource(audioElement);
+                
+                window.__audioGainNode = window.__audioContext.createGain();
+                
+                // Adjust this value to boost sound (e.g., 2.0 = 200% volume, 3.0 = 300%)
+                window.__audioGainNode.gain.value = 2.0; 
+
+                // Connect graph: source -> gain node -> speakers
+                window.__audioSource.connect(window.__audioGainNode);
+                window.__audioGainNode.connect(window.__audioContext.destination);
+                
+                window.__audioContextInitialized = true;
+            } else {
+                // If context already exists, just resume it (needed for browser autoplay policies)
+                if (window.__audioContext.state === 'suspended') {
+                    window.__audioContext.resume();
+                }
+            }
+            // ----------------------------------------
+
             audioElement.onloadedmetadata = () => {
                 resolve({
                     element: audioElement,
