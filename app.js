@@ -967,8 +967,13 @@ function processSvgFile(file) {
 }
 
      document.addEventListener('paste', async (e) => {
-    // Stop the browser from performing its default paste action
-    const output = document.querySelector("#output");
+        
+    const clipboardData = e.clipboardData || e.originalEvent.clipboardData;
+    if (!clipboardData) return;
+
+    const items = clipboardData.items;
+    const promises = [];
+    const output = document.querySelector("#output");    
 
     // Only prevent default if the target is #output or a descendant of #output
     if (output && (e.target === output || output.contains(e.target))) {
@@ -977,13 +982,6 @@ function processSvgFile(file) {
         // Allow normal default paste behavior for other elements on the page
         return;
     }
-        
-    const clipboardData = e.clipboardData || e.originalEvent.clipboardData;
-    if (!clipboardData) return;
-
-    const items = clipboardData.items;
-    const promises = [];
-    const output = document.querySelector("#output");
 
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
