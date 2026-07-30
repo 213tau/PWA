@@ -8697,7 +8697,7 @@ function svgtoclipboardBtn() {
 
           function printSVGElement() {
   // 1. Select the SVG element
-  const svgElement = document.querySelector("svg");
+  const svgElement = document.querySelector("svg.editable-svg-canvas");
   
   if (!svgElement) {
     alert("No SVG element found on the page.");
