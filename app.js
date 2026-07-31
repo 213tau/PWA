@@ -8694,7 +8694,7 @@ async function svgtoclipboardBtn() {
 
   // Ensure it has standard SVG wrapper tags if they weren't explicitly typed
   if (!combinedSvg.includes("<svg")) {
-    combinedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500">\n${combinedSvg}\n</svg>`;
+    combinedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="595" height="842">\n${combinedSvg}\n</svg>`;
   }
 
   try {
