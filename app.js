@@ -8677,7 +8677,7 @@ function svgdownloadBtn() {
 }
 
 
-function svgtoclipboardBtn() {
+async function svgtoclipboardBtn() {
   const outputElement = document.querySelector("#output");
 
   if (!outputElement) {
@@ -8697,20 +8697,28 @@ function svgtoclipboardBtn() {
     combinedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500">\n${combinedSvg}\n</svg>`;
   }
 
-  // Create a Blob from the SVG text string
-  const blob = new Blob([combinedSvg], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+  try {
+    // Copy as both plain text (for code editors) and image/svg+xml (for design apps/PowerPoint)
+    const blob = new Blob([combinedSvg], { type: "image/svg+xml" });
+    const textBlob = new Blob([combinedSvg], { type: "text/plain" });
 
-  // Automatically trigger a file download so PowerPoint can ingest it easily
-  const downloadLink = document.createElement("a");
-  downloadLink.href = url;
-  downloadLink.download = "graphic.svg";
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  document.body.removeChild(downloadLink);
+    const clipboardItem = new ClipboardItem({
+      "image/svg+xml": blob,
+      "text/plain": textBlob
+    });
 
-  // Clean up object URL
-  URL.revokeObjectURL(url);
+    await navigator.clipboard.write([clipboardItem]);
+    alert("SVG copied to clipboard successfully!");
+  } catch (err) {
+    console.error("Failed to copy SVG: ", err);
+    // Fallback to standard text copy if ClipboardItem fails
+    try {
+      await navigator.clipboard.writeText(combinedSvg);
+      alert("SVG copied as text to clipboard!");
+    } catch (fallbackErr) {
+      alert("Failed to copy to clipboard. Please check browser permissions.");
+    }
+  }
 }
 
 
