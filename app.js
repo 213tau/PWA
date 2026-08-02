@@ -1168,32 +1168,36 @@ function processSvgFile(file) {
     }
 
     // 🧩 Handle button click (secure clipboard access)
+// 🧩 Handle button click (secure clipboard access)
 document.querySelector("#pastebutton").addEventListener('click', async () => {
   try {
     const clipboardItems = await navigator.clipboard.read();
     const files = [];
 
     for (const clipboardItem of clipboardItems) {
+      // Prioritize checking if it contains SVG markup or Plain Text first
+      if (clipboardItem.types.includes('image/svg+xml')) {
+        const blob = await clipboardItem.getType('image/svg+xml');
+        const svgText = await blob.text();
+        
+        const pre = document.createElement('pre');
+        pre.innerText = svgText;
+        document.querySelector("#output").appendChild(pre);
+        break; // Stop checking other types for this item to avoid duplicates
+      } 
+      
+      if (clipboardItem.types.includes('text/plain')) {
+        const blob = await clipboardItem.getType('text/plain');
+        const text = await blob.text();
+        
+        document.querySelector("#output").innerText += text;
+        break; // Stop checking other types for this item
+      }
+
+      // Handle other binary files (PNG, JPG, PDF, etc.)
       for (const type of clipboardItem.types) {
-        const blob = await clipboardItem.getType(type);
-
-        // Handle plain text
-        if (type === 'text/plain') {
-          const text = await blob.text();
-          document.querySelector("#output").innerText += text;
-        }
-
-        // Handle SVG text/markup (if copied as raw XML/SVG string or standard SVG format)
-        else if (type === 'image/svg+xml') {
-          const svgText = await blob.text();
-          // Append as plain text markup (escaped safely using innerText)
-          const pre = document.createElement('pre');
-          pre.innerText = svgText;
-          document.querySelector("#output").appendChild(pre);
-        }
-
-        // Only handle other images or PDFs as files
-        else if (type.startsWith('image/') || type === 'application/pdf') {
+        if (type.startsWith('image/') || type === 'application/pdf') {
+          const blob = await clipboardItem.getType(type);
           const extension = type.split('/')[1] || 'bin';
           const file = new File([blob], `clipboard_${Date.now()}.${extension}`, { type });
           files.push(file);
