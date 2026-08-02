@@ -1381,15 +1381,6 @@ async function sendFile(file) {
       });
     });
 
-    document.getElementById('openBillLinkelectron').addEventListener('click', () => {
-      const refno = document.getElementById('nameInput').value.trim();
-      if (!refno) {
-        alert('Please enter a reference number.');
-        return;
-      }
-      window.electron.ipcRenderer.send('open-bill', refno);
-    });
-
     document.getElementById('vrcent').addEventListener('click', () => {
       window.electron.ipcRenderer.send('vrcent');
     });
