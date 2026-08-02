@@ -1188,7 +1188,11 @@ async function getUserMedia() {
     }
   });
 
-  window.addEventListener("unload", clearAllSignals);
+  document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    clearAllSignals();
+  }
+});
 
   function clearAllSignals() {
     localStorage.removeItem("webrtcSignal");
