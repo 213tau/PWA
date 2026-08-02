@@ -7468,10 +7468,6 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       if (clickedTab) clickedTab.classList.add('active');
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
-      showTab('imageProcessing');
-    });
-
     const scrollContainer = document.getElementById('tabsScroll');
     let isDown = false, startX, scrollLeft;
 
