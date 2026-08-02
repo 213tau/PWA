@@ -1168,43 +1168,47 @@ function processSvgFile(file) {
     }
 
     // 🧩 Handle button click (secure clipboard access)
-    document.querySelector("#pastebutton").addEventListener('click', async () => {
-      try {
-        const clipboardItems = await navigator.clipboard.read();
-        const files = [];
+document.querySelector("#pastebutton").addEventListener('click', async () => {
+  try {
+    const clipboardItems = await navigator.clipboard.read();
+    const files = [];
 
-        for (const clipboardItem of clipboardItems) {
-          for (const type of clipboardItem.types) {
-            const blob = await clipboardItem.getType(type);
+    for (const clipboardItem of clipboardItems) {
+      for (const type of clipboardItem.types) {
+        const blob = await clipboardItem.getType(type);
 
-// Handle text
+        // Handle plain text
         if (type === 'text/plain') {
-          const blob = await clipboardItem.getType(type);          
-          document.querySelector("#output").innerHTML +=await blob.text();
+          const text = await blob.text();
+          document.querySelector("#output").innerText += text;
         }
 
-
-            // Only handle images or PDFs
-            if (type.startsWith('image/') || type === 'application/pdf') {
-              const extension = type.split('/')[1] || 'bin';
-              const file = new File([blob], `clipboard_${Date.now()}.${extension}`, { type });
-              files.push(file);
-            }
-          }
+        // Handle SVG text/markup (if copied as raw XML/SVG string or standard SVG format)
+        else if (type === 'image/svg+xml') {
+          const svgText = await blob.text();
+          // Append as plain text markup (escaped safely using innerText)
+          const pre = document.createElement('pre');
+          pre.innerText = svgText;
+          document.querySelector("#output").appendChild(pre);
         }
 
-        if (files.length > 0) {
-          await handleClipboardFiles(files);
+        // Only handle other images or PDFs as files
+        else if (type.startsWith('image/') || type === 'application/pdf') {
+          const extension = type.split('/')[1] || 'bin';
+          const file = new File([blob], `clipboard_${Date.now()}.${extension}`, { type });
+          files.push(file);
         }
-        //else {
-          //alert('No supported files (image/pdf) found in clipboard.');
-        //}
-      } catch (err) {
-        console.error('❌ Clipboard read failed:', err);
-        alert('Clipboard access not allowed or not supported in this browser.');
       }
-    });
+    }
 
+    if (files.length > 0) {
+      await handleClipboardFiles(files);
+    }
+  } catch (err) {
+    console.error('❌ Clipboard read failed:', err);
+    alert('Clipboard access not allowed or not supported in this browser.');
+  }
+});
 
     // Attach drop and dragover event listeners
     document.body.addEventListener("dragover", (e) => {
