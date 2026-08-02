@@ -1184,9 +1184,7 @@ document.querySelector("#pastebutton").addEventListener('click', async () => {
         pre.innerText = svgText;
         document.querySelector("#output").appendChild(pre);
         break; // Stop checking other types for this item to avoid duplicates
-      } 
-      
-      if (clipboardItem.types.includes('text/plain')) {
+      } else if (clipboardItem.types.includes('text/plain')) {
         const blob = await clipboardItem.getType('text/plain');
         const text = await blob.text();
         
