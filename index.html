@@ -328,26 +328,7 @@
     <button id="delete">Delete</button>
     <button id="duplicate">Duplicate</button>
     <button id="stepDown">Move Up</button>
-    <button id="scanA4Btn">Scan A4</button>
-    <button id="scanpassport">Passport Scan</button>
     <button id="captureScreenBtn">📺 Screen</button>
-    
-    <div class="printer-panel">
-      <select id="printerSelect">
-        <option value="EPSON L3210 Series">EPSON L3210 Series</option>
-        <option value="EPSON L3210 Series (Pictures)">EPSON L3210 Series (Pictures)</option>
-        <option value="Canon LBP3000 Series PCL5e">Canon LBP3000 Series PCL5e</option>  
-      </select>
-      <button id="printMonoBtn">Print Mono</button>
-      <button id="printColorBtn">Print Color</button>
-      <input id="noofprint" type="number" value="1" min="1" step="1" style="width: 70px;">
-      <select id="duplexSelect">
-        <option value="simplex">Single-sided</option>
-        <option value="duplex">Duplex (Default)</option>
-        <option value="duplexlong">Duplex (Long edge)</option>
-        <option value="duplexshort">Duplex (Short edge)</option>
-      </select>
-    </div>
 
     <label for="filename">PDF Name: <input id="filename" value="document"></label>    
   </div>
@@ -502,6 +483,24 @@
       <button id="texttoimage">Add Text to Image</button>
       <button id="noofprint" onclick="generatefidaPDF()">Pending Page Slip</button>
       <button onclick="window.location.href='camscanner://scan'">Open CamScanner</button>
+      <button id="scanA4Btn">Scan A4</button>
+    <button id="scanpassport">Passport Scan</button>
+    <div class="printer-panel">
+      <select id="printerSelect">
+        <option value="EPSON L3210 Series">EPSON L3210 Series</option>
+        <option value="EPSON L3210 Series (Pictures)">EPSON L3210 Series (Pictures)</option>
+        <option value="Canon LBP3000 Series PCL5e">Canon LBP3000 Series PCL5e</option>  
+      </select>
+      <button id="printMonoBtn">Print Mono</button>
+      <button id="printColorBtn">Print Color</button>
+      <input id="noofprint" type="number" value="1" min="1" step="1" style="width: 70px;">
+      <select id="duplexSelect">
+        <option value="simplex">Single-sided</option>
+        <option value="duplex">Duplex (Default)</option>
+        <option value="duplexlong">Duplex (Long edge)</option>
+        <option value="duplexshort">Duplex (Short edge)</option>
+      </select>
+    </div>
     </div>
 
     <div class="tab-content" id="TabTools">
