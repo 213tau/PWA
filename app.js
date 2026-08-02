@@ -8728,7 +8728,7 @@ async function svgtoclipboardBtn() {
 }
 
 
-          function printSVGElement() {
+function printSVGElement() {
   // 1. Select the SVG element
   const svgElement = document.querySelector("svg.editable-svg-canvas");
   
@@ -8798,7 +8798,7 @@ async function svgtoclipboardBtn() {
 }
 
 
-                                                             async function exportEditableSvgToPdf() {
+async function exportEditableSvgToPdf() {
   // 1. Select the specific editable SVG canvas
   const svgElement = document.querySelector("svg.editable-svg-canvas");
 
@@ -8836,4 +8836,74 @@ async function svgtoclipboardBtn() {
     console.error("PDF generation failed:", error);
     alert("Could not generate PDF from this canvas.");
   }
+}
+
+
+function SVGElementPDF() {
+  // 1. Select the SVG element
+  const svgElement = document.querySelector("#preview-container svg");
+  
+  if (!svgElement) {
+    alert("No SVG element found on the page.");
+    return;
+  }
+
+  // 2. Serialize the SVG HTML
+  const svgString = new XMLSerializer().serializeToString(svgElement);
+
+  // 3. Open a new window
+  const printWindow = window.open('', '_blank', 'width=800,height=600');
+  
+  if (!printWindow) {
+    alert("Pop-up blocked! Please allow pop-ups for this app to print.");
+    return;
+  }
+
+  // 4. Write the isolated HTML document
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Print SVG</title>
+        <style>
+          body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #ffffff;
+          }
+          svg {
+            max-width: 100%;
+            height: auto;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+            @page {
+              size: auto;
+              margin: 10mm;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${svgString}
+        <script>
+          // Wait for resources to render, then trigger print
+          window.onload = function() {
+            setTimeout(() => {
+              window.print();
+              window.close();
+            }, 250);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+
+  printWindow.document.close();
 }
