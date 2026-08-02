@@ -374,7 +374,7 @@
 
   <!-- MAIN TAB CONTENTS -->
   <main>
-    <div class="tab-content active" id="imageProcessing">
+    <div class="tab-content" id="imageProcessing">
       <button id="warpBtn">Warp Image</button>
       <button onclick="contrastStretchingWithHistogramClipping(document.querySelector('canvas'), 2, 'both')">Histogram Clipping Both</button>
       <button onclick="applyContrastStretching(true);">Auto Light Enhancement</button>
@@ -633,7 +633,7 @@
 
     <canvas id="canvas"></canvas>
 
-    <div class="tab-content" id="textEditing">
+    <div class="tab-content active" id="textEditing">
       <div id="output" contenteditable="true" dir="auto">
         <div><br></div>
       </div>
