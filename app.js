@@ -1846,7 +1846,7 @@ images.forEach(function (e, index) {
       }
 
       const originalCanvas = document.querySelector('canvas');
-      const input = document.querySelector("#filename");
+      const input = document.querySelector("#output");
       const targetSizeKB = parseFloat(input.value) - 0.2;  // Assuming input is a number
 
       function resizeCanvas(canvas, scale) {
@@ -3694,7 +3694,7 @@ images.forEach(function (e, index) {
       const pdfBytes = await pdfDoc.save();
 
       // Get the input value
-      let pdfName = document.querySelector("#filename").value.trim();
+      let pdfName = document.querySelector("#output").value.trim();
 
       if (!pdfName) {
         // If the input is empty, use the current date and time as filename
