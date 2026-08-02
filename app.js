@@ -8835,7 +8835,7 @@ async function exportEditableSvgToPdf() {
 }
 
 
-function SVGElementPDF() {
+function SVGElementPrint() {
   // 1. Select the SVG element
   const svgElement = document.querySelector("#preview-container svg");
   
