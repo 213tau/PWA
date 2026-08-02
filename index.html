@@ -329,8 +329,6 @@
     <button id="duplicate">Duplicate</button>
     <button id="stepDown">Move Up</button>
     <button id="captureScreenBtn">📺 Screen</button>
-
-    <label for="filename">PDF Name: <input id="filename" value="document"></label>    
   </div>
 
   <!-- TAB MENU -->
@@ -2598,7 +2596,7 @@ async function downloadFinal() {
     const blob = await app.zip.generateAsync({ type: "blob" });
     const now = new Date();
     const iso = now.toISOString().replace(/:/g, "-").split(".")[0];
-    const finalName = `${filename || "presentation"}_${iso}.pptx`;
+    const finalName = `${"presentation"}_${iso}.pptx`;
 
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
