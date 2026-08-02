@@ -355,7 +355,7 @@
   <!-- TAB MENU -->
   <nav class="tab-container">
     <div class="tabs-scroll" id="tabsScroll">
-      <button class="tab active" onclick="showTab('textEditing')">Text Editing</button>
+      <button class="tab active" onclick="showTab('textEditing')">💎 Text Editing</button>
       <button class="tab" onclick="showTab('imageProcessing')">🖼️ Image</button>
       <button class="tab" onclick="showTab('imageAnalysis')">🧠 Analysis</button>
       <button class="tab" onclick="showTab('thresholding')">🌀 Threshold</button>
@@ -367,8 +367,7 @@
       <button class="tab" onclick="showTab('printTools')">🖨️ Print</button>
       <button class="tab" onclick="showTab('canvasTools')">🌀 Canvas</button>
       <button class="tab" onclick="showTab('TabTools')">Tabs</button>
-      <button class="tab" onclick="showTab('SharedTools')">Web Share API</button>
-      <button class="tab" onclick="showTab('electronTools')" style="display:none;">💎 Electron</button>
+      <button class="tab" onclick="showTab('SharedTools')">Web Share API</button>      
     </div>
   </nav>
 
@@ -1607,32 +1606,6 @@ async function embedImages(svg) {
         URL.revokeObjectURL(url);
     }
 });
-
-    const { ipcRenderer } = require('electron');
-
-    async function updateList(files) {
-      const list = document.getElementById('list');
-      list.innerHTML = '';
-      if (files.length === 0) {
-        list.innerHTML = '<li>No files found</li>';
-      } else {
-        files.forEach(f => {
-          const li = document.createElement('li');
-          li.textContent = f;
-          list.appendChild(li);
-        });
-      }
-    }
-
-    document.getElementById('check').addEventListener('click', async () => {
-      const files = await ipcRenderer.invoke('wa-get-new-files');
-      updateList(files);
-    });
-
-    document.getElementById('today').addEventListener('click', async () => {
-      const files = await ipcRenderer.invoke('wa-get-today-files');
-      updateList(files);
-    });
 
 
 
