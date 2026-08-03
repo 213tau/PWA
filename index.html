@@ -1995,46 +1995,6 @@ function removePicker() {
   savedRange = null;
 }
 }
-
-const editor2 = document.getElementById("output");
-
-function createLine(text = "") {
-  const div = document.createElement("div");
-  div.innerHTML = text || "<br>";
-  return div;
-}
-
-editor2.addEventListener("keydown", function(e) {
-
-  if (e.key === "Enter") {
-    e.preventDefault();
-
-    const sel = window.getSelection();
-    const range = sel.getRangeAt(0);
-
-    let line = range.startContainer;
-
-    while (line && line.parentNode !== editor) {
-      line = line.parentNode;
-    }
-
-    const newLine = createLine();
-
-    if (line) {
-      line.after(newLine);
-    } else {
-      editor.appendChild(newLine);
-    }
-
-    const newRange = document.createRange();
-    newRange.setStart(newLine, 0);
-    newRange.collapse(true);
-
-    sel.removeAllRanges();
-    sel.addRange(newRange);
-  }
-
-});
   </script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
