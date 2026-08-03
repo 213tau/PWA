@@ -8905,3 +8905,24 @@ function SVGElementPrint() {
 
   printWindow.document.close();
 }
+
+const outputElement = document.querySelector("#output");
+
+// Function to save content to localStorage
+function saveToLocalStorage() {
+  localStorage.setItem("tau", outputElement.innerHTML);
+}
+
+// Listen for typing and direct input changes
+outputElement.addEventListener("input", saveToLocalStorage);
+
+// Listen for paste events (using 'input' usually covers paste, 
+// but 'paste' can be used if you need to intercept or handle clipboard data specifically)
+outputElement.addEventListener("paste", () => {
+  // Use setTimeout to ensure innerHTML is updated *after* the paste completes
+  setTimeout(saveToLocalStorage, 0);
+});
+
+function saveoutput(){
+document.querySelector("#output").innerHTML = localStorage.getItem("tau");
+}
