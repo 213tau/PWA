@@ -6542,23 +6542,26 @@ if (outputEl && outputEl.textContent.trim() !== '') {
     }
 
     function openMepcobill() {      
-      let refno = document.getElementById("output").innerText.trim();        
+    let refno = document.getElementById("output").innerText.trim();        
 
-      if (/^(\d{14}|\d{2}\s\d{5}\s\d{7})$/.test(refno)) {
-      // Create a form dynamically
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = `https://bill.pitc.com.pk/gbill.aspx?refno=${encodeURIComponent(refno)}`;
-      form.target = '_blank'; // Open in a new tab
+    if (/^(\d{14}|\d{2}\s\d{5}\s\d{7})$/.test(refno)) {
+        // Remove all whitespace characters before encoding
+        let cleanRefno = refno.replace(/\s+/g, '');
 
-      // Add to body and submit
-      document.body.appendChild(form);
-      form.submit();
+        // Create a form dynamically
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `https://bill.pitc.com.pk/gbill.aspx?refno=${encodeURIComponent(cleanRefno)}`;
+        form.target = '_blank'; // Open in a new tab
 
-      // Clean up
-      document.body.removeChild(form);
-        }
-    };
+        // Add to body and submit
+        document.body.appendChild(form);
+        form.submit();
+
+        // Clean up
+        document.body.removeChild(form);
+    }
+};
 
     
     function gradientShadowRemovalWithGuidedFilter(canvas = document.querySelector("canvas")) {
