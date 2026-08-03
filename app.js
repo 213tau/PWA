@@ -6541,7 +6541,7 @@ if (outputEl && outputEl.textContent.trim() !== '') {
       a.click();
     }
 
-    document.getElementById('openMepcobill').addEventListener('click', function (e) {
+    function openMepcobill() {
       e.preventDefault(); // Prevent normal <a> behavior
       let refno = document.getElementById("output").innerText.trim();        
 
@@ -6559,7 +6559,7 @@ if (outputEl && outputEl.textContent.trim() !== '') {
       // Clean up
       document.body.removeChild(form);
         }
-    });
+    };
 
     
     function gradientShadowRemovalWithGuidedFilter(canvas = document.querySelector("canvas")) {
