@@ -1958,13 +1958,22 @@ images.forEach(function (e, index) {
     function getTouchPos(touch, canvas) {
       const rect = canvas.getBoundingClientRect();
       
-      // Calculate scale ratio between internal resolution and CSS display size
+      // Account for potential CSS padding/borders inside the element box
+      const style = window.getComputedStyle(canvas);
+      const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+      const borderTop = parseFloat(style.borderTopWidth) || 0;
+      const paddingLeft = parseFloat(style.paddingLeft) || 0;
+      const paddingTop = parseFloat(style.paddingTop) || 0;
+
+      // Effective rendered width/height of the canvas content area minus padding/borders
+      const renderWidth = rect.width - borderLeft - borderTop - paddingLeft - paddingTop; // fallback safety
+      
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
 
       return {
-        x: (touch.clientX - rect.left) * scaleX,
-        y: (touch.clientY - rect.top) * scaleY
+        x: (touch.clientX - rect.left - borderLeft - paddingLeft) * scaleX,
+        y: (touch.clientY - rect.top - borderTop - paddingTop) * scaleY
       };
     }
 
