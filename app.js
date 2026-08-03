@@ -8926,3 +8926,33 @@ outputElement.addEventListener("paste", () => {
 function saveoutput(){
 document.querySelector("#output").innerHTML = localStorage.getItem("tau");
 }
+
+const organize = document.getElementById('organize');
+const organizeDataDiv = document.getElementById('organizeData');
+
+organize.addEventListener('click', function() {
+  organizeDataDiv.innerHTML = '';
+
+  images.forEach(item => {
+    // If you want to display the actual <img> element stored in the object:
+    if (item.img instanceof HTMLElement) {
+      const clone = item.img.cloneNode(true);
+      clone.style.display = 'block';
+      clone.style.margin = '5px';
+      clone.style.maxWidth = '150px';
+      organizeDataDiv.appendChild(clone);
+    } 
+    // Alternatively, if you want to render from imageData:
+    else if (item.imageData instanceof ImageData) {
+      const canvas = document.createElement('canvas');
+      canvas.width = item.imageData.width;
+      canvas.height = item.imageData.height;
+      const ctx = canvas.getContext('2d');
+      ctx.putImageData(item.imageData, 0, 0);
+      
+      canvas.style.margin = '5px';
+      canvas.style.maxWidth = '150px';
+      organizeDataDiv.appendChild(canvas);
+    }
+  });
+});
