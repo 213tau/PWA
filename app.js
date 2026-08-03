@@ -6541,21 +6541,11 @@ if (outputEl && outputEl.textContent.trim() !== '') {
       a.click();
     }
 
-    document.getElementById('openBillLink').addEventListener('click', function (e) {
+    document.getElementById('openMepcobill').addEventListener('click', function (e) {
       e.preventDefault(); // Prevent normal <a> behavior
+      let refno = document.getElementById("output").innerText.trim();        
 
-      let refno = document.getElementById('refno').value.trim();
-
-      if (!refno) {
-        alert('Please enter a reference number.');
-        return;
-      }
-
-      // Append '0' if refno is exactly 13 digits
-      if (/^\d{13}$/.test(refno)) {
-        refno += '0';
-      }
-
+      if (/^(\d{14}|\d{2}\s\d{5}\s\d{7})$/.test(refno)) {
       // Create a form dynamically
       const form = document.createElement('form');
       form.method = 'POST';
@@ -6568,14 +6558,9 @@ if (outputEl && outputEl.textContent.trim() !== '') {
 
       // Clean up
       document.body.removeChild(form);
+        }
     });
 
-    document.getElementById('openLink').addEventListener('click', function (e) {
-      e.preventDefault(); // Prevent normal <a> behavior
-
-      let refno = document.getElementById('refno').value.trim();
-      window.open(refno, '_blank'); // Opens in a new tab
-      });
     
     function gradientShadowRemovalWithGuidedFilter(canvas = document.querySelector("canvas")) {
       if (!canvas) {
