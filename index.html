@@ -458,7 +458,7 @@
         <div>
             <label class="btn file-label">
                 Choose PPTX File
-                <input type="file" id="fileInput" accept=".pdf, .pptx, .svg, image/svg+xml">
+                <input type="file" id="fileInputsvg" accept=".pdf, .pptx, .svg, image/svg+xml">
             </label>
             <button id="clipboardBtn" class="btn"  style="background: black">Clipboard SVG</button>
             <button id="saveBtn" class="btn">Save & Download PPTX</button>
@@ -2865,7 +2865,7 @@ dropZone.addEventListener('drop', (e) => {
     if (files.length && files[0].name.endsWith('.pptx')) handleFile(files[0]);
 });
 
-document.getElementById("fileInput").addEventListener("change", (e) => {
+document.getElementById("fileInputsvg").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) handleFile(file);
 });
