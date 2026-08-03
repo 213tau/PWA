@@ -502,22 +502,15 @@
     </div>
     </div>
 
-    <div class="tab-content" id="TabTools">
-      <div style="margin-bottom: 10px;">
-        <label for="refno">Reference No.:</label>
-        <input type="text" id="refno" placeholder="e.g. 20151746013001">
-        <a href="#" id="openBillLink" class="success" style="padding: 9px 12px; display:inline-block; border-radius:6px; text-decoration:none; color:white;">Open My Bill</a>
-      </div>
-      <button id="openLink">Open Link</button>
+    <div class="tab-content" id="TabTools">      
       <button onclick="window.open('https://www.google.com/webhp', '_blank')">Google</button>
       <button onclick="window.open('https://chatgpt.com/', '_blank')">ChatGPT</button>
       <button onclick="window.open('https://pixlr.com/editor/', '_blank')">Pixlr</button>
-      <button onclick="window.open('https://www.text-sync.com/en/r/e66q0', '_blank')">Text Sync</button>
-      <button onclick="window.open('https://domicile.punjab.gov.pk/Public-Home.aspx', '_blank')">Domicile</button>
+      <button onclick="window.open('https://boxy-svg.com/app', '_blank')">Boxy SVG</button>
+      <button onclick="window.open('https://www.text-sync.com/en/r/e66q0', '_blank')">Text Sync</button>      
       <button onclick="window.open('https://vrcentpunjab.com/', '_blank')">Vehicle Card</button>
       <button onclick="window.open('https://softskills.oec.gov.pk/portal/soft-skill', '_blank')">Soft Skill Certificate</button>
-      <button onclick="window.open('https://vscode.dev/', '_blank')">VS Code</button>
-      <button onclick="window.open('https://www.youtube.com/', '_blank')">YouTube</button>
+      <button onclick="window.open('https://vscode.dev/', '_blank')">VS Code</button>      
       <button onclick="window.open('https://biosystid.lhc.gov.pk/biosystno', '_blank')">Lahore High Court</button>
       <button onclick="window.open('https://vulearning.com/Jobs/Category/punjab-government.aspx', '_blank')">Govt Punjab Jobs</button>
     </div>
@@ -637,6 +630,7 @@
       <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;">
         <button onclick="ocrwarp()">OCR Warp</button>
         <button onclick="openWhatsApp()" class="success">🟢 WhatsApp</button>
+        <button onclick="openMepcobill()" style="display:none">Open Mepco Bill</button>
         <button onclick="editoutput()">Edit Output</button>
         <button onclick="textup()">TextUp</button>
         <button onclick="moveLineUp()">Move Line Up</button>
@@ -647,6 +641,7 @@
         <button id="urduStyle">Urdu Style (Jameel Noori)</button>
         <button onclick="googletranslate()">Translate Urdu → English</button>
         <button onclick="document.querySelector('#output').style.margin = '1in 1in 0.7in 1in';">Margin 0.7in</button>
+        <button id="lowercase">Lowercase</button>
         <button id="propercase">Propercase</button>
         <button id="uppercase">Uppercase</button>      
         <button id="startBtn" onclick="startVoiceTyping('en-US')">Voice Typing (English)</button>
