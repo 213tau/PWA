@@ -439,9 +439,6 @@
       <button id="svg">SVG Path Manipulation</button>
       <button id="svgpathedit">SVG Path Edit</button>
       <button id="bringcoat">Bring Coat Upfront</button>
-    </div>
-
-    <div class="tab-content" id="svgTools">
       <button id="textlayerdisplay">Show/Hide Text Layer</button>
       <button id="embedsvgimages">Embed SVG Images</button>
       <button id="pdfpagetocanvas">PDF to Canvas</button>
@@ -451,6 +448,73 @@
       <button onclick="editablesvg()">Editable SVG</button>
       <button id="printBtn" onclick="printSVGElement()">Print / Save PDF</button>
       <button id="downloadPdfBtn" onclick="exportEditableSvgToPdf()">Download PDF</button>
+    </div>
+
+    <div class="tab-content" id="svgTools">
+      <div id="main-layout">
+    <div id="controls">
+        <h2>PPTX Pro Suite Editor</h2>
+        <p>Drag & drop a file here or browse to load slides. Click elements to inspect and reposition.</p>
+        <div>
+            <label class="btn file-label">
+                Choose PPTX File
+                <input type="file" id="fileInput" accept=".pdf, .pptx, .svg, image/svg+xml">
+            </label>
+            <button id="clipboardBtn" class="btn"  style="background: black">Clipboard SVG</button>
+            <button id="saveBtn" class="btn">Save & Download PPTX</button>
+        </div>
+        <div id="status" class="status-msg"></div>
+        <button id="saveSVG" class="btn">Save & Download SVG</button>
+        <button id="printBtn" class="btn" style="background: green">Print</button>
+    </div>
+    <div id="output"></div>
+</div>
+
+<div id="sidebar">
+    <h3>Format Inspector</h3>
+    <div id="no-selection-notice">Select a slide element on the canvas to inspect or adjust its properties.</div>
+    <div id="editor-fields" style="display: none;">
+        <div class="config-group">
+            <label>Text Content</label>
+            <input type="text" id="prop-text">
+        </div>
+        <div class="row" style="margin-top: 10px;">
+            <div class="config-group">
+                <label>Size (px)</label>
+                <input type="number" id="prop-size" min="1">
+            </div>
+            <div class="config-group">
+                <label>Color</label>
+                <input type="color" id="prop-color" style="width:100%; height:38px; background:#1e293b; border:1px solid var(--border-dark); border-radius:6px; cursor:pointer;">
+            </div>
+        </div>
+        <div class="config-group" style="margin-top: 10px;">
+            <label>Style Rules</label>
+            <div class="row">
+                <button id="btn-bold" class="toggle-btn">B</button>
+                <button id="btn-italic" class="toggle-btn">I</button>
+            </div>
+        </div>
+        <hr style="border: none; border-top: 1px solid var(--border-dark); margin: 16px 0;">
+        <div class="row">
+            <div class="config-group">
+                <label>Canvas X</label>
+                <input type="number" id="prop-posX">
+            </div>
+            <div class="config-group">
+                <label>Canvas Y</label>
+                <input type="number" id="prop-posY">
+            </div>
+        </div>
+    </div>
+
+    <div class="kbd-hint">
+        <strong>Shortcuts:</strong><br>
+        <kbd>Arrows</kbd> Move text 1px<br>
+        <kbd>Shift</kbd> + <kbd>Arrows</kbd> Move 10px<br>
+        <kbd>Esc</kbd> Deselect
+    </div>
+</div>
     </div>
 
     <div class="tab-content" id="pdfTools">
@@ -2735,6 +2799,1166 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Clean up the URL bar so refreshing doesn't trigger share handling again
     window.history.replaceState({}, document.title, window.location.pathname);
   }
+});
+</script>
+  <script>
+const EMU_TO_PX = 96 / 914400;
+const PX_TO_EMU = 914400 / 96;
+const blobUrls = new Set();
+
+let currentZip = null;
+let currentFileName = "presentation.pptx";
+const slideXmlDocs = {}; 
+let selectedTarget = null;
+
+// Namespace-agnostic element selection helpers
+function findElements(parent, localName) {
+    if (!parent) return [];
+    return Array.from(parent.getElementsByTagName("*")).filter(el => {
+        const name = el.localName || el.nodeName.split(':').pop();
+        return name === localName;
+    });
+}
+
+function findFirstElement(parent, localName) {
+    if (!parent) return null;
+    return Array.from(parent.getElementsByTagName("*")).find(el => {
+        const name = el.localName || el.nodeName.split(':').pop();
+        return name === localName;
+    }) || null;
+}
+
+function getAttr(el, attrName) {
+    if (!el) return null;
+    return el.getAttribute(attrName) || 
+           el.getAttribute(`r:${attrName}`) || 
+           el.getAttribute(`a:${attrName}`) || 
+           el.getAttribute(`p:${attrName}`) ||
+           Array.from(el.attributes).find(a => a.localName === attrName)?.value;
+}
+
+const emuToPx = (val) => parseInt(val || 0) * EMU_TO_PX;
+const pxToEmu = (val) => Math.round(parseFloat(val || 0) * PX_TO_EMU);
+
+function getOrCreateDefs(svg) {
+    let defs = svg.querySelector("defs");
+    if (!defs) {
+        defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        svg.insertBefore(defs, svg.firstChild);
+    }
+    return defs;
+}
+
+// Drag & Drop File Handlers
+const dropZone = document.getElementById("controls");
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+});
+['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+});
+['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+});
+dropZone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    if (files.length && files[0].name.endsWith('.pptx')) handleFile(files[0]);
+});
+
+document.getElementById("fileInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) handleFile(file);
+});
+document.getElementById("saveBtn").addEventListener("click", saveAndDownloadPPTX);
+document.getElementById("printBtn").addEventListener("click", function(){
+    window.print();
+});
+
+// Keyboard controls (desktop fallback)
+document.addEventListener("keydown", (e) => {
+    if (!selectedTarget || e.target.tagName === "INPUT") return;
+    
+    const step = e.shiftKey ? 10 : 1;
+    const parent = selectedTarget._parentTextEl;
+    let x = parseInt(parent.getAttribute("x") || 0);
+    let y = parseInt(parent.getAttribute("y") || 0);
+
+    if (e.key === "ArrowLeft") x -= step;
+    else if (e.key === "ArrowRight") x += step;
+    else if (e.key === "ArrowUp") y -= step;
+    else if (e.key === "ArrowDown") y += step;
+    else if (e.key === "Escape") { closeInspector(); return; }
+    else return;
+
+    e.preventDefault();
+    updateTargetPosition(parent, x, y);
+});
+
+function updateTargetPosition(parent, x, y) {
+    parent.setAttribute("x", x);
+    Array.from(parent.children).forEach(c => c.setAttribute("x", x));
+    parent.setAttribute("y", y);
+
+    if (parent._xmlOffRef) {
+        parent._xmlOffRef.setAttribute("x", pxToEmu(x));
+        parent._xmlOffRef.setAttribute("y", pxToEmu(y - (parent._initialVerticalOffset || 0) - 14));
+    }
+
+    document.getElementById("prop-posX").value = Math.round(x);
+    document.getElementById("prop-posY").value = Math.round(y);
+}
+
+// Make sure PDF.js is imported in your HTML/Environment:
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+async function handleFile(file) {
+    const status = document.getElementById("status");
+    const output = document.getElementById("output");
+    const saveBtn = document.getElementById("saveBtn");
+    
+    status.innerText = "Reading File...";
+    output.innerHTML = "";
+    saveBtn.style.display = "none";
+    closeInspector();
+    
+    blobUrls.forEach(url => URL.revokeObjectURL(url));
+    blobUrls.clear();
+    Object.keys(slideXmlDocs).forEach(k => delete slideXmlDocs[k]);
+
+    currentFileName = file.name;
+
+    try {
+        const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+        if (isSvg) {
+            // --- EXISTING SVG HANDLING ---
+            const svgText = await file.text();
+            const parser = new DOMParser();
+            let xmlDoc = parser.parseFromString(svgText, "image/svg+xml");
+            
+            const hasError = xmlDoc.getElementsByTagName("parsererror").length > 0 ||
+                             xmlDoc.querySelector("parsererror") != null;
+
+            if (hasError) {
+                const htmlDoc = parser.parseFromString(svgText, "text/html");
+                const foundSvg = htmlDoc.querySelector("svg");
+                if (foundSvg) {
+                    xmlDoc = htmlDoc;
+                } else {
+                    throw new Error("Invalid SVG file structure.");
+                }
+            }
+
+            slideXmlDocs[file.name] = xmlDoc;
+
+            const container = document.createElement("div");
+            container.className = "slide-container";
+
+            const rawSvgElement = xmlDoc.querySelector("svg") || xmlDoc.documentElement;
+            const svgElement = document.importNode(rawSvgElement, true);
+            
+            svgElement.addEventListener("click", (e) => {
+                if (e.target.tagName.toLowerCase() === "svg") closeInspector();
+            });
+
+            const textElements = svgElement.querySelectorAll("text, tspan");
+            textElements.forEach((el) => {
+                el.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const clickedTarget = e.target;
+                    clickedTarget._parentTextEl = clickedTarget.closest("text") || clickedTarget;
+                    selectElementForInspection(clickedTarget);
+                });
+            });
+
+            container.appendChild(svgElement);
+            output.appendChild(container);
+
+            status.innerText = `Loaded SVG: ${file.name}`;
+            saveBtn.style.display = "inline-flex";
+
+        } else if (isPdf) {
+    // --- NEW PDF HANDLING WITH CMAP & TEXTCONTENT SUPPORT ---
+    const arrayBuffer = await file.arrayBuffer();
+    
+    // Pass cMap parameters to getDocument to decode custom glyphs correctly
+    const pdf = await pdfjsLib.getDocument({ 
+        data: arrayBuffer,
+        cMapUrl: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/",
+        cMapPacked: true
+    }).promise;
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+        status.innerText = `Processing page ${i} of ${pdf.numPages}...`;
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        try {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 1.0 });
+
+            const container = document.createElement("div");
+            container.className = "slide-container";
+
+            // 1. Retrieve both vector objects and decoded text content
+            const [opList, textContent] = await Promise.all([
+                page.getOperatorList(),
+                page.getTextContent({ combineTextItems: true }) // Combines fragmented glyph items
+            ]);
+
+            const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+
+            // SAFEGUARD: Wrap image methods to skip faulty images
+            // --- 1. SAFEGUARD: Wrap image methods to skip faulty images ---
+const imageMethods = ['paintImageXObject', 'paintInlineImageXObject', 'paintImageMaskXObject'];
+imageMethods.forEach((method) => {
+    if (typeof svgGfx[method] === 'function') {
+        const originalMethod = svgGfx[method].bind(svgGfx);
+        
+        svgGfx[method] = function (...args) {
+            try {
+                const result = originalMethod(...args);
+                // If it returns a Promise, catch async rejections
+                if (result && typeof result.catch === 'function') {
+                    return result.catch((imgError) => {
+                        console.warn(`Skipped faulty image in page ${i} (${method} async):`, imgError);
+                    });
+                }
+                return result;
+            } catch (imgError) {
+                // Catch synchronous errors (like reading properties of null 'subarray')
+                console.warn(`Skipped faulty image in page ${i} (${method} sync):`, imgError);
+            }
+        };
+    }
+});
+
+            // Render SVG layout using SVGGraphics
+            const svgElement = await svgGfx.getSVG(opList, viewport);
+
+            svgElement.setAttribute("viewBox", `0 0 ${viewport.width} ${viewport.height}`);
+            svgElement.style.touchAction = "none";
+
+            // Deselect on root SVG click
+            svgElement.addEventListener("click", (e) => {
+                if (e.target.tagName.toLowerCase() === "svg") closeInspector();
+            });
+
+            // 2. Map and replace text nodes with clean text from getTextContent()
+            const textNodes = Array.from(svgElement.querySelectorAll("text"));
+
+            // Filter valid text items from getTextContent
+            const textItems = textContent.items.filter(item => item.str && item.str.trim().length > 0);
+
+            textNodes.forEach((node, index) => {
+                const item = textItems[index];
+
+                if (item) {
+                    // Replace Private Use Area (PUA) glyphs (e.g., \uE000 - \uF8FF) or unmapped symbols
+                    const cleanStr = item.str.replace(/[\uE000-\uF8FF]/g, '');
+
+                    // Attach extracted metadata directly to the element for inspection
+                    node.dataset.rawText = item.str;
+                    node.dataset.cleanText = cleanStr;
+                    node.dataset.fontName = item.fontName;
+                    
+                    // If the SVG node rendered PUA symbols, update text content to readable Unicode
+                    if (/[\uE000-\uF8FF]/.test(node.textContent) && cleanStr) {
+                        node.textContent = cleanStr;
+                    }
+                }
+
+                // Add click listener for inspection
+                node.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const clickedTarget = e.target;
+                    clickedTarget._parentTextEl = clickedTarget.closest("text") || clickedTarget;
+                    
+                    // Store the resolved string from textContent if needed
+                    if (item) {
+                        clickedTarget._textContentMeta = item;
+                    }
+                    
+                    selectElementForInspection(clickedTarget);
+                });
+            });
+
+            container.appendChild(svgElement);
+            output.appendChild(container);
+
+        } catch (pageError) {
+            console.error(`Error processing page ${i}:`, pageError);
+        }
+    }
+
+    status.innerText = `Loaded ${pdf.numPages} PDF page(s) successfully.`;
+    saveBtn.style.display = "inline-flex";
+} else {
+            // --- EXISTING PPTX HANDLING ---
+            currentZip = await JSZip.loadAsync(file);
+            
+            const presXml = await currentZip.file("ppt/presentation.xml").async("text");
+            const presDoc = new DOMParser().parseFromString(presXml, "text/xml");
+            const sldSz = findFirstElement(presDoc, "sldSz");
+            const sw = emuToPx(getAttr(sldSz, 'cx')) || 960;
+            const sh = emuToPx(getAttr(sldSz, 'cy')) || 720;
+
+            const slideFiles = Object.keys(currentZip.files)
+                .filter(f => f.startsWith("ppt/slides/slide") && f.endsWith(".xml"))
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+            for (let path of slideFiles) {
+                status.innerText = `Processing ${path.split('/').pop()}...`;
+                await new Promise(resolve => requestAnimationFrame(resolve));
+
+                const container = document.createElement("div");
+                container.className = "slide-container";
+                
+                const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.setAttribute("viewBox", `0 0 ${sw} ${sh}`);
+                svg.style.touchAction = "none";
+
+                const relsPath = path.replace("slides/", "slides/_rels/") + ".rels";
+                const rels = {};
+                if (currentZip.file(relsPath)) {
+                    const relXml = await currentZip.file(relsPath).async("text");
+                    const relDoc = new DOMParser().parseFromString(relXml, "text/xml");
+                    Array.from(relDoc.getElementsByTagName("Relationship")).forEach(r => {
+                        rels[getAttr(r, 'Id')] = getAttr(r, 'Target');
+                    });
+                }
+
+                const slideXml = await currentZip.file(path).async("text");
+                slideXmlDocs[path] = new DOMParser().parseFromString(slideXml, "text/xml");
+
+                const spTree = findFirstElement(slideXmlDocs[path], "spTree");
+                if (spTree) {
+                    await processNodesRecursive(Array.from(spTree.children), svg, currentZip, rels);
+                }
+
+                svg.addEventListener("click", (e) => {
+                    if (e.target.tagName.toLowerCase() === "svg") closeInspector();
+                });
+
+                container.appendChild(svg);
+                output.appendChild(container);
+            }
+
+            status.innerText = `Loaded ${slideFiles.length} slide(s) successfully.`;
+            saveBtn.style.display = "inline-flex";
+        }
+    } catch (err) {
+        console.error(err);
+        status.innerText = "Error parsing file. Ensure it is a valid PPTX, PDF, or SVG document.";
+    }
+}
+
+async function processNodesRecursive(nodes, container, zip, rels) {
+    for (let node of nodes) {
+        const localName = node.localName || node.nodeName.split(':').pop();
+        if (localName === "sp") {
+            renderShapeAndText(node, container);
+        } else if (localName === "pic") {
+            await renderCroppedImage(node, container, zip, rels);
+        } else if (localName === "graphicFrame") {
+            const tbl = findFirstElement(node, "tbl");
+            if (tbl) renderTable(node, tbl, container);
+        } else if (localName === "grpSp") {
+            const childNodes = Array.from(node.children).filter(c => {
+                const n = c.localName || c.nodeName.split(':').pop();
+                return ["sp", "pic", "graphicFrame", "grpSp"].includes(n) || c.children.length > 0;
+            });
+            await processNodesRecursive(childNodes, container, zip, rels);
+        }
+    }
+}
+
+function parseFillAndStroke(spPr, svg, targetEl) {
+    if (!spPr) return;
+
+    let hasAppliedFill = false;
+
+    // 1. Check for Gradient Fill first (highest priority)
+    const gradFill = findFirstElement(spPr, "gradFill");
+    if (gradFill) {
+        const gsLst = findFirstElement(gradFill, "gsLst");
+        if (gsLst) {
+            const stops = findElements(gsLst, "gs");
+            const gradId = "grad-" + Math.random().toString(36).substr(2, 9);
+            const linearGrad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+            linearGrad.setAttribute("id", gradId);
+
+            stops.forEach(gs => {
+                const pos = (parseInt(getAttr(gs, 'pos') || 0) / 1000) + "%";
+                const clr = findFirstElement(gs, "srgbClr");
+                const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                stop.setAttribute("offset", pos);
+                stop.setAttribute("stop-color", clr ? "#" + getAttr(clr, 'val') : "#000");
+                linearGrad.appendChild(stop);
+            });
+
+            getOrCreateDefs(svg).appendChild(linearGrad);
+            targetEl.setAttribute("fill", `url(#${gradId})`);
+            hasAppliedFill = true;
+        }
+    }
+
+    // 2. If no gradient, check for a Solid Fill
+    if (!hasAppliedFill) {
+        const solidFill = findFirstElement(spPr, "solidFill");
+        if (solidFill) {
+            const srgbClr = findFirstElement(solidFill, "srgbClr");
+            if (srgbClr) {
+                targetEl.setAttribute("fill", "#" + getAttr(srgbClr, 'val'));
+                hasAppliedFill = true;
+            }
+        }
+    }
+
+    // 3. Fallback to default white if neither gradient nor solid fill exists
+    if (!hasAppliedFill) {
+        targetEl.setAttribute("fill", "#FFFFFF");
+    }
+
+    // 4. Parse Stroke / Line properties
+    const ln = findFirstElement(spPr, "ln");
+    if (ln) {
+        const strokeWidth = emuToPx(getAttr(ln, 'w')) || 1;
+        const lnFill = findFirstElement(ln, "solidFill");
+        const srgbClr = lnFill ? findFirstElement(lnFill, "srgbClr") : null;
+        targetEl.setAttribute("stroke", srgbClr ? "#" + getAttr(srgbClr, 'val') : "none");
+        targetEl.setAttribute("stroke-width", strokeWidth);
+    }
+}
+
+function renderShapeAndText(sp, svg) {
+    const spPr = findFirstElement(sp, "spPr");
+    const xfrm = findFirstElement(spPr, "xfrm");
+    const off = findFirstElement(xfrm, "off");
+    const ext = findFirstElement(xfrm, "ext");
+
+    if (!off) return;
+
+    const x = emuToPx(getAttr(off, 'x') || 0);
+    const y = emuToPx(getAttr(off, 'y') || 0);
+    const w = ext ? emuToPx(getAttr(ext, 'cx') || 0) : 0;
+    const h = ext ? emuToPx(getAttr(ext, 'cy') || 0) : 0;
+
+    // Calculate rotation around shape center
+    const rotAttr = getAttr(xfrm, 'rot');
+    let transformStr = "";
+    if (rotAttr) {
+        const degrees = parseInt(rotAttr, 10) / 60000;
+        transformStr = `rotate(${degrees}, ${x + w / 2}, ${y + h / 2})`;
+    }
+
+    const prstGeom = findFirstElement(spPr, "prstGeom");
+    const custGeom = findFirstElement(spPr, "custGeom");
+
+    // Use a grouping element (<g>) if rotation is present to keep geometry & styling clean
+    let targetContainer = svg;
+    let groupEl = null;
+
+    if (transformStr) {
+        groupEl = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        groupEl.setAttribute("transform", transformStr);
+        targetContainer = groupEl;
+    }
+
+    if (w > 0 && h > 0) {
+        if (custGeom) {
+            renderCustomGeometry(custGeom, spPr, targetContainer, x, y);
+        } else if (prstGeom) {
+            renderPresetGeometry(prstGeom, spPr, targetContainer, x, y, w, h);
+        }
+    }
+
+    if (groupEl) {
+        svg.appendChild(groupEl);
+    }
+
+    // Pass base layout coordinates to text renderer
+    renderFormattedText(sp, svg, x, y, transformStr);
+}
+
+/**
+ * Handles complex custom geometry (custGeom) paths including curves and arcs.
+ */
+function renderCustomGeometry(custGeom, spPr, container, x, y) {
+    const pathLst = findFirstElement(custGeom, "pathLst");
+    if (!pathLst) return;
+
+    const paths = findElements(pathLst, "path");
+    paths.forEach(p => {
+        let pathData = "";
+        Array.from(p.children).forEach(cmd => {
+            const localName = cmd.localName || cmd.nodeName.split(':').pop();
+            const pt = findFirstElement(cmd, "pt");
+
+            switch (localName) {
+                case "moveTo":
+                    if (pt) pathData += `M ${emuToPx(getAttr(pt, 'x'))} ${emuToPx(getAttr(pt, 'y'))} `;
+                    break;
+                case "lnTo":
+                    if (pt) pathData += `L ${emuToPx(getAttr(pt, 'x'))} ${emuToPx(getAttr(pt, 'y'))} `;
+                    break;
+                case "cubicBezTo": {
+                    const pts = findElements(cmd, "pt");
+                    if (pts.length >= 3) {
+                        pathData += `C ${emuToPx(getAttr(pts[0], 'x'))} ${emuToPx(getAttr(pts[0], 'y'))}, ` +
+                                    `${emuToPx(getAttr(pts[1], 'x'))} ${emuToPx(getAttr(pts[1], 'y'))}, ` +
+                                    `${emuToPx(getAttr(pts[2], 'x'))} ${emuToPx(getAttr(pts[2], 'y'))} `;
+                    }
+                    break;
+                }
+                case "close":
+                    pathData += "Z ";
+                    break;
+            }
+        });
+
+        if (pathData) {
+            const pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            pathEl.setAttribute("d", pathData);
+            pathEl.setAttribute("transform", `translate(${x}, ${y})`);
+            parseFillAndStroke(spPr, container, pathEl);
+            container.appendChild(pathEl);
+        }
+    });
+}
+
+/**
+ * Handles standard preset shapes (rect, ellipse, roundRect, etc.).
+ */
+function renderPresetGeometry(prstGeom, spPr, container, x, y, w, h) {
+    const prstVal = getAttr(prstGeom, 'prst');
+    let shapeEl;
+
+    if (prstVal === "ellipse") {
+        shapeEl = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+        shapeEl.setAttribute("cx", x + w / 2);
+        shapeEl.setAttribute("cy", y + h / 2);
+        shapeEl.setAttribute("rx", w / 2);
+        shapeEl.setAttribute("ry", h / 2);
+    } else if (prstVal === "roundRect") {
+        shapeEl = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        shapeEl.setAttribute("x", x);
+        shapeEl.setAttribute("y", y);
+        shapeEl.setAttribute("width", w);
+        shapeEl.setAttribute("height", h);
+        shapeEl.setAttribute("rx", Math.min(w, h) * 0.1); // Default rounded corner radius
+    } else {
+        // Fallback default rectangle
+        shapeEl = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        shapeEl.setAttribute("x", x);
+        shapeEl.setAttribute("y", y);
+        shapeEl.setAttribute("width", w);
+        shapeEl.setAttribute("height", h);
+    }
+
+    parseFillAndStroke(spPr, container, shapeEl);
+    container.appendChild(shapeEl);
+}
+
+/**
+ * Renders formatted text with automatic word wrapping into an SVG element.
+ */
+function renderFormattedText(sp, svg, x, y, transformStr, maxLineWidth = 300) {
+    const paragraphs = findElements(sp, "p");
+    let currentY = y;
+
+    const handleSpanSelection = (tspan) => (e) => {
+        e.stopPropagation();
+        if (e.type === 'touchend') {
+            e.preventDefault();
+        }
+        selectElementForInspection(tspan);
+    };
+
+    for (const p of paragraphs) {
+        const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        textEl.setAttribute("x", x);
+        textEl.setAttribute("font-family", "system-ui, -apple-system, sans-serif");
+        
+        if (transformStr) {
+            textEl.setAttribute("transform", transformStr);
+        }
+
+        textEl._xmlOffRef = findFirstElement(sp, "off");
+        textEl._initialVerticalOffset = currentY - y; 
+        
+        setupDragAndDrop(textEl, svg);
+
+        const components = Array.from(p.children).filter(c => {
+            const ln = c.localName || c.nodeName.split(':').pop();
+            return ln === "r" || ln === "br";
+        });
+
+        if (components.length === 0) {
+            currentY += 18;
+            continue;
+        }
+
+        let maxHeightInLine = 16;
+        
+        // Create an initial active tspan for the paragraph line
+        let activeTspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        textEl.appendChild(activeTspan);
+        let currentLineText = "";
+
+        for (const comp of components) {
+            const localName = comp.localName || comp.nodeName.split(':').pop();
+
+            if (localName === "br") {
+                currentY += maxHeightInLine + 4;
+                activeTspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+                activeTspan.setAttribute("x", x);
+                activeTspan.setAttribute("dy", maxHeightInLine + 4);
+                textEl.appendChild(activeTspan);
+                currentLineText = "";
+                continue;
+            }
+
+            const xmlTextNode = findFirstElement(comp, "t");
+            if (!xmlTextNode) continue;
+
+            const rPr = findFirstElement(comp, "rPr");
+            const sz = getAttr(rPr, 'sz');
+            const fontSize = sz ? parseInt(sz, 10) / 100 : 16;
+            
+            if (fontSize > maxHeightInLine) maxHeightInLine = fontSize;
+
+            // Style configuration mapping
+            const isBold = getAttr(rPr, 'b') === "1";
+            const isItalic = getAttr(rPr, 'i') === "1";
+            const srgbClr = findFirstElement(rPr, "srgbClr");
+            const hexColor = srgbClr ? getAttr(srgbClr, 'val') : "000000";
+
+            // Word-by-word wrapping check
+            const words = (xmlTextNode.textContent || "").split(/\s+/);
+
+            for (let i = 0; i < words.length; i++) {
+                const word = words[i] + (i === words.length - 1 ? "" : " ");
+                
+                // Test length by tentatively appending to active tspan
+                activeTspan.textContent = currentLineText + word;
+                activeTspan.setAttribute("font-size", `${fontSize}px`);
+                if (isBold) activeTspan.setAttribute("font-weight", "bold");
+                if (isItalic) activeTspan.setAttribute("font-style", "italic");
+                activeTspan.setAttribute("fill", `#${hexColor}`);
+
+                // If it overflows the max width boundary, wrap to a new line (tspan)
+                if (activeTspan.getComputedTextLength() > maxLineWidth && currentLineText.length > 0) {
+                    // Revert active span to previous safe line state
+                    activeTspan.textContent = currentLineText;
+
+                    // Create new line tspan
+                    activeTspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+                    activeTspan.setAttribute("x", x);
+                    activeTspan.setAttribute("dy", maxHeightInLine);
+                    
+                    // Apply styles to new line span
+                    activeTspan.setAttribute("font-size", `${fontSize}px`);
+                    if (isBold) activeTspan.setAttribute("font-weight", "bold");
+                    if (isItalic) activeTspan.setAttribute("font-style", "italic");
+                    activeTspan.setAttribute("fill", `#${hexColor}`);
+
+                    currentLineText = word;
+                    activeTspan.textContent = currentLineText;
+                    textEl.appendChild(activeTspan);
+
+                    currentY += maxHeightInLine;
+                } else {
+                    currentLineText += word;
+                }
+
+                // Bind inspection events onto active span chunks
+                if (!activeTspan._boundHandler) {
+                    activeTspan._xmlTextNode = xmlTextNode;
+                    activeTspan._xmlRPrNode = rPr;
+                    activeTspan._parentTextEl = textEl;
+                    
+                    const boundHandler = handleSpanSelection(activeTspan);
+                    activeTspan.addEventListener("click", boundHandler);
+                    activeTspan.addEventListener("touchend", boundHandler);
+                    activeTspan._boundHandler = true;
+                }
+            }
+        }
+
+        currentY += maxHeightInLine;
+        textEl.setAttribute("y", currentY);
+        svg.appendChild(textEl);
+        currentY += 6; 
+    }
+}
+
+async function renderCroppedImage(pic, svg, zip, rels) {
+    const blip = findFirstElement(pic, "blip");
+    if (!blip) return;
+
+    // 1. Look for SVG blip extension first, fallback to standard embed ID
+    const svgBlip = findFirstElement(blip, "svgBlip");
+    const embedId = svgBlip 
+        ? (getAttr(svgBlip, 'embed') || getAttr(svgBlip, 'r:embed'))
+        : (getAttr(blip, 'embed') || getAttr(blip, 'r:embed'));
+
+    const target = rels[embedId];
+    if (!target) return;
+
+    // 2. Safely clean relative path (handles ../media/... -> ppt/media/...)
+    const cleanPath = target.startsWith("ppt/") 
+        ? target 
+        : target.replace(/^(\.\.\/)+/, "ppt/");
+
+    const imgFile = zip.file(cleanPath);
+    if (!imgFile) return;
+
+    // Parse transform dimensions
+    const xfrm = findFirstElement(pic, "xfrm") || findFirstElement(findFirstElement(pic, "spPr"), "xfrm");
+    if (!xfrm) return;
+
+    const off = findFirstElement(xfrm, "off");
+    const ext = findFirstElement(xfrm, "ext");
+    if (!off || !ext) return;
+
+    const displayW = emuToPx(getAttr(ext, 'cx'));
+    const displayH = emuToPx(getAttr(ext, 'cy'));
+    const posX = emuToPx(getAttr(off, 'x'));
+    const posY = emuToPx(getAttr(off, 'y'));
+
+    // Parse crop percentages (OpenXML uses percentages scaled by 100,000)
+    const srcRect = findFirstElement(blip, "srcRect");
+    const cropL = srcRect ? (parseInt(getAttr(srcRect, 'l') || 0) / 100000) : 0;
+    const cropR = srcRect ? (parseInt(getAttr(srcRect, 'r') || 0) / 100000) : 0;
+    const cropT = srcRect ? (parseInt(getAttr(srcRect, 't') || 0) / 100000) : 0;
+    const cropB = srcRect ? (parseInt(getAttr(srcRect, 'b') || 0) / 100000) : 0;
+
+    const isSvg = cleanPath.toLowerCase().endsWith('.svg');
+
+    if (isSvg) {
+        const svgContent = await imgFile.async("text");
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgContent, "image/svg+xml");
+        const innerSvg = doc.querySelector("svg");
+
+        if (!innerSvg) return;
+
+        // Group wrapper positioned on the main canvas
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("transform", `translate(${posX}, ${posY})`);
+
+        // Apply crop clipping if crop attributes exist
+        if (cropL > 0 || cropR > 0 || cropT > 0 || cropB > 0) {
+            const clipInset = `${cropT * 100}% ${cropR * 100}% ${cropB * 100}% ${cropL * 100}%`;
+            g.style.clipPath = `inset(${clipInset})`;
+        }
+
+        // Set dimensions on imported SVG
+        innerSvg.setAttribute("width", displayW);
+        innerSvg.setAttribute("height", displayH);
+        
+        // Ensure standard viewBox handling
+        if (!innerSvg.getAttribute("viewBox") && innerSvg.getAttribute("width") && innerSvg.getAttribute("height")) {
+            const rawW = parseFloat(innerSvg.getAttribute("width"));
+            const rawH = parseFloat(innerSvg.getAttribute("height"));
+            innerSvg.setAttribute("viewBox", `0 0 ${rawW} ${rawH}`);
+        }
+
+        g.appendChild(document.importNode(innerSvg, true));
+        svg.appendChild(g);
+
+    } else {
+        // Standard raster image logic (PNG, JPEG, etc.)
+        const blob = await imgFile.async("blob");
+        const url = URL.createObjectURL(blob);
+        if (typeof blobUrls !== 'undefined' && blobUrls.add) {
+            blobUrls.add(url);
+        }
+
+        const viewport = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        viewport.setAttribute("x", posX); 
+        viewport.setAttribute("y", posY);
+        viewport.setAttribute("width", displayW); 
+        viewport.setAttribute("height", displayH);
+        viewport.setAttribute("viewBox", "0 0 1 1");
+        viewport.setAttribute("preserveAspectRatio", "none");
+        viewport.setAttribute("overflow", "hidden");
+
+        const img = document.createElementNS("http://www.w3.org/2000/svg", "image");
+        img.setAttributeNS("http://www.w3.org/1999/xlink", "href", url);
+        img.setAttribute("href", url);
+
+        const scaleX = 1 / (1 - cropL - cropR);
+        const scaleY = 1 / (1 - cropT - cropB);
+
+        img.setAttribute("width", scaleX); 
+        img.setAttribute("height", scaleY);
+        img.setAttribute("x", -cropL * scaleX); 
+        img.setAttribute("y", -cropT * scaleY);
+        img.setAttribute("preserveAspectRatio", "none");
+
+        viewport.appendChild(img);
+        svg.appendChild(viewport);
+    }
+}
+
+function renderTable(graphicFrame, tbl, svg) {
+    const xfrm = findFirstElement(graphicFrame, "xfrm");
+    const off = findFirstElement(xfrm, "off");
+    if (!off) return;
+
+    const startX = emuToPx(getAttr(off, 'x'));
+    const startY = emuToPx(getAttr(off, 'y'));
+
+    const tblGrid = findFirstElement(tbl, "tblGrid");
+    const gridCols = tblGrid ? findElements(tblGrid, "gridCol") : [];
+    const colWidths = gridCols.map(col => emuToPx(getAttr(col, 'w')));
+
+    const rows = findElements(tbl, "tr");
+    let currentY = startY;
+
+    rows.forEach(tr => {
+        const rowHeight = emuToPx(getAttr(tr, 'h')) || 30;
+        const cells = findElements(tr, "tc");
+        let currentX = startX;
+
+        cells.forEach((tc, colIdx) => {
+            const colWidth = colWidths[colIdx] || 100;
+
+            const tcPr = findFirstElement(tc, "tcPr");
+            const solidFill = findFirstElement(tcPr, "solidFill");
+            const noFill = findFirstElement(tcPr, "noFill");
+            
+            const cellRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            cellRect.setAttribute("x", currentX);
+            cellRect.setAttribute("y", currentY);
+            cellRect.setAttribute("width", colWidth);
+            cellRect.setAttribute("height", rowHeight);
+            
+            if (solidFill && !noFill) {
+                const srgbClr = findFirstElement(solidFill, "srgbClr");
+                cellRect.setAttribute("fill", srgbClr ? "#" + getAttr(srgbClr, 'val') : "none");
+            } else {
+                cellRect.setAttribute("fill", "none");
+            }
+            
+            cellRect.setAttribute("stroke", "#cbd5e1");
+            cellRect.setAttribute("stroke-width", "1");
+            svg.appendChild(cellRect);
+
+            const txBody = findFirstElement(tc, "txBody");
+            if (txBody) {
+                const paragraphs = findElements(txBody, "p");
+                let textY = currentY + 18;
+
+                paragraphs.forEach(p => {
+                    const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    textEl.setAttribute("x", currentX + 8);
+                    textEl.setAttribute("y", textY);
+                    textEl.setAttribute("font-family", "system-ui, -apple-system, sans-serif");
+
+                    const runs = findElements(p, "r");
+                    runs.forEach(r => {
+                        const xmlTextNode = findFirstElement(r, "t");
+                        if (!xmlTextNode) return;
+
+                        const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+                        const rPr = findFirstElement(r, "rPr");
+                        
+                        const sz = getAttr(rPr, 'sz');
+                        const fontSize = sz ? (parseInt(sz) / 100) : 12;
+                        tspan.setAttribute("font-size", fontSize + "px");
+
+                        if (getAttr(rPr, 'b') === "1") tspan.setAttribute("font-weight", "bold");
+                        if (getAttr(rPr, 'i') === "1") tspan.setAttribute("font-style", "italic");
+
+                        const srgbClr = findFirstElement(rPr, "srgbClr");
+                        const hexColor = srgbClr ? getAttr(srgbClr, 'val') : "1e293b";
+                        tspan.setAttribute("fill", "#" + hexColor);
+
+                        tspan.textContent = xmlTextNode.textContent || "";
+                        
+                        tspan._xmlTextNode = xmlTextNode;
+                        tspan._xmlRPrNode = rPr;
+                        tspan._parentTextEl = textEl;
+                        tspan.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            selectElementForInspection(tspan);
+                        });
+
+                        textEl.appendChild(tspan);
+                    });
+
+                    svg.appendChild(textEl);
+                    textY += 16;
+                });
+            }
+
+            currentX += colWidth;
+        });
+
+        currentY += rowHeight;
+    });
+}
+
+// Unified Drag and Drop Helper for Mouse and Touch
+function setupDragAndDrop(el, svg) {
+    let isDragging = false;
+    let startX, startY, origDx, origDy;
+    let animationFrameId = null;
+
+    const getCoords = (e) => {
+        if (e.touches && e.touches.length > 0) {
+            return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+        }
+        return { clientX: e.clientX, clientY: e.clientY };
+    };
+
+    const dragStart = (e) => {
+        if (!["tspan", "text"].includes(e.target.tagName)) return;
+        
+        if (e.type === "touchstart") e.preventDefault();
+        
+        isDragging = true;
+        // Read initial dx/dy offsets instead of x/y
+        origDx = parseFloat(el.getAttribute("dx") || 0);
+        origDy = parseFloat(el.getAttribute("dy") || 0);
+        
+        const coords = getCoords(e);
+        const pt = svg.createSVGPoint();
+        pt.x = coords.clientX; 
+        pt.y = coords.clientY;
+        
+        const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+        startX = svgP.x; 
+        startY = svgP.y;
+
+        window.addEventListener("mousemove", dragMove, { passive: false });
+        window.addEventListener("touchmove", dragMove, { passive: false });
+        window.addEventListener("mouseup", dragEnd);
+        window.addEventListener("touchend", dragEnd);
+    };
+
+    const dragMove = (e) => {
+        if (!isDragging) return;
+        if (e.cancelable) e.preventDefault();
+        
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        
+        animationFrameId = requestAnimationFrame(() => {
+            const coords = getCoords(e);
+            const pt = svg.createSVGPoint();
+            pt.x = coords.clientX; 
+            pt.y = coords.clientY;
+            
+            const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+            const nextDx = origDx + (svgP.x - startX);
+            const nextDy = origDy + (svgP.y - startY);
+
+            // Update dx and dy attributes instead of x and y
+            el.setAttribute("dx", nextDx);
+            el.setAttribute("dy", nextDy);
+        });
+    };
+
+    const dragEnd = () => {
+        isDragging = false;
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        
+        window.removeEventListener("mousemove", dragMove);
+        window.removeEventListener("touchmove", dragMove);
+        window.removeEventListener("mouseup", dragEnd);
+        window.removeEventListener("touchend", dragEnd);
+    };
+
+    el.addEventListener("mousedown", dragStart);
+    el.addEventListener("touchstart", dragStart, { passive: false });
+}
+
+function selectElementForInspection(tspan) {
+    if (selectedTarget) selectedTarget._parentTextEl.classList.remove("selected-element");
+    selectedTarget = tspan;
+    selectedTarget._parentTextEl.classList.add("selected-element");
+
+    document.getElementById("no-selection-notice").style.display = "none";
+    document.getElementById("editor-fields").style.display = "block";
+
+    document.getElementById("prop-text").value = tspan.textContent;
+    document.getElementById("prop-size").value = parseInt(tspan.getAttribute("font-size") || 16);
+    
+    const rawFill = tspan.getAttribute("fill") || "#000000";
+    document.getElementById("prop-color").value = rawFill.startsWith("#") ? rawFill : "#000000";
+    
+    document.getElementById("btn-bold").classList.toggle("active", tspan.getAttribute("font-weight") === "bold");
+    document.getElementById("btn-italic").classList.toggle("active", tspan.getAttribute("font-style") === "italic");
+    
+    document.getElementById("prop-posX").value = Math.round(tspan._parentTextEl.getAttribute("x") || 0);
+    document.getElementById("prop-posY").value = Math.round(tspan._parentTextEl.getAttribute("y") || 0);
+}
+
+function closeInspector() {
+    if (selectedTarget) selectedTarget._parentTextEl.classList.remove("selected-element");
+    selectedTarget = null;
+    document.getElementById("no-selection-notice").style.display = "block";
+    document.getElementById("editor-fields").style.display = "none";
+}
+
+document.getElementById("prop-text").addEventListener("input", (e) => {
+    if (!selectedTarget) return;
+    selectedTarget.textContent = e.target.value;
+    if (selectedTarget._xmlTextNode) selectedTarget._xmlTextNode.textContent = e.target.value;
+});
+
+document.getElementById("prop-size").addEventListener("input", (e) => {
+    if (!selectedTarget) return;
+    const pxVal = parseInt(e.target.value) || 12;
+    selectedTarget.setAttribute("font-size", pxVal + "px");
+    if (selectedTarget._xmlRPrNode) {
+        selectedTarget._xmlRPrNode.setAttribute("sz", pxVal * 100);
+    }
+});
+
+document.getElementById("prop-color").addEventListener("input", (e) => {
+    if (!selectedTarget) return;
+    const hex = e.target.value;
+    selectedTarget.setAttribute("fill", hex);
+    
+    if (selectedTarget._xmlRPrNode) {
+        let srgbClr = findFirstElement(selectedTarget._xmlRPrNode, "srgbClr");
+        if (!srgbClr) {
+            srgbClr = selectedTarget._xmlRPrNode.ownerDocument.createElementNS("http://schemas.openxmlformats.org/drawingml/2006/main", "a:srgbClr");
+            selectedTarget._xmlRPrNode.appendChild(srgbClr);
+        }
+        srgbClr.setAttribute("val", hex.replace("#", "").toUpperCase());
+    }
+});
+
+document.getElementById("btn-bold").addEventListener("click", () => {
+    if (!selectedTarget) return;
+    const isBold = selectedTarget.getAttribute("font-weight") === "bold";
+    selectedTarget.setAttribute("font-weight", isBold ? "normal" : "bold");
+    document.getElementById("btn-bold").classList.toggle("active", !isBold);
+    if (selectedTarget._xmlRPrNode) selectedTarget._xmlRPrNode.setAttribute("b", isBold ? "0" : "1");
+});
+
+document.getElementById("btn-italic").addEventListener("click", () => {
+    if (!selectedTarget) return;
+    const isItalic = selectedTarget.getAttribute("font-style") === "italic";
+    selectedTarget.setAttribute("font-style", isItalic ? "normal" : "italic");
+    document.getElementById("btn-italic").classList.toggle("active", !isItalic);
+    if (selectedTarget._xmlRPrNode) selectedTarget._xmlRPrNode.setAttribute("i", isItalic ? "0" : "1");
+});
+
+[document.getElementById("prop-posX"), document.getElementById("prop-posY")].forEach(input => {
+    input.addEventListener("input", () => {
+        if (!selectedTarget) return;
+        const x = parseInt(document.getElementById("prop-posX").value) || 0;
+        const y = parseInt(document.getElementById("prop-posY").value) || 0;
+        updateTargetPosition(selectedTarget._parentTextEl, x, y);
+    });
+});
+
+async function saveAndDownloadPPTX() {
+    if (!currentZip || Object.keys(slideXmlDocs).length === 0) return;
+    const status = document.getElementById("status");
+    status.innerText = "Reassembling package...";
+
+    try {
+        const serializer = new XMLSerializer();
+        for (const [path, xmlDoc] of Object.entries(slideXmlDocs)) {
+            const updatedXmlString = serializer.serializeToString(xmlDoc);
+            currentZip.file(path, updatedXmlString);
+        }
+
+        status.innerText = "Compressing presentation file...";
+        const contentBlob = await currentZip.generateAsync({
+            type: "blob", 
+            mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        });
+        
+        const downloadUrl = URL.createObjectURL(contentBlob);
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = currentFileName.replace(/\.pptx$/i, "") + "_edited.pptx";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+        status.innerText = "Presentation saved successfully!";
+    } catch (err) {
+        console.error(err);
+        status.innerText = "Failed to generate file archive.";
+    }
+}
+
+document.querySelector("#saveSVG").addEventListener("click", () => {
+    // Grab the active SVG element from the output area
+    const svgElement = document.querySelector("svg");
+    if (!svgElement) return;
+
+    // Clean up temporary editing artifacts before saving (e.g. remove contenteditable)
+    svgElement.querySelectorAll("[contenteditable]").forEach(el => {
+        el.removeAttribute("contenteditable");
+    });
+
+    // Serialize the SVG DOM to a string
+    const serializer = new XMLSerializer();
+    let svgString = serializer.serializeToString(svgElement);
+
+    // Ensure proper XML namespaces are present
+    if (!svgString.includes("xmlns=")) {
+        svgString = svgString.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+
+    // Create a Blob and trigger a file download
+    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    
+    const downloadLink = document.createElement("a");
+    downloadLink.href = url;
+    downloadLink.download = (currentFileName ? currentFileName.replace(/\.[^/.]+$/, "") : "edited") + ".svg";
+    
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    
+    URL.revokeObjectURL(url);
+});
+
+document.getElementById("clipboardBtn").addEventListener("click", async () => {
+    const status = document.getElementById("status");
+
+    try {
+        // 1. Request clipboard text content
+        const text = await navigator.clipboard.readText();
+        const trimmedText = text.trim();
+
+        // 2. Validate basic SVG content presence
+        if (!trimmedText.toLowerCase().includes("<svg") || !trimmedText.toLowerCase().includes("</svg>")) {
+            status.innerText = "Clipboard does not contain valid SVG markup.";
+            return;
+        }
+
+        // 3. Create a synthetic SVG File object
+        const svgFile = new File([trimmedText], "clipboard.svg", {
+            type: "image/svg+xml",
+        });
+
+        // 4. Pass the file directly to your existing handleFile pipeline
+        await handleFile(svgFile);
+
+    } catch (err) {
+        console.error("Failed to read clipboard:", err);
+        
+        // Handle common permission denial errors
+        if (err.name === "NotAllowedError") {
+            status.innerText = "Clipboard permission denied. Please grant permission.";
+        } else {
+            status.innerText = "Unable to read SVG from clipboard.";
+        }
+    }
 });
 </script>
 </body>
