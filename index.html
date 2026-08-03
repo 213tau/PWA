@@ -377,12 +377,6 @@
       <br>
       <button onclick="savecanvas()" class="primary">Save Canvas</button>
       <button id="canvastoimage">Canvas to Array</button>      
-    </div>
-
-    <div class="tab-content" id="organizeData">  
-    </div>
-
-    <div class="tab-content" id="imageAnalysis">
       <button id="savecanvas">Save Canvas</button>      
       <button id="InvertContrastStreching">Invert Contrast</button>
       <button id="invertcolor">Invert Colors</button>
@@ -409,9 +403,6 @@
       <button onclick="removeText();">Remove Text</button>
       <button onclick="contrastStretchingWithHistogramClipping(document.querySelector('canvas'), 1, 'low')">Clip Low</button>
       <button onclick="contrastStretchingWithHistogramClipping(document.querySelector('canvas'), 2, 'high')">Clip High</button>
-    </div>
-
-    <div class="tab-content" id="thresholding">
       <button onclick="segmentImageByOtsu()">Otsu Threshold</button>
       <button onclick="adaptiveLuminanceSegmentation()">Mean Adaptive</button>
       <button onclick="segmentImageByLuminance()">Luminance Threshold</button>
@@ -422,6 +413,9 @@
       <button onclick="edgeAwareAdaptiveThresholdingSobel()">Edge-Aware (Sobel)</button>      
       <button onclick="edgeAwareAdaptiveThresholding()">Adaptive Thresholding</button>
       <button onclick="cclForOCR()">CCL for OCR</button>
+    </div>
+
+    <div class="tab-content" id="organizeData">  
     </div>
 
     <div class="tab-content" id="idCardTools">
