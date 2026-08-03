@@ -1954,11 +1954,17 @@ images.forEach(function (e, index) {
     });
 
     // Utility to get touch coordinates
+    // Utility to get touch coordinates scaled to canvas internal resolution
     function getTouchPos(touch, canvas) {
       const rect = canvas.getBoundingClientRect();
+      
+      // Calculate scale ratio between internal resolution and CSS display size
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
       return {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY
       };
     }
 
