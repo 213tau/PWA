@@ -876,6 +876,30 @@ document.getElementById("uppercase").addEventListener("click", () => {
     output.innerText = output.innerText.toUpperCase();
   });
 
+    document.getElementById("lowercase").addEventListener("click", () => {
+    const selection = window.getSelection();
+    
+    // Check if there is active text selected and it's not empty
+    if (selection.rangeCount > 0 && selection.toString().length > 0) {
+        const range = selection.getRangeAt(0);
+        const selectedText = range.toString();
+        
+        // Convert only the selected text to lowercase
+        const lowerText = selectedText.toLowerCase();
+        
+        // Replace the highlighted text with the lowercase version
+        const newNode = document.createTextNode(lowerText);
+        range.deleteContents();
+        range.insertNode(newNode);
+        
+        selection.removeAllRanges();
+    } else {
+        // Fallback: if nothing is selected, convert the whole output element
+        const output = document.getElementById("output");
+        output.innerText = output.innerText.toLowerCase();
+    }
+});
+
   </script>
   <script>
   const signalBox = document.getElementById("signalBox");
