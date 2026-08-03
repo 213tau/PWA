@@ -6541,8 +6541,7 @@ if (outputEl && outputEl.textContent.trim() !== '') {
       a.click();
     }
 
-    function openMepcobill() {
-      e.preventDefault(); // Prevent normal <a> behavior
+    function openMepcobill() {      
       let refno = document.getElementById("output").innerText.trim();        
 
       if (/^(\d{14}|\d{2}\s\d{5}\s\d{7})$/.test(refno)) {
