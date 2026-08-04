@@ -1044,23 +1044,9 @@ function processSvgFile(file) {
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
 
-        if (item.kind === 'string' && item.type === 'text/plain') {
-            promises.push(new Promise((resolve) => {
-                item.getAsString((text) => {
-                    if (output) {
-                        const lines = text.split(/\r?\n/);
-                        lines.forEach(line => {
-                            const div = document.createElement("div");
-                            div.textContent = line;
-                            output.appendChild(div);
-                        });
-                    }
-                    resolve({ type: 'text', content: text });
-                });
-            }));
-        }
+        
         // 1. Handle SVG sent directly as string payload (image/svg+xml)
-        else if (item.kind === 'string' && item.type === 'image/svg+xml') {
+        if (item.kind === 'string' && item.type === 'image/svg+xml') {
             promises.push(new Promise((resolve) => {
                 item.getAsString(async (svgString) => {
                     console.log('Pasted SVG Code:', svgString);
@@ -1135,6 +1121,21 @@ function processSvgFile(file) {
             }
         } 
         // 4. Handle plain text fallback
+        else if (item.kind === 'string' && item.type === 'text/plain') {
+            promises.push(new Promise((resolve) => {
+                item.getAsString((text) => {
+                    if (output) {
+                        const lines = text.split(/\r?\n/);
+                        lines.forEach(line => {
+                            const div = document.createElement("div");
+                            div.textContent = line;
+                            output.appendChild(div);
+                        });
+                    }
+                    resolve({ type: 'text', content: text });
+                });
+            }));
+        }
         
     }
 
