@@ -6580,6 +6580,26 @@ if (outputEl && outputEl.textContent.trim() !== '') {
     }
 };
 
+function openGasbill() {      
+    let refno = document.getElementById("output").innerText.trim();        
+
+    if (/^(\d{11})$/.test(refno)) {        
+        // Create a form dynamically
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `https://www.sngpl.com.pk/login.jsp?mdids=85&consumer=${encodeURIComponent(refno)}`;
+        
+        form.target = '_blank'; // Open in a new tab
+
+        // Add to body and submit
+        document.body.appendChild(form);
+        form.submit();
+
+        // Clean up
+        document.body.removeChild(form);
+    }
+};
+
     
     function gradientShadowRemovalWithGuidedFilter(canvas = document.querySelector("canvas")) {
       if (!canvas) {
