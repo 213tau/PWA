@@ -1068,6 +1068,7 @@ function processSvgFile(file) {
             }));
         } 
         // 2. Handle HTML markup fallbacks (Most common when copying vectors from browsers/apps)
+        // 2. Handle HTML markup fallbacks (Most common when copying vectors from browsers/apps)
         else if (item.kind === 'string' && item.type === 'text/html') {
             promises.push(new Promise((resolve) => {
                 item.getAsString(async (html) => {
@@ -1079,14 +1080,14 @@ function processSvgFile(file) {
                         const svgCode = svgElement.outerHTML;
                         console.log('Extracted SVG from HTML:', svgCode);
                         
-                        // FIX: Appending raw SVG code to #output element
-                       if (output) {
-    const pre = document.createElement("pre");
-    const code = document.createElement("code");
-    code.textContent = svgString; // or svgCode
-    pre.appendChild(code);
-    output.appendChild(pre);
-}
+                        // FIXED: Using svgCode instead of undefined svgString
+                        if (output) {
+                            const pre = document.createElement("pre");
+                            const code = document.createElement("code");
+                            code.textContent = svgCode; 
+                            pre.appendChild(code);
+                            output.appendChild(pre);
+                        }
 
                         const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
                         const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
@@ -1101,7 +1102,7 @@ function processSvgFile(file) {
                     }
                 });
             }));
-        } 
+        }
         // 3. Handle standard files (Dragged/Pasted files)
         else if (item.kind === 'file') {
             const file = item.getAsFile();
