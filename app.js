@@ -1120,7 +1120,7 @@ function processSvgFile(file) {
             }
         } 
         // 4. Handle plain text fallback
-        else if (item.kind === 'string' && item.type === 'text/plain') {
+        if (item.kind === 'string' && item.type === 'text/plain') {
             promises.push(new Promise((resolve) => {
                 item.getAsString((text) => {
                     if (output) {
