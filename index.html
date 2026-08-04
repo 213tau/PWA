@@ -701,7 +701,7 @@
         <button onclick="moveLineUp()">Move Line Up</button>
         <button onclick="moveLineDown()">Move Line Down</button>
         <button onclick="domicilecheck()">Domicile</button>
-        <button onclick="domiciledata()">Domicile Data</button>
+        <button onclick="licensedata()">License Data</button>
         <button onclick="tabling()">Text To Table</button>
         <button onclick="tablingLine()">NewLine To Table</button>
         <button id="urduStyle">Urdu Style (Jameel Noori)</button>
@@ -3965,17 +3965,42 @@ document.getElementById("clipboardBtn").addEventListener("click", async () => {
         }
     }
 });
-          function domiciledata() {
-  // Assume these are fetched from your PWA output state
-  const cnicValue = "36302-1234567-1"; 
-  const dobValue = "1995-05-12"; // Format matching input requirements (e.g., YYYY-MM-DD or DD-MM-YYYY)
+         
 
-  // Send message to the extension's content script running on your PWA page
-  window.postMessage({
-    type: "FETCH_DLIMS_DATA",
-    cnic: cnicValue,
-    dob: dobValue
-  }, "https://atauxel.vercel.app");
+    function licensedata() {
+    // 1. Get and clean the text from #output
+    let text = document.getElementById("output").innerText.trim();
+
+    // 2. Define regex patterns
+    const cnicPattern = /\b(\d{5}-\d{7}-\d{1}|\d{13})\b/;
+    const dobPattern = /(\d{2})-(\d{2})-(20\d{2})/;
+
+    // 3. Find matches
+    const cnicMatch = text.match(cnicPattern);
+    const dobMatch = text.match(dobPattern);
+
+    // Validate that both CNIC and DOB exist
+    if (cnicMatch && dobMatch) {
+        let cnicValue = cnicMatch[0];
+
+        // Format 13-digit CNIC if it lacks dashes
+        if (/^\d{13}$/.test(cnicValue)) {
+            cnicValue = cnicValue.slice(0, 5) + '-' + cnicValue.slice(5, 12) + '-' + cnicValue.slice(12);
+        }
+
+        // Reverse DOB from DD-MM-YYYY to YYYY-MM-DD using captured groups
+        let dobValue = dobMatch[0].replace(dobPattern, "$3-$2-$1");
+
+        // 4. Send message to the extension's content script
+        window.postMessage({
+            type: "FETCH_DLIMS_DATA",
+            cnic: cnicValue,
+            dob: dobValue
+        }, "https://atauxel.vercel.app");
+
+    } else {
+        alert("Valid CNIC and Date of Birth (DD-MM-YYYY) not found in the text.");
+    }
 }
 </script>
 </body>
