@@ -6584,9 +6584,9 @@ function openGasbill() {
     let refno = document.getElementById("output").innerText.trim();        
 
     if (/^(\d{11})$/.test(refno)) {        
-        window.open(https://www.sngpl.com.pk/login.jsp?mdids=85&consumer=${encodeURIComponent(refno)}`, '_blank');        
+        window.open(`https://www.sngpl.com.pk/login.jsp?mdids=85&consumer=${encodeURIComponent(refno)}`, '_blank');        
     }
-};
+}
 
     
     function gradientShadowRemovalWithGuidedFilter(canvas = document.querySelector("canvas")) {
