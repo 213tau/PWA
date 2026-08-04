@@ -8967,3 +8967,9 @@ organize.addEventListener('click', function() {
     }
   });
 });
+
+function googlesearch(){
+const query = document.querySelector("#output").innerText;
+const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+window.open(searchUrl, '_blank');
+}
