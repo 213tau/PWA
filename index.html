@@ -701,6 +701,7 @@
         <button onclick="moveLineUp()">Move Line Up</button>
         <button onclick="moveLineDown()">Move Line Down</button>
         <button onclick="domicilecheck()">Domicile</button>
+        <button onclick="domiciledata()">Domicile Data</button>
         <button onclick="tabling()">Text To Table</button>
         <button onclick="tablingLine()">NewLine To Table</button>
         <button id="urduStyle">Urdu Style (Jameel Noori)</button>
@@ -3964,6 +3965,18 @@ document.getElementById("clipboardBtn").addEventListener("click", async () => {
         }
     }
 });
+          function domiciledata() {
+  // Assume these are fetched from your PWA output state
+  const cnicValue = "36302-1234567-1"; 
+  const dobValue = "1995-05-12"; // Format matching input requirements (e.g., YYYY-MM-DD or DD-MM-YYYY)
+
+  // Send message to the extension's content script running on your PWA page
+  window.postMessage({
+    type: "FETCH_DLIMS_DATA",
+    cnic: cnicValue,
+    dob: dobValue
+  }, "https://atauxel.vercel.app");
+}
 </script>
 </body>
 
