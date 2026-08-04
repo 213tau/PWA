@@ -4002,6 +4002,28 @@ document.getElementById("clipboardBtn").addEventListener("click", async () => {
         alert("Valid CNIC and Date of Birth (DD-MM-YYYY) not found in the text.");
     }
 }
+
+    // Inside your PWA script or web app code
+window.addEventListener("message", (event) => {
+  // Ensure message comes from your extension or handle extension communication
+  if (event.data && event.data.action === "DLIMS_DATA_RESPONSE") {
+    const { status, html } = event.data.data;
+    
+    if (status === "success") {
+      // Create a temporary container or parse the scraped HTML wrapper
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      
+      const dWrapper = doc.querySelector(".d_wrapper");
+      if (dWrapper) {
+        console.log("Successfully intercepted .d_wrapper in PWA:", dWrapper);
+        
+        // TODO: Render data into your PWA UI elements here
+        document.getElementById("pwa-result-container").innerHTML = dWrapper.innerHTML;
+      }
+    }
+  }
+});
 </script>
 </body>
 
