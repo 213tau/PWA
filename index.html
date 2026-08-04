@@ -3973,7 +3973,7 @@ document.getElementById("clipboardBtn").addEventListener("click", async () => {
 
     // 2. Define regex patterns
     const cnicPattern = /\b(\d{5}-\d{7}-\d{1}|\d{13})\b/;
-    const dobPattern = /(\d{2})-(\d{2})-(20\d{2})/;
+    const dobPattern = /(\d{2})-(\d{2})-(19\d{2}|20\d{2})/;
 
     // 3. Find matches
     const cnicMatch = text.match(cnicPattern);
