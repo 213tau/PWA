@@ -2913,10 +2913,6 @@ function updateTargetPosition(parent, x, y) {
     document.getElementById("prop-posY").value = Math.round(y);
 }
 
-// Make sure PDF.js is imported in your HTML/Environment:
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
 async function handleFile(file) {
     const status = document.getElementById("status");
     const output = document.getElementById("fileoutput");
