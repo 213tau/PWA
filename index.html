@@ -15,7 +15,40 @@
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.11.0/dist/pptxgen.bundle.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
-
+<style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 30px; background: #f0f2f5; color: #333; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 900px; margin: auto; }
+        .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+        button { background: #0078d4; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: 600; transition: background 0.2s; }
+        button:hover { background: #005a9e; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        input[type="text"] { padding: 10px; flex-grow: 1; border: 1px solid #ddd; border-radius: 6px; outline: none; }
+        input[type="text"]:focus { border-color: #0078d4; }
+        #status { font-size: 0.9em; color: #555; }
+        .progress-bg { background: #eee; width: 100%; height: 6px; border-radius: 3px; margin-bottom: 20px; display: none; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0%; background: #28a745; transition: width 0.2s; border-radius: 3px; }
+        .result-item { padding: 15px; border-bottom: 1px solid #eee; transition: background 0.1s; }
+        .result-item:hover { background: #fafafa; }
+        .file-path { color: #888; font-size: 0.75rem; display: block; margin-bottom: 2px; }
+        .file-link { color: #0078d4; font-weight: bold; text-decoration: none; cursor: pointer; display: inline-block; margin-bottom: 8px; }
+        .file-link:hover { text-decoration: underline; }
+        .data-tag { 
+            display: inline-block; 
+            background: #e7f3ff; 
+            color: #0078d4; 
+            padding: 4px 10px; 
+            border-radius: 4px; 
+            font-size: 0.8rem; 
+            margin-right: 8px; 
+            margin-top: 5px;
+            cursor: pointer;
+            border: 1px solid #cde4ff;
+            transition: all 0.2s;
+        }
+        .data-tag:hover { background: #d0e7ff; border-color: #0078d4; }
+        .label { font-size: 0.7rem; color: #666; text-transform: uppercase; font-weight: bold; margin-right: 8px; }
+        .extracted-data { margin-top: 5px; }
+    </style>
   <style>
     :root { 
       --primary: #0ea5a4; 
