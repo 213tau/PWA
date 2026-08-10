@@ -1032,18 +1032,16 @@ function processSvgFile(file) {
     const items = clipboardData.items;
     const output = document.querySelector("#output");    
 
-    // Only prevent default if the target is #output or a descendant of #output
+    // Only prevent default if pasting directly inside the output area
     if (output && (e.target === output || output.contains(e.target))) {
         e.preventDefault();
     }
 
     let processed = false;
     let promise = null;
-
-    // Helper to extract items into an array for easier searching
     const itemArray = Array.from(items);
 
-    // 1. Try direct SVG string format (image/svg+xml)
+    // 1. Check for direct SVG string payload (may contain base64 image tags internally)
     const svgStringItem = itemArray.find(item => item.kind === 'string' && item.type === 'image/svg+xml');
     if (svgStringItem && !processed) {
         processed = true;
@@ -1051,7 +1049,7 @@ function processSvgFile(file) {
             svgStringItem.getAsString(async (svgString) => {
                 if (output) {
                     const pre = document.createElement("pre");
-                    pre.textContent = svgString;
+                    pre.textContent = svgString; // Contains the full SVG + base64 data
                     output.appendChild(pre);
                 }
                 const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
@@ -1065,7 +1063,7 @@ function processSvgFile(file) {
         });
     }
 
-    // 2. Try HTML markup fallback containing an SVG element
+    // 2. Check for HTML markup fallback (common when copying from design tools/browsers)
     const htmlItem = itemArray.find(item => item.kind === 'string' && item.type === 'text/html');
     if (htmlItem && !processed) {
         promise = new Promise((resolve) => {
@@ -1075,8 +1073,8 @@ function processSvgFile(file) {
                 const svgElement = doc.querySelector('svg');
 
                 if (svgElement) {
-                    processed = true; // Mark as handled since we found a valid embedded SVG
-                    const svgCode = svgElement.outerHTML;
+                    processed = true;
+                    const svgCode = svgElement.outerHTML; // Captures SVG with internal base64 image components
                     
                     if (output) {
                         const pre = document.createElement("pre");
@@ -1101,7 +1099,7 @@ function processSvgFile(file) {
         });
     }
 
-    // 3. Try File types (Dragged/Pasted files)
+    // 3. Check for File payloads (e.g. dragging/pasting an actual .svg file containing base64 assets)
     const fileItem = itemArray.find(item => item.kind === 'file');
     if (fileItem && !processed) {
         const file = fileItem.getAsFile();
@@ -1120,7 +1118,7 @@ function processSvgFile(file) {
         }
     }
 
-    // 4. Fallback to Plain Text only if no higher-priority asset was processed
+    // 4. Plain text fallback (only runs if no SVG/HTML match was found)
     const textItem = itemArray.find(item => item.kind === 'string' && item.type === 'text/plain');
     if (textItem && !processed) {
         processed = true;
@@ -1139,18 +1137,16 @@ function processSvgFile(file) {
         });
     }
 
-    // Await the single chosen pipeline
+    // Execute the final resolved pipeline cleanly without cross-contaminating outputs
     if (promise) {
         try {
             const result = await promise;
-            console.log('Clipboard item processed:', result);
+            console.log('Processed item with base64 components:', result);
         } catch (error) {
             console.error('Error processing clipboard item:', error);
         }
     }
 }, false);
-
-
 
 
     async function handleClipboardFiles(files) {
