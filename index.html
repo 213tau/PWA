@@ -1105,6 +1105,7 @@ background: brown;
         <button onclick="moveLineDown()">Move Line Down</button>
         <button onclick="domicilecheck()">Domicile</button>
         <button onclick="licensedata()">License Data</button>
+        <button onclick="irisdata()">IRIS Data</button>
         <button onclick="tabling()">Text To Table</button>
         <button onclick="tablingLine()">NewLine To Table</button>
         <button id="urduStyle">Urdu Style (Jameel Noori)</button>
@@ -4401,6 +4402,34 @@ document.getElementById("clipboardBtn").addEventListener("click", async () => {
         alert("Valid CNIC and Date of Birth (DD-MM-YYYY) not found in the text.");
     }
 }
+    function irisdata() {
+    // 1. Get and clean the text from #output
+    let text = document.getElementById("output").innerText.trim();
+
+    // 2. Define regex patterns
+    const cnicPattern = /\b(\d{5}-\d{7}-\d{1}|\d{13})\b/;    
+
+    // 3. Find matches
+    const cnicMatch = text.match(cnicPattern);    
+
+    // Validate that both CNIC and DOB exist
+    if (cnicMatch) {
+        let cnicValue = cnicMatch[0];
+
+        // Format 13-digit CNIC if it lacks dashes
+        if (/^\d{13}$/.test(cnicValue)) {
+            cnicValue = cnicValue.slice(0, 5) + '-' + cnicValue.slice(5, 12) + '-' + cnicValue.slice(12);
+        }
+        // 4. Send message to the extension's content script
+        window.postMessage({
+            type: "FETCH_IRIS_DATA",
+            cnic: cnicValue            
+        }, "https://atauxel.vercel.app");
+
+    } else {
+        alert("Valid CNIC and Date of Birth (DD-MM-YYYY) not found in the text.");
+    }
+}
 
     // Inside your PWA script or web app code
 window.addEventListener("message", (event) => {
@@ -4418,7 +4447,7 @@ window.addEventListener("message", (event) => {
         console.log("Successfully intercepted .d_wrapper in PWA:", dWrapper);
         
         // TODO: Render data into your PWA UI elements here
-        document.getElementById("pwa-result-container").innerHTML = dWrapper.innerHTML;
+        document.getElementById("output").innerHTML = dWrapper.innerHTML;
       }
     }
   }
