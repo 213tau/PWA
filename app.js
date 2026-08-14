@@ -451,7 +451,7 @@ for (const img of SELimages) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
 
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
             try {
                 const rawHtmlText = event.target.result;
 
@@ -460,17 +460,18 @@ for (const img of SELimages) {
                     return reject(new Error("Target element #output not found"));
                 }
 
+                // 1. Setup layout wrapper for side-by-side editing & preview
                 let wrapper = codeElement.parentElement;
                 wrapper.style.display = wrapper.style.display || "flex";
                 wrapper.style.gap = wrapper.style.gap || "1rem";
                 wrapper.style.height = wrapper.style.height || "500px";
 
-                // Setup editor container
                 codeElement.innerHTML = "";
                 codeElement.style.flex = "1";
                 codeElement.style.height = "100%";
+                codeElement.style.overflow = "hidden";
 
-                // Setup dynamic sandbox preview container next to it
+                // 2. Setup dynamic sandbox preview container next to #output
                 let previewContainer = wrapper.querySelector("#previewContainer");
                 if (!previewContainer) {
                     previewContainer = document.createElement("div");
@@ -489,38 +490,37 @@ for (const img of SELimages) {
                 iframe.srcdoc = rawHtmlText;
                 previewContainer.appendChild(iframe);
 
-                // Helper to initialize Monaco Editor (VS Code core)
-                const initMonaco = () => {
-                    window.monaco.editor.create(codeElement, {
-                        value: rawHtmlText,
-                        language: 'html',
-                        theme: 'vs-dark', // Change to 'vs' for light theme
-                        automaticLayout: true,
-                        minimap: { enabled: false }
-                    }).onDidChangeModelContent((e) => {
-                        // Live update sandbox iframe as you type code
-                        const updatedCode = window.monaco.editor.getModels()[0].getValue();
-                        iframe.srcdoc = updatedCode;
-                    });
-                    resolve(rawHtmlText);
-                };
+                // 3. Dynamically import CodeMirror 6 modules via esm.sh CDN
+                const { EditorView, basicSetup } = await import("https://esm.sh/codemirror");
+                const { html } = await import("https://esm.sh/@codemirror/lang-html");
 
-                // Load Monaco Editor dynamically via CDN if not already loaded
-                if (window.monaco) {
-                    initMonaco();
-                } else {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js';
-                    script.onload = () => {
-                        window.require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min' } });
-                        window.require(['vs/editor/editor.main'], () => {
-                            initMonaco();
-                        });
-                    };
-                    script.onerror = (err) => reject(err);
-                    document.head.appendChild(script);
+                // Clear previous CodeMirror instance if any exists on this element
+                if (codeElement._cmView) {
+                    codeElement._cmView.destroy();
                 }
 
+                // 4. Initialize CodeMirror 6 Editor instance
+                const updateListener = EditorView.updateListener.of((update) => {
+                    if (update.docChanged) {
+                        const updatedCode = update.state.doc.toString();
+                        iframe.srcdoc = updatedCode; // Live-update sandbox preview
+                    }
+                });
+
+                const view = new EditorView({
+                    doc: rawHtmlText,
+                    extensions: [
+                        basicSetup,
+                        html(),
+                        updateListener
+                    ],
+                    parent: codeElement
+                });
+
+                // Save reference to clean up later if needed
+                codeElement._cmView = view;
+
+                resolve(rawHtmlText);
             } catch (err) {
                 reject(err);
             }
