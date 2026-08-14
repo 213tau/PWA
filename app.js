@@ -455,51 +455,72 @@ for (const img of SELimages) {
             try {
                 const rawHtmlText = event.target.result;
 
-                // 1. Find #output and create/inject a preview container next to it dynamically
                 const codeElement = document.querySelector("#output");
-                if (codeElement) {
-                    let previewContainer = codeElement.parentElement.querySelector("#previewContainer");
-                    
-                    if (!previewContainer) {
-                        previewContainer = document.createElement("div");
-                        previewContainer.id = "previewContainer";
-                        // Insert the preview container right after the #output element
-                        codeElement.parentNode.insertBefore(previewContainer, codeElement.nextSibling);
-                    }
-
-                    previewContainer.innerHTML = ""; // Clear old preview
-                    
-                    const iframe = document.createElement("iframe");
-                    // 'allow-scripts' lets internal JS run; omit 'allow-same-origin' 
-                    // to completely isolate it from your app's domain and cookies.
-                    iframe.setAttribute("sandbox", "allow-scripts");
-                    iframe.style.width = "100%";
-                    iframe.style.height = "100%";
-                    iframe.style.border = "none";
-                    
-                    // Assign HTML content securely via srcdoc
-                    iframe.srcdoc = rawHtmlText;
-                    previewContainer.appendChild(iframe);
-
-                    // 2. Format code with line structures for #output view
-                    codeElement.innerHTML = ""; // Clear old output
-                    
-                    // Escape HTML entities safely to prevent rendering tags inside code view
-                    const escapedText = rawHtmlText
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;");
-                    
-                    const lines = escapedText.split("\n");
-                    lines.forEach(lineContent => {
-                        const lineSpan = document.createElement("span");
-                        lineSpan.className = "code-line";
-                        lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
-                        codeElement.appendChild(lineSpan);
-                    });
+                if (!codeElement) {
+                    return reject(new Error("Target element #output not found"));
                 }
 
-                resolve(rawHtmlText);
+                let wrapper = codeElement.parentElement;
+                wrapper.style.display = wrapper.style.display || "flex";
+                wrapper.style.gap = wrapper.style.gap || "1rem";
+                wrapper.style.height = wrapper.style.height || "500px";
+
+                // Setup editor container
+                codeElement.innerHTML = "";
+                codeElement.style.flex = "1";
+                codeElement.style.height = "100%";
+
+                // Setup dynamic sandbox preview container next to it
+                let previewContainer = wrapper.querySelector("#previewContainer");
+                if (!previewContainer) {
+                    previewContainer = document.createElement("div");
+                    previewContainer.id = "previewContainer";
+                    previewContainer.style.flex = "1";
+                    previewContainer.style.height = "100%";
+                    wrapper.insertBefore(previewContainer, codeElement.nextSibling);
+                }
+
+                previewContainer.innerHTML = "";
+                const iframe = document.createElement("iframe");
+                iframe.setAttribute("sandbox", "allow-scripts");
+                iframe.style.width = "100%";
+                iframe.style.height = "100%";
+                iframe.style.border = "1px solid #ccc";
+                iframe.srcdoc = rawHtmlText;
+                previewContainer.appendChild(iframe);
+
+                // Helper to initialize Monaco Editor (VS Code core)
+                const initMonaco = () => {
+                    window.monaco.editor.create(codeElement, {
+                        value: rawHtmlText,
+                        language: 'html',
+                        theme: 'vs-dark', // Change to 'vs' for light theme
+                        automaticLayout: true,
+                        minimap: { enabled: false }
+                    }).onDidChangeModelContent((e) => {
+                        // Live update sandbox iframe as you type code
+                        const updatedCode = window.monaco.editor.getModels()[0].getValue();
+                        iframe.srcdoc = updatedCode;
+                    });
+                    resolve(rawHtmlText);
+                };
+
+                // Load Monaco Editor dynamically via CDN if not already loaded
+                if (window.monaco) {
+                    initMonaco();
+                } else {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js';
+                    script.onload = () => {
+                        window.require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min' } });
+                        window.require(['vs/editor/editor.main'], () => {
+                            initMonaco();
+                        });
+                    };
+                    script.onerror = (err) => reject(err);
+                    document.head.appendChild(script);
+                }
+
             } catch (err) {
                 reject(err);
             }
