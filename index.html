@@ -1103,7 +1103,7 @@ background: brown;
         <button onclick="textup()">TextUp</button>
         <button onclick="moveLineUp()">Move Line Up</button>
         <button onclick="moveLineDown()">Move Line Down</button>
-        <button onclick="domicilecheck()">Domicile</button>
+        <button onclick="triggerDomicileFetch()">Domicile</button>
         <button onclick="licensedata()">License Data</button>
         <button onclick="irisdata()">IRIS Data</button>
         <button onclick="tabling()">Text To Table</button>
@@ -4429,6 +4429,38 @@ document.getElementById("clipboardBtn").addEventListener("click", async () => {
     } else {
         alert("Valid CNIC and Date of Birth (DD-MM-YYYY) not found in the text.");
     }
+}
+
+    // Function to trigger the Domicile fetch using #output text
+function triggerDomicileFetch() {
+    const outputElement = document.querySelector("#output");
+    
+    if (!outputElement) {
+        console.warn("Element #output not found.");
+        return;
+    }
+
+    const outputText = outputElement.innerText;
+    const match = outputText.match(/\d{5}-\d{7}-\d{1}/);
+
+    if (!match) {
+        alert("No valid CNIC format (5-7-1 digits) found in #output");
+        return;
+    }
+
+    const cnicId = match[0];
+
+    // Send postMessage to your content script bridge
+    window.postMessage({
+        type: "FETCH_DOMICILE_DATA",
+        id: cnicId
+    }, window.location.origin);
+}
+
+// Bind it directly to your button
+const fetchBtn = document.getElementById("fetchDomicileBtn");
+if (fetchBtn) {
+    fetchBtn.addEventListener("click", triggerDomicileFetch);
 }
 /*
     // Inside your PWA script or web app code
