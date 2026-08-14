@@ -455,18 +455,36 @@ for (const img of SELimages) {
             try {
                 const rawHtmlText = event.target.result;
 
-                // Insert visual HTML output into DOM container
-                const htmlContainer = document.querySelector("#svgTools");
-                if (htmlContainer) {
-                    htmlContainer.innerHTML = rawHtmlText;
-                }
-
-                // Format code with line structures for #output
+                // 1. Find #output and create/inject a preview container next to it dynamically
                 const codeElement = document.querySelector("#output");
                 if (codeElement) {
+                    let previewContainer = codeElement.parentElement.querySelector("#previewContainer");
+                    
+                    if (!previewContainer) {
+                        previewContainer = document.createElement("div");
+                        previewContainer.id = "previewContainer";
+                        // Insert the preview container right after the #output element
+                        codeElement.parentNode.insertBefore(previewContainer, codeElement.nextSibling);
+                    }
+
+                    previewContainer.innerHTML = ""; // Clear old preview
+                    
+                    const iframe = document.createElement("iframe");
+                    // 'allow-scripts' lets internal JS run; omit 'allow-same-origin' 
+                    // to completely isolate it from your app's domain and cookies.
+                    iframe.setAttribute("sandbox", "allow-scripts");
+                    iframe.style.width = "100%";
+                    iframe.style.height = "100%";
+                    iframe.style.border = "none";
+                    
+                    // Assign HTML content securely via srcdoc
+                    iframe.srcdoc = rawHtmlText;
+                    previewContainer.appendChild(iframe);
+
+                    // 2. Format code with line structures for #output view
                     codeElement.innerHTML = ""; // Clear old output
                     
-                    // Escape HTML entities safely to prevent rendering tags inside the code view
+                    // Escape HTML entities safely to prevent rendering tags inside code view
                     const escapedText = rawHtmlText
                         .replace(/&/g, "&amp;")
                         .replace(/</g, "&lt;")
