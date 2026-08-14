@@ -455,46 +455,36 @@ for (const img of SELimages) {
             try {
                 const rawHtmlText = event.target.result;
 
-                // 1. Find #output's parent wrapper to hold both the editor and the preview side-by-side
+                // 1. Find #output and create/inject a preview container next to it dynamically
                 const codeElement = document.querySelector("#output");
                 if (codeElement) {
-                    let wrapper = codeElement.parentElement;
+                    let previewContainer = codeElement.parentElement.querySelector("#previewContainer");
                     
-                    // If wrapper doesn't have a flex layout yet, apply it so they sit side-by-side cleanly
-                    wrapper.style.display = wrapper.style.display || "flex";
-                    wrapper.style.gap = wrapper.style.gap || "1rem";
-
-                    // Ensure #output has a distinct visual boundary/size
-                    codeElement.style.flex = codeElement.style.flex || "1";
-                    codeElement.style.overflow = codeElement.style.overflow || "auto";
-
-                    // Create or select the dynamic preview container next to #output
-                    let previewContainer = wrapper.querySelector("#previewContainer");
                     if (!previewContainer) {
                         previewContainer = document.createElement("div");
                         previewContainer.id = "previewContainer";
-                        previewContainer.style.flex = "1";
-                        previewContainer.style.minHeight = "300px";
-                        wrapper.insertBefore(previewContainer, codeElement.nextSibling);
+                        // Insert the preview container right after the #output element
+                        codeElement.parentNode.insertBefore(previewContainer, codeElement.nextSibling);
                     }
 
                     previewContainer.innerHTML = ""; // Clear old preview
                     
                     const iframe = document.createElement("iframe");
-                    // 'allow-scripts' lets internal JS run; omit 'allow-same-origin' for security isolation
+                    // 'allow-scripts' lets internal JS run; omit 'allow-same-origin' 
+                    // to completely isolate it from your app's domain and cookies.
                     iframe.setAttribute("sandbox", "allow-scripts");
                     iframe.style.width = "100%";
                     iframe.style.height = "100%";
-                    iframe.style.border = "1px solid #ccc";
+                    iframe.style.border = "none";
                     
                     // Assign HTML content securely via srcdoc
                     iframe.srcdoc = rawHtmlText;
                     previewContainer.appendChild(iframe);
 
-                    // 2. Format code cleanly with distinct line structures for the #output view
+                    // 2. Format code with line structures for #output view
                     codeElement.innerHTML = ""; // Clear old output
                     
-                    // Escape HTML entities safely to prevent tags from rendering inside code view
+                    // Escape HTML entities safely to prevent rendering tags inside code view
                     const escapedText = rawHtmlText
                         .replace(/&/g, "&amp;")
                         .replace(/</g, "&lt;")
@@ -504,9 +494,6 @@ for (const img of SELimages) {
                     lines.forEach(lineContent => {
                         const lineSpan = document.createElement("span");
                         lineSpan.className = "code-line";
-                        // Use block display so lines stack vertically like a real code editor
-                        lineSpan.style.display = "block";
-                        lineSpan.style.whiteSpace = "pre";
                         lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
                         codeElement.appendChild(lineSpan);
                     });
