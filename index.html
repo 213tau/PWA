@@ -1104,6 +1104,7 @@ background: brown;
         <button onclick="moveLineUp()">Move Line Up</button>
         <button onclick="moveLineDown()">Move Line Down</button>
         <button onclick="triggerDomicileFetch()">Domicile</button>
+        <button onclick="DomicileFetch()">Domicile Web</button>
         <button onclick="licensedata()">License Data</button>
         <button onclick="irisdata()">IRIS Data</button>
         <button onclick="tabling()">Text To Table</button>
@@ -4455,41 +4456,40 @@ function triggerDomicileFetch() {
         id = id.slice(0, 5) + '-' + id.slice(5, 12) + '-' + id.slice(12);
     }
 
-    let extensionRunning = false;
-
-    // Safely check if extension API exists and responds without throwing errors
-    if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) {
-        try {
-            extensionRunning = await new Promise((resolve) => {
-                // If you have a specific Extension ID, add it as the first argument:
-                // chrome.runtime.sendMessage("YOUR_EXTENSION_ID", { type: "CHECK_EXTENSION" }, ...
-                chrome.runtime.sendMessage({ type: "CHECK_EXTENSION" }, (response) => {
-                    if (chrome.runtime.lastError) {
-                        resolve(false); // Extension not found or failed
-                    } else {
-                        resolve(response && response.status === "running");
-                    }
-                });
-            });
-        } catch (e) {
-            extensionRunning = false; // Gracefully handle failure
-        }
-    }
-
-    if (extensionRunning) {
         // Extension is active: communicate via postMessage
         window.postMessage({
             type: "FETCH_DOMICILE_DATA",
             id: id
         }, window.location.origin);
-        console.log("Extension is running. Sent via postMessage.");
-    } else {
-        // Fallback: Extension is not running, open window directly
-        console.log("Extension not detected. Falling back to window.open.");
+}
+
+    function DomicileFetch() {
+    const outputElement = document.querySelector("#output");
+    
+    if (!outputElement) {
+        console.warn("Element #output not found.");
+        alert("Element #output not found.");
+        return;
+    }
+
+    const text = outputElement.innerText.trim();
+    const cnicPattern = /\b(\d{5}-\d{7}-\d{1}|\d{13})\b/;
+    const match = text.match(cnicPattern);
+
+    if (!match) {
+        alert("No valid CNIC found in the text.");
+        return;
+    }
+
+    let id = match[0];
+    if (/^\d{13}$/.test(id)) {
+        id = id.slice(0, 5) + '-' + id.slice(5, 12) + '-' + id.slice(12);
+    }
+  
         const url = "https://domicile.punjab.gov.pk/AjaxCall.aspx?ID=" + encodeURIComponent(id);
         window.open(url, "_blank");
-    }
 }
+
 
 // Bind it directly to your button
 const fetchBtn = document.getElementById("fetchDomicileBtn");
