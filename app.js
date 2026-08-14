@@ -451,74 +451,66 @@ for (const img of SELimages) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
 
-        reader.onload = async (event) => {
+        reader.onload = (event) => {
             try {
                 const rawHtmlText = event.target.result;
 
+                // 1. Find #output's parent wrapper to hold both the editor and the preview side-by-side
                 const codeElement = document.querySelector("#output");
-                if (!codeElement) {
-                    return reject(new Error("Target element #output not found"));
-                }
+                if (codeElement) {
+                    let wrapper = codeElement.parentElement;
+                    
+                    // If wrapper doesn't have a flex layout yet, apply it so they sit side-by-side cleanly
+                    wrapper.style.display = wrapper.style.display || "flex";
+                    wrapper.style.gap = wrapper.style.gap || "1rem";
 
-                // 1. Setup layout wrapper for side-by-side editing & preview
-                let wrapper = codeElement.parentElement;
-                wrapper.style.display = wrapper.style.display || "flex";
-                wrapper.style.gap = wrapper.style.gap || "1rem";
-                wrapper.style.height = wrapper.style.height || "500px";
+                    // Ensure #output has a distinct visual boundary/size
+                    codeElement.style.flex = codeElement.style.flex || "1";
+                    codeElement.style.overflow = codeElement.style.overflow || "auto";
 
-                codeElement.innerHTML = "";
-                codeElement.style.flex = "1";
-                codeElement.style.height = "100%";
-                codeElement.style.overflow = "hidden";
-
-                // 2. Setup dynamic sandbox preview container next to #output
-                let previewContainer = wrapper.querySelector("#previewContainer");
-                if (!previewContainer) {
-                    previewContainer = document.createElement("div");
-                    previewContainer.id = "previewContainer";
-                    previewContainer.style.flex = "1";
-                    previewContainer.style.height = "100%";
-                    wrapper.insertBefore(previewContainer, codeElement.nextSibling);
-                }
-
-                previewContainer.innerHTML = "";
-                const iframe = document.createElement("iframe");
-                iframe.setAttribute("sandbox", "allow-scripts");
-                iframe.style.width = "100%";
-                iframe.style.height = "100%";
-                iframe.style.border = "1px solid #ccc";
-                iframe.srcdoc = rawHtmlText;
-                previewContainer.appendChild(iframe);
-
-                // 3. Dynamically import CodeMirror 6 modules via esm.sh CDN
-                const { EditorView, basicSetup } = await import("https://esm.sh/codemirror");
-                const { html } = await import("https://esm.sh/@codemirror/lang-html");
-
-                // Clear previous CodeMirror instance if any exists on this element
-                if (codeElement._cmView) {
-                    codeElement._cmView.destroy();
-                }
-
-                // 4. Initialize CodeMirror 6 Editor instance
-                const updateListener = EditorView.updateListener.of((update) => {
-                    if (update.docChanged) {
-                        const updatedCode = update.state.doc.toString();
-                        iframe.srcdoc = updatedCode; // Live-update sandbox preview
+                    // Create or select the dynamic preview container next to #output
+                    let previewContainer = wrapper.querySelector("#previewContainer");
+                    if (!previewContainer) {
+                        previewContainer = document.createElement("div");
+                        previewContainer.id = "previewContainer";
+                        previewContainer.style.flex = "1";
+                        previewContainer.style.minHeight = "300px";
+                        wrapper.insertBefore(previewContainer, codeElement.nextSibling);
                     }
-                });
 
-                const view = new EditorView({
-                    doc: rawHtmlText,
-                    extensions: [
-                        basicSetup,
-                        html(),
-                        updateListener
-                    ],
-                    parent: codeElement
-                });
+                    previewContainer.innerHTML = ""; // Clear old preview
+                    
+                    const iframe = document.createElement("iframe");
+                    // 'allow-scripts' lets internal JS run; omit 'allow-same-origin' for security isolation
+                    iframe.setAttribute("sandbox", "allow-scripts");
+                    iframe.style.width = "100%";
+                    iframe.style.height = "100%";
+                    iframe.style.border = "1px solid #ccc";
+                    
+                    // Assign HTML content securely via srcdoc
+                    iframe.srcdoc = rawHtmlText;
+                    previewContainer.appendChild(iframe);
 
-                // Save reference to clean up later if needed
-                codeElement._cmView = view;
+                    // 2. Format code cleanly with distinct line structures for the #output view
+                    codeElement.innerHTML = ""; // Clear old output
+                    
+                    // Escape HTML entities safely to prevent tags from rendering inside code view
+                    const escapedText = rawHtmlText
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;");
+                    
+                    const lines = escapedText.split("\n");
+                    lines.forEach(lineContent => {
+                        const lineSpan = document.createElement("span");
+                        lineSpan.className = "code-line";
+                        // Use block display so lines stack vertically like a real code editor
+                        lineSpan.style.display = "block";
+                        lineSpan.style.whiteSpace = "pre";
+                        lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
+                        codeElement.appendChild(lineSpan);
+                    });
+                }
 
                 resolve(rawHtmlText);
             } catch (err) {
