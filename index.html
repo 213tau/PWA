@@ -4437,24 +4437,58 @@ function triggerDomicileFetch() {
     
     if (!outputElement) {
         console.warn("Element #output not found.");
+        alert("Element #output not found.");
         return;
     }
 
-    const outputText = outputElement.innerText;
-    const match = outputText.match(/\d{5}-\d{7}-\d{1}/);
+    const text = outputElement.innerText.trim();
+    
+    // Comprehensive regex to find CNIC (dashed 5-7-1 or 13 consecutive digits)
+    const cnicPattern = /\b(\d{5}-\d{7}-\d{1}|\d{13})\b/;
+    const match = text.match(cnicPattern);
 
     if (!match) {
-        alert("No valid CNIC format (5-7-1 digits) found in #output");
+        alert("No valid CNIC found in the text.");
         return;
     }
 
-    const cnicId = match[0];
+    let id = match[0]; // Extract the matched CNIC
 
-    // Send postMessage to your content script bridge
+    // Normalize 13-digit format to dashed format if necessary
+    if (/^\d{13}$/.test(id)) {
+        id = id.slice(0, 5) + '-' + id.slice(5, 12) + '-' + id.slice(12);
+    }
+
+    // Flag to track if the extension/content script acknowledged the message
+    let messageAcknowledged = false;
+
+    // Listen for a response from your content script (optional, but recommended for robust fallback)
+    const responseListener = (event) => {
+        if (event.source === window && event.data && event.data.type === "DOMICILE_FETCH_ACK") {
+            messageAcknowledged = true;
+            window.removeEventListener("message", responseListener);
+        }
+    };
+    window.addEventListener("message", responseListener);
+
+    // 1. Attempt to send postMessage to your content script bridge
     window.postMessage({
         type: "FETCH_DOMICILE_DATA",
-        id: cnicId
+        id: id
     }, window.location.origin);
+
+    // 2. Fallback mechanism: If no acknowledgment is received within 300ms, open the window directly
+    setTimeout(() => {
+        window.removeEventListener("message", responseListener);
+        
+        if (!messageAcknowledged) {
+            console.warn("Post message failed or unacknowledged. Falling back to opening window.");
+            
+            // Construct the URL and open in a new tab
+            const url = "https://domicile.punjab.gov.pk/AjaxCall.aspx?ID=" + encodeURIComponent(id);
+            window.open(url, "_blank");
+        }
+    }, 300);
 }
 
 // Bind it directly to your button
