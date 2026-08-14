@@ -447,6 +447,49 @@ for (const img of SELimages) {
             reject(err);
         }
     });
+} else if (file.type === "html" || file.type === "text/html") {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+            try {
+                const rawHtmlText = event.target.result;
+
+                // Insert visual HTML output into DOM container
+                const htmlContainer = document.querySelector("#svgTools");
+                if (htmlContainer) {
+                    htmlContainer.innerHTML = rawHtmlText;
+                }
+
+                // Format code with line structures for #output
+                const codeElement = document.querySelector("#output");
+                if (codeElement) {
+                    codeElement.innerHTML = ""; // Clear old output
+                    
+                    // Escape HTML entities safely to prevent rendering tags inside the code view
+                    const escapedText = rawHtmlText
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;");
+                    
+                    const lines = escapedText.split("\n");
+                    lines.forEach(lineContent => {
+                        const lineSpan = document.createElement("span");
+                        lineSpan.className = "code-line";
+                        lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
+                        codeElement.appendChild(lineSpan);
+                    });
+                }
+
+                resolve(rawHtmlText);
+            } catch (err) {
+                reject(err);
+            }
+        };
+
+        reader.onerror = (error) => reject(error);
+        reader.readAsText(file);
+    });
 } else {
           return []; // to avoid undefined entries in results
         }
