@@ -8634,34 +8634,6 @@ function getWeightedSurroundingAverageColor(data, x, y, width, height, mask) {
   };
 }
 
-function domicilecheck() {
-    // Get the innerText of #output and remove extra whitespace
-    let text = document.getElementById("output").innerText.trim();
-
-    // Regex to find CNIC anywhere: 00000-0000000-0 OR 13 consecutive digits
-    const cnicPattern = /\b(\d{5}-\d{7}-\d{1}|\d{13})\b/;
-
-    // Check if CNIC exists in the text
-    const match = text.match(cnicPattern);
-
-    if (match) {
-        let id = match[0]; // Extract the matched CNIC
-
-        // If it's 13 digits without dashes, convert to dashed format
-        if (/^\d{13}$/.test(id)) {
-            id = id.slice(0,5) + '-' + id.slice(5,12) + '-' + id.slice(12);
-        }
-
-        // Construct the URL
-        const url = "https://domicile.punjab.gov.pk/AjaxCall.aspx?ID=" + encodeURIComponent(id);
-
-        // Open the URL in a new tab
-        window.open(url, "_blank");
-    } else {
-        alert("No valid CNIC found in the text.");
-    }
-}
-
 function getCaretCharacterOffsetWithin(element) {
     let caretOffset = 0;
     const sel = window.getSelection();
