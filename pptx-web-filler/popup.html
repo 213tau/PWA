@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 200px; padding: 10px; font-family: sans-serif; }
+    button { width: 100%; margin-top: 5px; }
+    #resetBtn { background-color: #ff4d4d; color: white; border: none; padding: 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h3>PPTX Form Filler</h3>
+  <input type="file" id="pptxInput" accept=".pptx" />
+  <button id="processBtn">Fill Form</button>
+  <button id="resetBtn">Clear Fields</button>
+  <button id="inspectorBtn">Enable ID Inspector</button>
+  <script src="jszip.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
