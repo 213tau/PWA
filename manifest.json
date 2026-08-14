@@ -32,6 +32,9 @@
         "image/svg+xml": [
           ".svg"
         ],
+        "text/html": [
+          ".html"
+        ],
         "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
           ".pptx"
         ],
