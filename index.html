@@ -932,6 +932,7 @@ background: brown;
       <button id="ManualBookletWithBlanks">Manual Booklet</button>
       <button id="trueBookletPDF">True Booklet</button>
       <button id="svgdownload">SVGs Download</button>
+      <button onclick="downloadExtensionZip()">Chrome Extension</button>
       <button onclick="svgspanremove()">Svg Span Text Remove</button>
     </div>
 
@@ -4734,6 +4735,52 @@ async function searchText() {
             output.appendChild(div);
         });
     };
+}
+    async function downloadExtensionZip() {
+    const zip = new JSZip();
+
+    const files = [
+        "content.js",
+        "background.js",
+        "jszip.min.js",
+        "manifest.json",
+        "popup.html",
+        "popup.js"
+    ];
+
+    for (const file of files) {
+        const response = await fetch(
+            `/pptx-web-filler/${file}`
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to load ${file}`);
+        }
+
+        const data = await response.arrayBuffer();
+
+        zip.file(file, data);
+    }
+
+    const blob = await zip.generateAsync({
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: {
+            level: 9
+        }
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pptx-web-filler.zip";
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
 }
 </script>
 </body>
