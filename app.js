@@ -6410,10 +6410,37 @@ if (outputEl && outputEl.textContent.trim() !== '') {
         // Choose scheme based on your environment (or use app protocol with web fallback)
         // If you are strictly inside a Microsoft WinUI/WebView2 app where whatsapp:// is guaranteed to work:
         const whatsappAppUrl = `whatsapp://send?phone=${phoneNumber}&text=${message}`;                
-        window.open(whatsappAppUrl, '_blank');
+        window.open(whatsappAppUrl, '_blank');        
+    } else {
+        alert("Please enter a valid phone number.");
+    }
+}
+    function openWhatsAppWeb() {
+    const elementText = document.querySelector('#output').innerText || "";
+
+    // Regex to match Pakistani mobile formats (03XX-XXXXXXX, +92 3XX XXXXXXX, etc.)
+    const regex = /(?:\+92|0)?3\d{2}[\s\-]?\d{7}/;
+    const match = elementText.match(regex);
+
+    if (match) {
+        let phoneNumber = match[0];
+
+        // Format to international standard (923XXXXXXXXX)
+        if (phoneNumber.startsWith("0")) {
+            phoneNumber = "92" + phoneNumber.substring(1);
+        } else if (phoneNumber.startsWith("+")) {
+            phoneNumber = phoneNumber.replace("+", "");
+        }
         
-        const whatsappAppUrl1 = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;        
-        window.open(whatsappAppUrl1, '_blank');
+        // Remove remaining spaces or dashes
+        phoneNumber = phoneNumber.replace(/\D/g, '');
+
+        const message = encodeURIComponent("Tanveer Studio!"); 
+
+        // Choose scheme based on your environment (or use app protocol with web fallback)
+        // If you are strictly inside a Microsoft WinUI/WebView2 app where whatsapp:// is guaranteed to work:                
+        const whatsappAppUrl = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;        
+        window.open(whatsappAppUrl, '_blank');
     } else {
         alert("Please enter a valid phone number.");
     }
