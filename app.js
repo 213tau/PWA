@@ -1097,10 +1097,8 @@ function processSvgFile(file) {
         e.preventDefault();
     }
 
-    // Helper: Promisify item.getAsString()
     const getAsStringAsync = (item) => new Promise((resolve) => item.getAsString(resolve));
 
-    // Helper: Safely append text/code output
     const appendOutput = (content, isCode = false) => {
         if (!output) return;
         const container = document.createElement(isCode ? "pre" : "div");
@@ -1127,12 +1125,13 @@ function processSvgFile(file) {
                 return await processSvgFile(svgFile);
             }
 
-            // 2. Handle HTML markup fallbacks (e.g., copied vectors from browsers)
+            // 2. Handle HTML markup (Vectors, Tables, etc.)
             if (item.kind === 'string' && item.type === 'text/html') {
                 const html = await getAsStringAsync(item);
                 const doc = new DOMParser().parseFromString(html, 'text/html');
+                
+                // Check for SVG
                 const svgElement = doc.querySelector('svg');
-
                 if (svgElement) {
                     const svgCode = svgElement.outerHTML;
                     console.log('Extracted SVG from HTML:', svgCode);
@@ -1142,6 +1141,22 @@ function processSvgFile(file) {
                     const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
                     return await processSvgFile(svgFile);
                 }
+
+                // Check for Tables (Excel, Sheets, Web HTML tables)
+                const tableElement = doc.querySelector('table');
+                if (tableElement) {
+                    console.log('Extracted Table from HTML:', tableElement);
+                    if (output) {
+                        output.appendChild(tableElement.cloneNode(true));
+                    }
+                    
+                    const rows = Array.from(tableElement.querySelectorAll('tr'));
+                    const tableData = rows.map(row => 
+                        Array.from(row.querySelectorAll('th, td')).map(cell => cell.textContent.trim())
+                    );
+                    return { type: 'table', format: 'html', content: tableData };
+                }
+
                 return { type: 'html', content: html };
             }
 
@@ -1162,9 +1177,30 @@ function processSvgFile(file) {
                 }
             }
 
-            // 4. Handle plain text fallback
+            // 4. Handle plain text fallback (Includes tab-separated Excel/Sheets text)
             if (item.kind === 'string' && item.type === 'text/plain') {
                 const text = await getAsStringAsync(item);
+                
+                if (text.includes('\t')) {
+                    const rows = text.split(/\r?\n/).map(line => line.split('\t'));
+                    console.log('Extracted TSV / Spreadsheet Grid:', rows);
+
+                    if (output) {
+                        const table = document.createElement("table");
+                        rows.forEach(rowCells => {
+                            const tr = document.createElement("tr");
+                            rowCells.forEach(cellText => {
+                                const td = document.createElement("td");
+                                td.textContent = cellText;
+                                tr.appendChild(td);
+                            });
+                            table.appendChild(tr);
+                        });
+                        output.appendChild(table);
+                    }
+                    return { type: 'table', format: 'tsv', content: rows };
+                }
+
                 if (output) {
                     text.split(/\r?\n/).forEach(line => appendOutput(line, false));
                 }
@@ -1179,8 +1215,6 @@ function processSvgFile(file) {
     try {
         const results = await Promise.all(promises);
         console.log('All clipboard items processed:', results.filter(Boolean));
-    } else (error) {
-        // Syntax safety fallback
     } catch (error) {
         console.error('Error settling clipboard promises:', error);
     }
