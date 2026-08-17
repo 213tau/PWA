@@ -4784,21 +4784,38 @@ async function searchText() {
     URL.revokeObjectURL(url);
 }
 // Run when the PWA loads
-window.addEventListener("DOMContentLoaded", () => {
-  const params = new URLSearchParams(window.location.search);
-  const sharedData = params.get("data");
+document.addEventListener("DOMContentLoaded", () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const dataParam = urlParams.get("data");
 
-  if (sharedData) {
+  if (!dataParam) return;
+
+  // Check if the incoming data is a Base64 data URL (images) or a standard URL
+  if (dataParam.startsWith("data:image/") || dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)$/i)) {
+    // --- HANDLE IMAGE PAYLOAD ---
+    const img = new Image();
+    img.crossOrigin = "anonymous"; 
+    img.src = dataParam;
+
+    images.push({
+      img: img,
+      dpi: 300
+    });
+
+    currentImageIndex = 0;
+    updateImageSelector();
+    loadCurrentImage();
+
+  } else {
+    // --- HANDLE TEXT PAYLOAD ---
     const outputElement = document.querySelector("#output");
-    if (outputElement && outputElement.isContentEditable) {
-      // Set text content for contenteditable divs
-      outputElement.textContent = sharedData;
-      
-      // Trigger input event so any framework bindings (React, Vue, Svelte) or listeners catch the change
-      outputElement.dispatchEvent(new Event('input', { bubbles: true }));
-      
-      // Optional status notification
-      window.postMessage({ action: "UI_STATUS", status: "New instance loaded with data!" }, "*");
+    if (outputElement) {
+      // If #output is a textarea or input, use .value; otherwise use .textContent or .innerHTML
+      if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
+        outputElement.value = dataParam;
+      } else {
+        outputElement.textContent = dataParam;
+      }
     }
   }
 });

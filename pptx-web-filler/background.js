@@ -132,24 +132,38 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "openWithAtauxel") {
-    // 1. Determine what the user clicked on
     let payload = "";
+
     if (info.selectionText) {
       payload = info.selectionText;
-    } else if (info.srcUrl) {
-      payload = info.srcUrl;
     } else if (info.linkUrl) {
       payload = info.linkUrl;
+    } else if (info.srcUrl) {
+      // If it's an image (handles regular URLs, Data URLs, and Blob URLs)
+      try {
+        const response = await fetch(info.srcUrl);
+        const blob = await response.blob();
+        
+        // Convert blob into a Base64 Data URL so the new tab can read it
+        payload = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.error("Failed to fetch image source:", error);
+        // Fallback to raw srcUrl if fetch fails (e.g. CORS restrictions)
+        payload = info.srcUrl;
+      }
     }
 
     if (!payload) return;
 
-    // 2. Construct a fresh URL instance with the payload encoded as a query parameter
+    // Open a brand new instance with the payload encoded in the query
     const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
-
-    // 3. Always open a brand new tab instance
     chrome.tabs.create({ url: targetUrl, active: true });
   }
 });
