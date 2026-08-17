@@ -4783,23 +4783,32 @@ async function searchText() {
 
     URL.revokeObjectURL(url);
 }
-// Run when the PWA loads
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const urlParams = new URLSearchParams(window.location.search);
   const dataParam = urlParams.get("data");
+  const dataKey = urlParams.get("key");
 
-  if (!dataParam) return;
+  let payload = dataParam;
 
-  // Check if the incoming data is a Base64 data URL, a blob URL, or a standard image URL
+  // If a storage key was provided instead of raw data, retrieve it
+  if (dataKey && typeof chrome !== "undefined" && chrome.storage) {
+    const result = await chrome.storage.local.get(dataKey);
+    payload = result[dataKey];
+    // Clean up storage after reading
+    await chrome.storage.local.remove(dataKey);
+  }
+
+  if (!payload) return;
+
+  // --- HANDLE IMAGE PAYLOAD ---
   if (
-    dataParam.startsWith("data:image/") || 
-    dataParam.startsWith("blob:") || 
-    dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
+    payload.startsWith("data:image/") || 
+    payload.startsWith("blob:") || 
+    payload.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
   ) {
-    // --- HANDLE IMAGE PAYLOAD ---
     const img = new Image();
     img.crossOrigin = "anonymous"; 
-    img.src = dataParam;
+    img.src = payload;
 
     images.push({
       img: img,
@@ -4814,11 +4823,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- HANDLE TEXT PAYLOAD ---
     const outputElement = document.querySelector("#output");
     if (outputElement) {
-      // If #output is a textarea or input, use .value; otherwise use .textContent or .innerHTML
       if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
-        outputElement.value = dataParam;
+        outputElement.value = payload;
       } else {
-        outputElement.textContent = dataParam;
+        outputElement.textContent = payload;
       }
     }
   }

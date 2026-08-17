@@ -135,35 +135,18 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "openWithAtauxel") {
     let payload = "";
-
-    if (info.selectionText) {
-      payload = info.selectionText;
-    } else if (info.linkUrl) {
-      payload = info.linkUrl;
-    } else if (info.srcUrl) {
-      // If it's an image (handles regular URLs, Data URLs, and Blob URLs)
-      try {
-        const response = await fetch(info.srcUrl);
-        const blob = await response.blob();
-        
-        // Convert blob into a Base64 Data URL so the new tab can read it
-        payload = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } catch (error) {
-        console.error("Failed to fetch image source:", error);
-        // Fallback to raw srcUrl if fetch fails (e.g. CORS restrictions)
-        payload = info.srcUrl;
-      }
-    }
+    // ... (keep your existing blob/selection/srcUrl fetching logic to get the payload) ...
 
     if (!payload) return;
 
-    // Open a brand new instance with the payload encoded in the query
-    const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
+    // Generate a unique key for this payload
+    const dataKey = `atauxel_payload_${Date.now()}`;
+    
+    // Store large payload safely in extension local storage
+    await chrome.storage.local.set({ [dataKey]: payload });
+
+    // Pass only the lightweight key in the URL query string
+    const targetUrl = `https://atauxel.vercel.app/?key=${dataKey}`;
     chrome.tabs.create({ url: targetUrl, active: true });
   }
 });
