@@ -128,7 +128,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openWithAtauxel",
     title: "Open with Atauxel",
-    contexts: ["selection", "image", "link", "editable"]
+    contexts: ["selection", "image", "link", "editable", "page"]
   });
 });
 
