@@ -1112,6 +1112,57 @@ function processSvgFile(file) {
         output.appendChild(container);
     };
 
+    // Helper: Render HTML content with a toggle button to switch between Styled View and Raw Source Code View
+    const renderHtmlWithToggle = (htmlContent) => {
+        if (!output) return;
+
+        // Container wrapper for the pasted block and its toolbar
+        const wrapper = document.createElement("div");
+        wrapper.className = "pasted-html-container";
+        wrapper.style.cssText = "margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 4px;";
+
+        // Toolbar for the toggle button
+        const toolbar = document.createElement("div");
+        toolbar.style.cssText = "margin-bottom: 8px; text-align: right;";
+        
+        const toggleBtn = document.createElement("button");
+        toggleBtn.textContent = "View Raw HTML Source";
+        toggleBtn.type = "button";
+        toggleBtn.className = "toggle-html-view-btn";
+
+        // Content container
+        const contentBox = document.createElement("div");
+        contentBox.className = "html-content-box";
+        
+        // Initial state: Rendered Styled HTML
+        let isRaw = false;
+        contentBox.innerHTML = htmlContent;
+
+        toggleBtn.onclick = () => {
+            isRaw = !isRaw;
+            if (isRaw) {
+                contentBox.textContent = htmlContent; // switch to raw text/code view
+                contentBox.style.whiteSpace = "pre-wrap";
+                contentBox.style.fontFamily = "monospace";
+                contentBox.style.background = "#f4f4f4";
+                contentBox.style.padding = "8px";
+                toggleBtn.textContent = "View Styled HTML";
+            } else {
+                contentBox.innerHTML = htmlContent; // switch back to styled HTML view
+                contentBox.style.whiteSpace = "";
+                contentBox.style.fontFamily = "";
+                contentBox.style.background = "";
+                contentBox.style.padding = "";
+                toggleBtn.textContent = "View Raw HTML Source";
+            }
+        };
+
+        toolbar.appendChild(toggleBtn);
+        wrapper.appendChild(toolbar);
+        wrapper.appendChild(contentBox);
+        output.appendChild(wrapper);
+    };
+
     const promises = Array.from(clipboardData.items).map(async (item) => {
         try {
             // 1. Handle SVG sent directly as string payload
@@ -1157,6 +1208,9 @@ function processSvgFile(file) {
                     return { type: 'table', format: 'html', content: tableData };
                 }
 
+                // General HTML fallback: Render styled HTML with a dedicated toggle button option
+                console.log('Pasted Rich HTML with Styles:', html);
+                renderHtmlWithToggle(html);
                 return { type: 'html', content: html };
             }
 
