@@ -4783,32 +4783,24 @@ async function searchText() {
 
     URL.revokeObjectURL(url);
 }
-// Define a global handler that the extension can call post-load
-window.handleAtauxelPayload = function(payload) {
-  processPayload(payload);
-};
-
-// Also keep your DOMContentLoaded listener if someone navigates directly or reloads
+// Run when the PWA loads
+// Run when the PWA loads
 document.addEventListener("DOMContentLoaded", () => {
   const urlParams = new URLSearchParams(window.location.search);
   const dataParam = urlParams.get("data");
-  if (dataParam) {
-    processPayload(dataParam);
-  }
-});
 
-// Shared processor function
-function processPayload(payload) {
-  if (!payload) return;
+  if (!dataParam) return;
 
+  // Check if the incoming data is a Base64 data URL, a blob URL, or a standard image URL
   if (
-    payload.startsWith("data:image/") || 
-    payload.startsWith("blob:") || 
-    payload.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
+    dataParam.startsWith("data:image/") || 
+    dataParam.startsWith("blob:") || 
+    dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
   ) {
+    // --- HANDLE IMAGE PAYLOAD ---
     const img = new Image();
     img.crossOrigin = "anonymous"; 
-    img.src = payload;
+    img.src = dataParam;
 
     images.push({
       img: img,
@@ -4820,16 +4812,18 @@ function processPayload(payload) {
     loadCurrentImage();
 
   } else {
+    // --- HANDLE TEXT PAYLOAD ---
     const outputElement = document.querySelector("#output");
-    if (outputEntity) {
+    if (outputElement) {
+      // If #output is a textarea or input, use .value; otherwise use .textContent or .innerHTML
       if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
-        outputElement.value = payload;
+        outputElement.value = dataParam;
       } else {
-        outputElement.textContent = payload;
+        outputElement.textContent = dataParam;
       }
     }
   }
-} 
+});
 </script>
 </body>
 

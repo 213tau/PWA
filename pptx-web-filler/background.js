@@ -121,6 +121,9 @@ function cleanupWorker(targetTabId) {
     "isSubmitted"
   ]);
 }
+// ==========================================
+// CONTEXT MENU SETUP & CLICK HANDLER
+// ==========================================
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openWithAtauxel",
@@ -132,29 +135,35 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "openWithAtauxel") {
     let payload = "";
-    // ... (keep your blob / selection / srcUrl fetching logic to get `payload`) ...
+
+    if (info.selectionText) {
+      payload = info.selectionText;
+    } else if (info.linkUrl) {
+      payload = info.linkUrl;
+    } else if (info.srcUrl) {
+      // If it's an image (handles regular URLs, Data URLs, and Blob URLs)
+      try {
+        const response = await fetch(info.srcUrl);
+        const blob = await response.blob();
+        
+        // Convert blob into a Base64 Data URL so the new tab can read it
+        payload = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.error("Failed to fetch image source:", error);
+        // Fallback to raw srcUrl if fetch fails (e.g. CORS restrictions)
+        payload = info.srcUrl;
+      }
+    }
+
     if (!payload) return;
 
-    // 1. Open the Vercel page normally (no query string needed!)
-    const targetUrl = "https://atauxel.vercel.app/";
-    const newTab = await chrome.tabs.create({ url: targetUrl, active: true });
-
-    // 2. Wait for the tab to finish loading, then inject the payload directly
-    chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
-      if (tabId === newTab.id && changeInfo.status === "complete") {
-        // Remove listener so it only runs once for this tab
-        chrome.tabs.onUpdated.removeListener(listener);
-
-        // Execute a script inside the Vercel page context to populate the app
-        chrome.scripting.executeScript({
-          target: { tabId: newTab.id },
-          func: (receivedPayload) => {
-            // This runs directly inside atauxel.vercel.app page context!
-            window.handleAtauxelPayload(receivedPayload);
-          },
-          args: [payload]
-        });
-      }
-    });
+    // Open a brand new instance with the payload encoded in the query
+    const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
+    chrome.tabs.create({ url: targetUrl, active: true });
   }
-}); 
+});
