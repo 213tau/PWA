@@ -121,3 +121,35 @@ function cleanupWorker(targetTabId) {
     "isSubmitted"
   ]);
 }
+// ==========================================
+// CONTEXT MENU SETUP & CLICK HANDLER
+// ==========================================
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "openWithAtauxel",
+    title: "Open with Atauxel",
+    contexts: ["selection", "image", "link", "editable"]
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "openWithAtauxel") {
+    // 1. Determine what the user clicked on
+    let payload = "";
+    if (info.selectionText) {
+      payload = info.selectionText;
+    } else if (info.srcUrl) {
+      payload = info.srcUrl;
+    } else if (info.linkUrl) {
+      payload = info.linkUrl;
+    }
+
+    if (!payload) return;
+
+    // 2. Construct a fresh URL instance with the payload encoded as a query parameter
+    const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
+
+    // 3. Always open a brand new tab instance
+    chrome.tabs.create({ url: targetUrl, active: true });
+  }
+});

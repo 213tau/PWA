@@ -93,7 +93,7 @@
         #saveBtn { background: var(--success); display: none; }
         #saveBtn:hover { background: var(--success-hover); }
 
-        //input[type="file"] { display: none; }
+        /* input[type="file"] { display: none; } */
 
       
 
@@ -4783,6 +4783,25 @@ async function searchText() {
 
     URL.revokeObjectURL(url);
 }
+// Run when the PWA loads
+window.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  const sharedData = params.get("data");
+
+  if (sharedData) {
+    const outputElement = document.querySelector("#output");
+    if (outputElement && outputElement.isContentEditable) {
+      // Set text content for contenteditable divs
+      outputElement.textContent = sharedData;
+      
+      // Trigger input event so any framework bindings (React, Vue, Svelte) or listeners catch the change
+      outputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      
+      // Optional status notification
+      window.postMessage({ action: "UI_STATUS", status: "New instance loaded with data!" }, "*");
+    }
+  }
+});
 </script>
 </body>
 
