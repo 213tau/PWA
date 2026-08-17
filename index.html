@@ -4783,24 +4783,24 @@ async function searchText() {
 
     URL.revokeObjectURL(url);
 }
-document.addEventListener("DOMContentLoaded", async () => {
+// Define a global handler that the extension can call post-load
+window.handleAtauxelPayload = function(payload) {
+  processPayload(payload);
+};
+
+// Also keep your DOMContentLoaded listener if someone navigates directly or reloads
+document.addEventListener("DOMContentLoaded", () => {
   const urlParams = new URLSearchParams(window.location.search);
   const dataParam = urlParams.get("data");
-  const dataKey = urlParams.get("key");
-
-  let payload = dataParam;
-
-  // If a storage key was provided instead of raw data, retrieve it
-  if (dataKey && typeof chrome !== "undefined" && chrome.storage) {
-    const result = await chrome.storage.local.get(dataKey);
-    payload = result[dataKey];
-    // Clean up storage after reading
-    await chrome.storage.local.remove(dataKey);
+  if (dataParam) {
+    processPayload(dataParam);
   }
+});
 
+// Shared processor function
+function processPayload(payload) {
   if (!payload) return;
 
-  // --- HANDLE IMAGE PAYLOAD ---
   if (
     payload.startsWith("data:image/") || 
     payload.startsWith("blob:") || 
@@ -4820,9 +4820,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadCurrentImage();
 
   } else {
-    // --- HANDLE TEXT PAYLOAD ---
     const outputElement = document.querySelector("#output");
-    if (outputElement) {
+    if (outputEntity) {
       if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
         outputElement.value = payload;
       } else {
@@ -4830,7 +4829,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
   }
-});
+}
 </script>
 </body>
 
