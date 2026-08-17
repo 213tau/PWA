@@ -121,9 +121,6 @@ function cleanupWorker(targetTabId) {
     "isSubmitted"
   ]);
 }
-// ==========================================
-// CONTEXT MENU SETUP & CLICK HANDLER
-// ==========================================
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openWithAtauxel",
@@ -135,17 +132,72 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "openWithAtauxel") {
     let payload = "";
-    // ... (keep your existing blob/selection/srcUrl fetching logic to get the payload) ...
+
+    if (info.selectionText) {
+      payload = info.selectionText;
+    } else if (info.linkUrl) {
+      payload = info.linkUrl;
+    } else if (info.srcUrl) {
+      // 1. Try handling blob URLs from the active tab context
+      if (info.srcUrl.startsWith("blob:")) {
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: async (blobUrl) => {
+              try {
+                const response = await fetch(blobUrl);
+                const blob = await response.blob();
+                return await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(blob);
+                });
+              } catch (e) {
+                return null;
+              }
+            },
+            args: [info.srcUrl]
+          });
+
+          if (results && results[0] && results[0].result) {
+            payload = results[0].result;
+          }
+        } catch (error) {
+          console.error("Failed to read blob URL from page context:", error);
+        }
+      }
+
+      // 2. Fallback for regular image URLs or failed blobs
+      if (!payload) {
+        try {
+          const response = await fetch(info.srcUrl);
+          const blob = await response.blob();
+          payload = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.error("Failed to fetch image source:", error);
+          payload = info.srcUrl; // Final fallback to raw URL
+        }
+      }
+    }
 
     if (!payload) return;
 
-    // Generate a unique key for this payload
+    // 3. Generate a unique key and store payload safely
     const dataKey = `atauxel_payload_${Date.now()}`;
     
-    // Store large payload safely in extension local storage
-    await chrome.storage.local.set({ [dataKey]: payload });
+    try {
+      await chrome.storage.local.set({ [dataKey]: payload });
+    } catch (storageError) {
+      console.error("Storage write failed:", storageError);
+    }
 
-    // Pass only the lightweight key in the URL query string
+    // 4. Always open the tab using the lightweight key parameter
     const targetUrl = `https://atauxel.vercel.app/?key=${dataKey}`;
     chrome.tabs.create({ url: targetUrl, active: true });
   }
