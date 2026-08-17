@@ -1087,245 +1087,103 @@ function processSvgFile(file) {
 }
 
      document.addEventListener('paste', async (e) => {
-
-        
-
     const clipboardData = e.clipboardData || e.originalEvent.clipboardData;
-
     if (!clipboardData) return;
 
+    const output = document.querySelector("#output");
 
-
-    const items = clipboardData.items;
-
-    const promises = [];
-
-    const output = document.querySelector("#output");    
-
-
-
-    // Only prevent default if the target is #output or a descendant of #output
-
+    // Prevent default only if targeting #output or its descendants
     if (output && (e.target === output || output.contains(e.target))) {
-
         e.preventDefault();
-
-    } else {
-
-        // Allow normal default paste behavior for other elements on the page        
-
     }
 
-
-
-    for (let i = 0; i < items.length; i++) {
-
-        const item = items[i];
-
-
-
-        
-
-        // 1. Handle SVG sent directly as string payload (image/svg+xml)
-
-        if (item.kind === 'string' && item.type === 'image/svg+xml') {
-
-            promises.push(new Promise((resolve) => {
-
-                item.getAsString(async (svgString) => {
-
-                    console.log('Pasted SVG Code:', svgString);
-
-                    
-
-                    if (output) {
-
-                        const pre = document.createElement("pre");
-
-                        pre.textContent = svgString;
-
-                        output.appendChild(pre);
-
-                    }
-
-
-
-                    const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
-
-                    const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
-
-                    
-
-                    try {
-
-                        resolve(await processSvgFile(svgFile));
-
-                    } catch (err) {
-
-                        resolve({ type: 'error', error: err });
-
-                    }
-
-                });
-
-            }));
-
-        } 
-
-        // 2. Handle HTML markup fallbacks (Most common when copying vectors from browsers/apps)
-
-        // 2. Handle HTML markup fallbacks (Most common when copying vectors from browsers/apps)
-
-        else if (item.kind === 'string' && item.type === 'text/html') {
-
-            promises.push(new Promise((resolve) => {
-
-                item.getAsString(async (html) => {
-
-                    const parser = new DOMParser();
-
-                    const doc = parser.parseFromString(html, 'text/html');
-
-                    const svgElement = doc.querySelector('svg');
-
-
-
-                    if (svgElement) {
-
-                        const svgCode = svgElement.outerHTML;
-
-                        console.log('Extracted SVG from HTML:', svgCode);
-
-                        
-
-                        // FIXED: Using svgCode instead of undefined svgString
-
-                        if (output) {
-
-                            const pre = document.createElement("pre");
-
-                            const code = document.createElement("code");
-
-                            code.textContent = svgCode; 
-
-                            pre.appendChild(code);
-
-                            output.appendChild(pre);
-
-                        }
-
-
-
-                        const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
-
-                        const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
-
-                        
-
-                        try {
-
-                            resolve(await processSvgFile(svgFile));
-
-                        } catch (err) {
-
-                            resolve({ type: 'error', error: err });
-
-                        }
-
-                    } else {
-
-                        resolve({ type: 'html', content: html });
-
-                    }
-
-                });
-
-            }));
-
+    // Helper: Promisify item.getAsString()
+    const getAsStringAsync = (item) => new Promise((resolve) => item.getAsString(resolve));
+
+    // Helper: Safely append text/code output
+    const appendOutput = (content, isCode = false) => {
+        if (!output) return;
+        const container = document.createElement(isCode ? "pre" : "div");
+        if (isCode) {
+            const code = document.createElement("code");
+            code.textContent = content;
+            container.appendChild(code);
+        } else {
+            container.textContent = content;
         }
+        output.appendChild(container);
+    };
 
-        // 3. Handle standard files (Dragged/Pasted files)
+    const promises = Array.from(clipboardData.items).map(async (item) => {
+        try {
+            // 1. Handle SVG sent directly as string payload
+            if (item.kind === 'string' && item.type === 'image/svg+xml') {
+                const svgString = await getAsStringAsync(item);
+                console.log('Pasted SVG Code:', svgString);
+                appendOutput(svgString, true);
 
-        else if (item.kind === 'file') {
-
-            const file = item.getAsFile();
-
-            if (!file) continue;
-
-
-
-            if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
-
-                promises.push(processSvgFile(file));
-
-            } else if (file.type === 'application/pdf') {
-
-                if (typeof fileListPdf !== 'undefined') {
-
-                    fileListPdf.push({ file });
-
-                }
-
-                promises.push(processPdf(file, true));
-
-            } else if (file.type.startsWith('image/')) {
-
-                promises.push(processFile(file));
-
+                const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+                const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
+                return await processSvgFile(svgFile);
             }
 
-        } 
+            // 2. Handle HTML markup fallbacks (e.g., copied vectors from browsers)
+            if (item.kind === 'string' && item.type === 'text/html') {
+                const html = await getAsStringAsync(item);
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const svgElement = doc.querySelector('svg');
 
-        // 4. Handle plain text fallback
+                if (svgElement) {
+                    const svgCode = svgElement.outerHTML;
+                    console.log('Extracted SVG from HTML:', svgCode);
+                    appendOutput(svgCode, true);
 
-        else if (item.kind === 'string' && item.type === 'text/plain') {
+                    const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
+                    const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
+                    return await processSvgFile(svgFile);
+                }
+                return { type: 'html', content: html };
+            }
 
-            promises.push(new Promise((resolve) => {
+            // 3. Handle standard files (Dragged/Pasted files)
+            if (item.kind === 'file') {
+                const file = item.getAsFile();
+                if (!file) return null;
 
-                item.getAsString((text) => {
+                if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+                    return await processSvgFile(file);
+                } 
+                if (file.type === 'application/pdf') {
+                    if (typeof fileListPdf !== 'undefined') fileListPdf.push({ file });
+                    return await processPdf(file, true);
+                } 
+                if (file.type.startsWith('image/')) {
+                    return await processFile(file);
+                }
+            }
 
-                    if (output) {
-
-                        const lines = text.split(/\r?\n/);
-
-                        lines.forEach(line => {
-
-                            const div = document.createElement("div");
-
-                            div.textContent = line;
-
-                            output.appendChild(div);
-
-                        });
-
-                    }
-
-                    resolve({ type: 'text', content: text });
-
-                });
-
-            }));
-
+            // 4. Handle plain text fallback
+            if (item.kind === 'string' && item.type === 'text/plain') {
+                const text = await getAsStringAsync(item);
+                if (output) {
+                    text.split(/\r?\n/).forEach(line => appendOutput(line, false));
+                }
+                return { type: 'text', content: text };
+            }
+        } catch (err) {
+            console.error(`Error processing clipboard item (${item.type}):`, err);
+            return { type: 'error', error: err };
         }
-
-        
-
-    }
-
-
+    });
 
     try {
-
         const results = await Promise.all(promises);
-
-        console.log('All clipboard items processed:', results);
-
+        console.log('All clipboard items processed:', results.filter(Boolean));
+    } else (error) {
+        // Syntax safety fallback
     } catch (error) {
-
-        console.error('Error processing clipboard items:', error);
-
+        console.error('Error settling clipboard promises:', error);
     }
-
 }, false);
 
 
