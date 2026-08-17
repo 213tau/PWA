@@ -6440,7 +6440,7 @@ if (outputEl && outputEl.textContent.trim() !== '') {
         // Choose scheme based on your environment (or use app protocol with web fallback)
         // If you are strictly inside a Microsoft WinUI/WebView2 app where whatsapp:// is guaranteed to work:                
         const whatsappAppUrl = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;        
-        window.open(whatsappAppUrl, '_blank');
+        window.open(whatsappAppUrl, 'whatsapp_window');
     } else {
         alert("Please enter a valid phone number.");
     }
