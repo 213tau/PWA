@@ -1905,7 +1905,7 @@ images.forEach(function (e, index) {
 });
       
       document.querySelector("table").style.margin = "0 auto";
-      document.querySelector("table").style.borderSpacing = "45px 15px";
+      document.querySelector("table").style.borderSpacing = "0.4in 0.2in";
       document.querySelector("table").style.pageBreakAfter = "always";
     document.querySelector("#array").style.display = "block";
 
