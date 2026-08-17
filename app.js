@@ -1893,7 +1893,7 @@ async function rotateCurrentImage() {
 
     })
 
-    document.querySelector('#idcard').addEventListener("click", async function () {
+    function idcard() {
       //await generatePortraitPDF();
 
       const tds = document.querySelectorAll("#array table td");
@@ -1907,6 +1907,7 @@ images.forEach(function (e, index) {
       document.querySelector("table").style.margin = "0 auto";
       document.querySelector("table").style.borderSpacing = "45px 15px";
       document.querySelector("table").style.pageBreakAfter = "always";
+    document.querySelector("#array").style.display = "block";
 
       // Ask the user
       const printType = confirm("Click OK for double-sided printing, or Cancel for single-sided printing.");
@@ -1927,7 +1928,7 @@ images.forEach(function (e, index) {
         window.print();
       }
 
-    });
+    }
 
     document.querySelector('#idcardstacked').addEventListener("click", function () {
 
