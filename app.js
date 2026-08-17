@@ -30,7 +30,7 @@
       }
     }
 
-async function uploadAndForwardToEditor(file) {
+function uploadAndForwardToEditor(file) {
     if (!file) return;
 
     // 1. Sync file to your existing #jsfileInput element (used by the editor script)
