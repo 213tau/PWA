@@ -1920,7 +1920,7 @@ images.forEach(function (e, index) {
         clonedNode.style.paddingTop = '0.1in';
 
         // Append the cloned node
-        await document.querySelector("#array").appendChild(clonedNode);
+        document.querySelector("#array").appendChild(clonedNode);
 
         window.print();
       } else {
