@@ -4790,8 +4790,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!dataParam) return;
 
-  // Check if the incoming data is a Base64 data URL (images) or a standard URL
-  if (dataParam.startsWith("data:image/") || dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)$/i)) {
+  // Check if the incoming data is a Base64 data URL, a blob URL, or a standard image URL
+  if (
+    dataParam.startsWith("data:image/") || 
+    dataParam.startsWith("blob:") || 
+    dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
+  ) {
     // --- HANDLE IMAGE PAYLOAD ---
     const img = new Image();
     img.crossOrigin = "anonymous"; 
