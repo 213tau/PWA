@@ -4621,36 +4621,44 @@ images.forEach(function (e, index) {
         });
       }
 
-// Add final slide with #output text made of divs
-const outputEl = document.querySelector('#output');
-if (outputEl && outputEl.textContent.trim() !== '') {
-  const finalSlide = pptx.addSlide();
+      // Add final slide with #output text made of divs
+      const outputEl = document.querySelector('#output');
+      if (outputEl && outputEl.textContent.trim() !== '') {
+        const finalSlide = pptx.addSlide();
 
-  // Collect each child div's text
-  const lines = Array.from(outputEl.children)
-    .map(div => div.innerText.trim())
-    .filter(line => line.length > 0);
+        // Collect each child div's text
+        const lines = Array.from(outputEl.children)
+          .map(div => div.innerText.trim())
+          .filter(line => line.length > 0);
 
-  // Join with \r to preserve line breaks in one text box
-  const formattedText = lines.join('\n');
+        // Join with \r to preserve line breaks in one text box
+        const formattedText = lines.join('\n');
 
-  finalSlide.addText(formattedText, {
-    x: 0.5,
-    y: 0.5,
-    w: slideWidth - 1,
-    h: slideHeight - 1,
-    fontSize: 18,
-    color: '363636',
-    align: 'left',
-    valign: 'top',
-    wrap: true,
-    margin: 0 // Remove text box padding/margin
-  });
-}
+        finalSlide.addText(formattedText, {
+          x: 0.5,
+          y: 0.5,
+          w: slideWidth - 1,
+          h: slideHeight - 1,
+          fontSize: 18,
+          color: '363636',
+          align: 'left',
+          valign: 'top',
+          wrap: true,
+          margin: 0 // Remove text box padding/margin
+        });
+      }
 
       let name = "a4-images-presentation.pptx";
-      const userFilename = document.querySelector('#output div')?.innerText.trim();
-      if (userFilename) name = userFilename + ".pptx";
+      if (outputEl) {
+        const match = outputEl.textContent.match(/\d{5}-\d{7}-\d{1}/);
+        if (match) {
+          name = match[0] + ".pptx";
+        } else {
+          const userFilename = outputEl.querySelector('div')?.innerText.trim();
+          if (userFilename) name = userFilename + ".pptx";
+        }
+      }
+
       await pptx.writeFile(name);
     });
 
