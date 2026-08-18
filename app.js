@@ -1253,37 +1253,41 @@ function processSvgFile(file) {
             }
 
             // 4. Handle plain text fallback (Preserving <div> structures)
-            if (item.kind === 'string' && item.type === 'text/plain') {
-                const text = await getAsStringAsync(item);
-                
-                if (text.includes('\t') || text.includes('\n')) {
-    const rows = text.split(/\r?\n/).map(line => line.split('\t'));
-    console.log('Extracted TSV / Spreadsheet Grid:', rows);
-
+            // 4. Handle plain text fallback (Preserving <div> and HTML structures)
+if (item.kind === 'string' && item.type === 'text/plain') {
+    const text = await getAsStringAsync(item);
+    
     if (output) {
-        const table = document.createElement("table");
+        // Check for HTML/div structures FIRST before treating as TSV/grid
+        if (text.includes('<div') || text.includes('</div>') || text.trim().startsWith('<')) {
+            const divContainer = document.createElement("div");
+            divContainer.innerHTML = text;
+            output.appendChild(divContainer);
+            return { type: 'html', content: text };
+        } 
+        
+        // Then handle TSV / Spreadsheet grids if tabs or structured lines are found
+        else if (text.includes('\t') || text.includes('\n')) {
+            const rows = text.split(/\r?\n/).map(line => line.split('\t'));
+            console.log('Extracted TSV / Spreadsheet Grid:', rows);
 
-        table.innerHTML = rows.map(row => 
-            `<tr>${row.map(cell => `<td style="border: 1px solid #ccc;">${cell}</td>`).join('')}</tr>`
-        ).join('');
+            const table = document.createElement("table");
+            table.innerHTML = rows.map(row => 
+                `<tr>${row.map(cell => `<td style="border: 1px solid #ccc;">${cell}</td>`).join('')}</tr>`
+            ).join('');
 
-        output.appendChild(table);
+            output.appendChild(table);
+            return { type: 'table', format: 'tsv', content: rows };
+        } 
+        
+        // Default text fallback
+        else {
+            text.split(/\r?\n/).forEach(line => appendOutput(line, false));
+        }
     }
     
-    return { type: 'table', format: 'tsv', content: rows };
+    return { type: 'text', content: text };
 }
-
-                if (output) {
-                    if (text.includes('<div') || text.includes('</div>')) {
-                        const divContainer = document.createElement("div");
-                        divContainer.innerHTML = text;
-                        output.appendChild(divContainer);
-                    } else {
-                        text.split(/\r?\n/).forEach(line => appendOutput(line, false));
-                    }
-                }
-                return { type: 'text', content: text };
-            }
         } catch (err) {
             console.error(`Error processing clipboard item (${item.type}):`, err);
             return { type: 'error', error: err };
