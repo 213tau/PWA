@@ -1252,13 +1252,12 @@ function processSvgFile(file) {
                 }
             }
 
-            // 4. Handle plain text fallback (Preserving <div> structures)
-            // 4. Handle plain text fallback (Preserving <div> and HTML structures)
+// 4. Handle plain text fallback (Preserving HTML/<div> structures)
 if (item.kind === 'string' && item.type === 'text/plain') {
     const text = await getAsStringAsync(item);
     
     if (output) {
-        // Check for HTML/div structures FIRST before treating as TSV/grid
+        // 1. Check for HTML / div structures first
         if (text.includes('<div') || text.includes('</div>') || text.trim().startsWith('<')) {
             const divContainer = document.createElement("div");
             divContainer.innerHTML = text;
@@ -1266,8 +1265,8 @@ if (item.kind === 'string' && item.type === 'text/plain') {
             return { type: 'html', content: text };
         } 
         
-        // Then handle TSV / Spreadsheet grids if tabs or structured lines are found
-        else if (text.includes('\t') || text.includes('\n')) {
+        // 2. Treat as a spreadsheet table ONLY if it contains actual tabs (\t)
+        else if (text.includes('\t')) {
             const rows = text.split(/\r?\n/).map(line => line.split('\t'));
             console.log('Extracted TSV / Spreadsheet Grid:', rows);
 
@@ -1280,7 +1279,7 @@ if (item.kind === 'string' && item.type === 'text/plain') {
             return { type: 'table', format: 'tsv', content: rows };
         } 
         
-        // Default text fallback
+        // 3. Standard text fallback for everything else (including plain text with \n)
         else {
             text.split(/\r?\n/).forEach(line => appendOutput(line, false));
         }
