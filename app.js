@@ -1264,7 +1264,7 @@ function processSvgFile(file) {
         const table = document.createElement("table");
 
         table.innerHTML = rows.map(row => 
-            `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
+            `<tr>${row.map(cell => `<td style="border: 1px solid #ccc;">${cell}</td>`).join('')}</tr>`
         ).join('');
 
         output.appendChild(table);
