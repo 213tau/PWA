@@ -1257,7 +1257,7 @@ if (item.kind === 'string' && item.type === 'text/plain') {
     const text = await getAsStringAsync(item);
     
     if (output) {
-        // 1. Check for HTML / div structures first
+        // 1. Check for HTML structures (rendered as standard HTML, no tables enforced)
         if (text.includes('<div') || text.includes('</div>') || text.trim().startsWith('<')) {
             const divContainer = document.createElement("div");
             divContainer.innerHTML = text;
@@ -1265,21 +1265,7 @@ if (item.kind === 'string' && item.type === 'text/plain') {
             return { type: 'html', content: text };
         } 
         
-        // 2. Treat as a spreadsheet table ONLY if it contains actual tabs (\t)
-        else if (text.includes('\t')) {
-            const rows = text.split(/\r?\n/).map(line => line.split('\t'));
-            console.log('Extracted TSV / Spreadsheet Grid:', rows);
-
-            const table = document.createElement("table");
-            table.innerHTML = rows.map(row => 
-                `<tr>${row.map(cell => `<td style="border: 1px solid #ccc;">${cell}</td>`).join('')}</tr>`
-            ).join('');
-
-            output.appendChild(table);
-            return { type: 'table', format: 'tsv', content: rows };
-        } 
-        
-        // 3. Standard text fallback for everything else (including plain text with \n)
+        // 2. Fallback for everything else (plain text / newlines)
         else {
             text.split(/\r?\n/).forEach(line => appendOutput(line, false));
         }
