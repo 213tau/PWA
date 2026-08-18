@@ -1112,16 +1112,16 @@ function processSvgFile(file) {
         output.appendChild(container);
     };
 
-    // Helper: Render HTML content with a toggle button to switch between Styled View and Raw Source Code View
-    const renderHtmlWithToggle = (htmlContent) => {
+    // Helper: Render HTML content with a toggle button, placing the wrapper OUTSIDE or wrapping #output if needed, 
+    // or creating a distinct standalone container placed right before/after #output.
+    const renderHtmlWithExternalWrapper = (htmlContent) => {
         if (!output) return;
 
-        // Container wrapper for the pasted block and its toolbar
+        // Container wrapper created outside/around the interaction flow
         const wrapper = document.createElement("div");
         wrapper.className = "pasted-html-container";
         wrapper.style.cssText = "margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 4px;";
 
-        // Toolbar for the toggle button
         const toolbar = document.createElement("div");
         toolbar.style.cssText = "margin-bottom: 8px; text-align: right;";
         
@@ -1130,25 +1130,23 @@ function processSvgFile(file) {
         toggleBtn.type = "button";
         toggleBtn.className = "toggle-html-view-btn";
 
-        // Content container
         const contentBox = document.createElement("div");
         contentBox.className = "html-content-box";
         
-        // Initial state: Rendered Styled HTML
         let isRaw = false;
         contentBox.innerHTML = htmlContent;
 
         toggleBtn.onclick = () => {
             isRaw = !isRaw;
             if (isRaw) {
-                contentBox.textContent = htmlContent; // switch to raw text/code view
+                contentBox.textContent = htmlContent;
                 contentBox.style.whiteSpace = "pre-wrap";
                 contentBox.style.fontFamily = "monospace";
                 contentBox.style.background = "#f4f4f4";
                 contentBox.style.padding = "8px";
                 toggleBtn.textContent = "View Styled HTML";
             } else {
-                contentBox.innerHTML = htmlContent; // switch back to styled HTML view
+                contentBox.innerHTML = htmlContent;
                 contentBox.style.whiteSpace = "";
                 contentBox.style.fontFamily = "";
                 contentBox.style.background = "";
@@ -1160,7 +1158,13 @@ function processSvgFile(file) {
         toolbar.appendChild(toggleBtn);
         wrapper.appendChild(toolbar);
         wrapper.appendChild(contentBox);
-        output.appendChild(wrapper);
+
+        // Place wrapper outside of #output (e.g., right before or after it in the DOM)
+        if (output.parentNode) {
+            output.parentNode.insertBefore(wrapper, output);
+        } else {
+            document.body.appendChild(wrapper);
+        }
     };
 
     const promises = Array.from(clipboardData.items).map(async (item) => {
@@ -1193,7 +1197,7 @@ function processSvgFile(file) {
                     return await processSvgFile(svgFile);
                 }
 
-                // Check for Tables (Excel, Sheets, Web HTML tables)
+                // Check for Tables
                 const tableElement = doc.querySelector('table');
                 if (tableElement) {
                     console.log('Extracted Table from HTML:', tableElement);
@@ -1208,13 +1212,13 @@ function processSvgFile(file) {
                     return { type: 'table', format: 'html', content: tableData };
                 }
 
-                // General HTML fallback: Render styled HTML with a dedicated toggle button option
+                // General HTML fallback: Render using external wrapper
                 console.log('Pasted Rich HTML with Styles:', html);
-                renderHtmlWithToggle(html);
+                renderHtmlWithExternalWrapper(html);
                 return { type: 'html', content: html };
             }
 
-            // 3. Handle standard files (Dragged/Pasted files)
+            // 3. Handle standard files
             if (item.kind === 'file') {
                 const file = item.getAsFile();
                 if (!file) return null;
@@ -1231,7 +1235,7 @@ function processSvgFile(file) {
                 }
             }
 
-            // 4. Handle plain text fallback (Includes tab-separated Excel/Sheets text)
+            // 4. Handle plain text fallback (Preserving <div> structures if embedded or parsed)
             if (item.kind === 'string' && item.type === 'text/plain') {
                 const text = await getAsStringAsync(item);
                 
@@ -1256,7 +1260,14 @@ function processSvgFile(file) {
                 }
 
                 if (output) {
-                    text.split(/\r?\n/).forEach(line => appendOutput(line, false));
+                    // Check if plain text contains HTML tags/divs or treat linebreaks safely without losing block semantics
+                    if (text.includes('<div') || text.includes('</div>')) {
+                        const divContainer = document.createElement("div");
+                        divContainer.innerHTML = text;
+                        output.appendChild(divContainer);
+                    } else {
+                        text.split(/\r?\n/).forEach(line => appendOutput(line, false));
+                    }
                 }
                 return { type: 'text', content: text };
             }
