@@ -133,24 +133,46 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 2. Handle GET requests (Network-first with dynamic cache update & offline fallback)
-  if (event.request.method === "GET") {
+  // 2. Handle GET requests (Cache-first for navigation, network-first for others)
+if (event.request.method === "GET") {
+  const url = new URL(event.request.url);
+
+  // If it's a navigation request (like our share redirect /?share=true), serve index.html directly from cache!
+  if (event.request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html") {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          // Online: update cache with a clone of the response
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
-          return response;
-        })
-        .catch(() => {
-          // Offline: serve cached file or fall back to index.html
-          return caches.match(event.request).then((cachedRes) => {
-            if (cachedRes) return cachedRes;
-            return caches.match("/index.html");
-          });
-        })
+      caches.match("/index.html").then((cachedRes) => {
+        if (cachedRes) {
+          // Optionally fetch in background to update cache (stale-while-revalidate)
+          fetch(event.request).then((networkRes) => {
+            if (networkRes && networkRes.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", networkRes));
+            }
+          }).catch(() => {}); // Ignore network errors silently
+          
+          return cachedRes;
+        }
+        // Fallback to network if cache is empty
+        return fetch(event.request);
+      })
     );
+    return;
   }
+
+  // Standard network-first for other static assets/scripts
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone);
+        });
+        return response;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cachedRes) => {
+          return cachedRes || caches.match("/index.html");
+        });
+      })
+  );
+}
 });
