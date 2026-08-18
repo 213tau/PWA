@@ -1256,25 +1256,39 @@ function processSvgFile(file) {
             if (item.kind === 'string' && item.type === 'text/plain') {
                 const text = await getAsStringAsync(item);
                 
-                if (text.includes('\t')) {
-                    const rows = text.split(/\r?\n/).map(line => line.split('\t'));
-                    console.log('Extracted TSV / Spreadsheet Grid:', rows);
+                if (text.includes('\t') || text.includes('\n')) {
+    const rows = text.split(/\r?\n/).map(line => line.split('\t'));
+    console.log('Extracted TSV / Spreadsheet Grid:', rows);
 
-                    if (output) {
-                        const table = document.createElement("table");
-                        rows.forEach(rowCells => {
-                            const tr = document.createElement("tr");
-                            rowCells.forEach(cellText => {
-                                const td = document.createElement("td");
-                                td.textContent = cellText;
-                                tr.appendChild(td);
-                            });
-                            table.appendChild(tr);
-                        });
-                        output.appendChild(table);
-                    }
-                    return { type: 'table', format: 'tsv', content: rows };
-                }
+    if (output) {
+        const table = document.createElement("table");
+        
+        // Apply inline styles for borders and layout
+        table.style.width = "100%";
+        table.style.borderCollapse = "collapse";
+        table.style.marginTop = "10px";
+        table.style.marginBottom = "10px";
+
+        rows.forEach((rowCells, rowIndex) => {
+            const tr = document.createElement("tr");
+            rowCells.forEach(cellText => {
+                const td = document.createElement("td");
+                td.textContent = cellText;
+                
+                // Style individual cells with borders and padding
+                td.style.border = "1px solid #ccc";
+                td.style.padding = "8px 12px";
+                td.style.textAlign = "left";
+                
+                tr.appendChild(td);
+            });
+            table.appendChild(tr);
+        });
+        
+        output.appendChild(table);
+    }
+    return { type: 'table', format: 'tsv', content: rows };
+}
 
                 if (output) {
                     if (text.includes('<div') || text.includes('</div>')) {
