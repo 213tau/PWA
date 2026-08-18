@@ -1112,58 +1112,75 @@ function processSvgFile(file) {
         output.appendChild(container);
     };
 
-    // Helper: Render HTML content with a toggle button, placing the wrapper OUTSIDE or wrapping #output if needed, 
-    // or creating a distinct standalone container placed right before/after #output.
-    const renderHtmlWithExternalWrapper = (htmlContent) => {
+    // Helper: Render single consolidated HTML content with a toggle button, placed below #output
+    const renderUnifiedHtmlBelowOutput = (htmlContent) => {
         if (!output) return;
 
-        // Container wrapper created outside/around the interaction flow
-        const wrapper = document.createElement("div");
-        wrapper.className = "pasted-html-container";
-        wrapper.style.cssText = "margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 4px;";
+        // Check if a container already exists to ensure only one is created
+        let wrapper = document.querySelector(".pasted-html-container");
+        let contentBox;
+        let toggleBtn;
 
-        const toolbar = document.createElement("div");
-        toolbar.style.cssText = "margin-bottom: 8px; text-align: right;";
-        
-        const toggleBtn = document.createElement("button");
-        toggleBtn.textContent = "View Raw HTML Source";
-        toggleBtn.type = "button";
-        toggleBtn.className = "toggle-html-view-btn";
+        if (!wrapper) {
+            wrapper = document.createElement("div");
+            wrapper.className = "pasted-html-container";
+            wrapper.style.cssText = "margin-top: 15px; margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 4px;";
 
-        const contentBox = document.createElement("div");
-        contentBox.className = "html-content-box";
-        
-        let isRaw = false;
-        contentBox.innerHTML = htmlContent;
+            const toolbar = document.createElement("div");
+            toolbar.style.cssText = "margin-bottom: 8px; text-align: right;";
+            
+            toggleBtn = document.createElement("button");
+            toggleBtn.textContent = "View Raw HTML Source";
+            toggleBtn.type = "button";
+            toggleBtn.className = "toggle-html-view-btn";
 
-        toggleBtn.onclick = () => {
-            isRaw = !isRaw;
-            if (isRaw) {
-                contentBox.textContent = htmlContent;
-                contentBox.style.whiteSpace = "pre-wrap";
-                contentBox.style.fontFamily = "monospace";
-                contentBox.style.background = "#f4f4f4";
-                contentBox.style.padding = "8px";
-                toggleBtn.textContent = "View Styled HTML";
+            contentBox = document.createElement("div");
+            contentBox.className = "html-content-box";
+            
+            let isRaw = false;
+            contentBox.innerHTML = htmlContent;
+
+            toggleBtn.onclick = () => {
+                isRaw = !isRaw;
+                if (isRaw) {
+                    contentBox.textContent = contentBox.dataset.raw || htmlContent;
+                    contentBox.style.whiteSpace = "pre-wrap";
+                    contentBox.style.fontFamily = "monospace";
+                    contentBox.style.background = "#f4f4f4";
+                    contentBox.style.padding = "8px";
+                    toggleBtn.textContent = "View Styled HTML";
+                } else {
+                    contentBox.innerHTML = contentBox.dataset.html || htmlContent;
+                    contentBox.style.whiteSpace = "";
+                    contentBox.style.fontFamily = "";
+                    contentBox.style.background = "";
+                    contentBox.style.padding = "";
+                    toggleBtn.textContent = "View Raw HTML Source";
+                }
+            };
+
+            contentBox.dataset.html = htmlContent;
+            contentBox.dataset.raw = htmlContent;
+
+            toolbar.appendChild(toggleBtn);
+            wrapper.appendChild(toolbar);
+            wrapper.appendChild(contentBox);
+
+            // Insert wrapper right AFTER #output
+            if (output.nextSibling) {
+                output.parentNode.insertBefore(wrapper, output.nextSibling);
             } else {
-                contentBox.innerHTML = htmlContent;
-                contentBox.style.whiteSpace = "";
-                contentBox.style.fontFamily = "";
-                contentBox.style.background = "";
-                contentBox.style.padding = "";
-                toggleBtn.textContent = "View Raw HTML Source";
+                output.parentNode.appendChild(wrapper);
             }
-        };
-
-        toolbar.appendChild(toggleBtn);
-        wrapper.appendChild(toolbar);
-        wrapper.appendChild(contentBox);
-
-        // Place wrapper outside of #output (e.g., right before or after it in the DOM)
-        if (output.parentNode) {
-            output.parentNode.insertBefore(wrapper, output);
         } else {
-            document.body.appendChild(wrapper);
+            // If wrapper already exists, append or combine content cleanly
+            contentBox = wrapper.querySelector(".html-content-box");
+            if (contentBox) {
+                const combinedHtml = (contentBox.dataset.html || "") + "<br>" + htmlContent;
+                contentBox.dataset.html = combinedHtml;
+                contentBox.dataset.raw = combinedHtml;
+                contentBox.innerHTML = combinedHtml;
+            }
         }
     };
 
@@ -1212,9 +1229,9 @@ function processSvgFile(file) {
                     return { type: 'table', format: 'html', content: tableData };
                 }
 
-                // General HTML fallback: Render using external wrapper
+                // General HTML fallback: Render unified HTML below output
                 console.log('Pasted Rich HTML with Styles:', html);
-                renderHtmlWithExternalWrapper(html);
+                renderUnifiedHtmlBelowOutput(html);
                 return { type: 'html', content: html };
             }
 
@@ -1235,7 +1252,7 @@ function processSvgFile(file) {
                 }
             }
 
-            // 4. Handle plain text fallback (Preserving <div> structures if embedded or parsed)
+            // 4. Handle plain text fallback (Preserving <div> structures)
             if (item.kind === 'string' && item.type === 'text/plain') {
                 const text = await getAsStringAsync(item);
                 
@@ -1260,7 +1277,6 @@ function processSvgFile(file) {
                 }
 
                 if (output) {
-                    // Check if plain text contains HTML tags/divs or treat linebreaks safely without losing block semantics
                     if (text.includes('<div') || text.includes('</div>')) {
                         const divContainer = document.createElement("div");
                         divContainer.innerHTML = text;
