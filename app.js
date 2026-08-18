@@ -9091,15 +9091,32 @@ organize.addEventListener('click', function() {
   organizeDataDiv.innerHTML = '';
 
   images.forEach(item => {
-    // If you want to display the actual <img> element stored in the object:
+    // Wrapper container for the image/canvas and its size label
+    const container = document.createElement('div');
+    container.style.display = 'inline-block';
+    container.style.textAlign = 'center';
+    container.style.margin = '5px';
+
+    let sizeInKB = 0;
+
+    // 1. If it's an HTMLElement (like an <img> tag)
     if (item.img instanceof HTMLElement) {
-      const clone = item.img.cloneNode(true);
-      clone.style.display = 'block';
-      clone.style.margin = '5px';
+      const clone = item.img.cloneNode(true);      
       clone.style.maxWidth = '150px';
-      organizeDataDiv.appendChild(clone);
+      clone.style.display = 'block';
+      container.appendChild(clone);
+
+      // Check if a direct Blob or File object is attached to the item
+      if (item.blob instanceof Blob || item.file instanceof Blob) {
+        const blobObj = item.blob || item.file;
+        sizeInKB = blobObj.size / 1024;
+      } 
+      // Otherwise, try to estimate from base64 data URLs
+      else if (item.img.src) {
+        sizeInKB = getSourceSizeInKB(item.img.src);
+      }
     } 
-    // Alternatively, if you want to render from imageData:
+    // 2. Alternatively, if it's rendered from imageData
     else if (item.imageData instanceof ImageData) {
       const canvas = document.createElement('canvas');
       canvas.width = item.imageData.width;
@@ -9107,12 +9124,40 @@ organize.addEventListener('click', function() {
       const ctx = canvas.getContext('2d');
       ctx.putImageData(item.imageData, 0, 0);
       
-      canvas.style.margin = '5px';
       canvas.style.maxWidth = '150px';
-      organizeDataDiv.appendChild(canvas);
+      canvas.style.display = 'block';
+      container.appendChild(canvas);
+
+      // ImageData size = width * height * 4 bytes (RGBA)
+      const bytes = item.imageData.data.length;
+      sizeInKB = bytes / 1024;
     }
+
+    // Create and append the size label below
+    const sizeLabel = document.createElement('div');
+    sizeLabel.style.fontSize = '12px';
+    sizeLabel.style.color = '#555';
+    sizeLabel.style.marginTop = '4px';
+    sizeLabel.textContent = `${sizeInKB.toFixed(1)} KB`;
+    container.appendChild(sizeLabel);
+
+    organizeDataDiv.appendChild(container);
   });
 });
+
+// Helper function to estimate size of base64 data URLs
+function getSourceSizeInKB(src) {
+  if (src.startsWith('data:')) {
+    const base64Marker = ';base64,';
+    const base64Index = src.indexOf(base64Marker);
+    if (base64Index !== -1) {
+      const base64Data = src.substring(base64Index + base64Marker.length);
+      const bytes = (base64Data.length * 3) / 4;
+      return bytes / 1024;
+    }
+  }
+  return 0; // Fallback if size cannot be determined synchronously
+}
 
 function googlesearch(){
 const query = document.querySelector("#output").innerText;
