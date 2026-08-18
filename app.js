@@ -9087,11 +9087,10 @@ document.querySelector("#output").innerHTML = localStorage.getItem("tau");
 const organize = document.getElementById('organize');
 const organizeDataDiv = document.getElementById('organizeData');
 
-organize.addEventListener('click', function() {
+organize.addEventListener('click', async function() {
   organizeDataDiv.innerHTML = '';
 
-  images.forEach(item => {
-    // Wrapper container for the image/canvas and its size label
+  for (const item of images) {
     const container = document.createElement('div');
     container.style.display = 'inline-block';
     container.style.textAlign = 'center';
@@ -9099,24 +9098,31 @@ organize.addEventListener('click', function() {
 
     let sizeInKB = 0;
 
-    // 1. If it's an HTMLElement (like an <img> tag)
     if (item.img instanceof HTMLElement) {
       const clone = item.img.cloneNode(true);      
       clone.style.maxWidth = '150px';
       clone.style.display = 'block';
       container.appendChild(clone);
 
-      // Check if a direct Blob or File object is attached to the item
+      // 1. Check direct Blob/File property
       if (item.blob instanceof Blob || item.file instanceof Blob) {
-        const blobObj = item.blob || item.file;
-        sizeInKB = blobObj.size / 1024;
+        sizeInKB = (item.blob || item.file).size / 1024;
       } 
-      // Otherwise, try to estimate from base64 data URLs
+      // 2. Check if src is a blob: URL and fetch its size
+      else if (item.img.src && item.img.src.startsWith('blob:')) {
+        try {
+          const response = await fetch(item.img.src);
+          const blob = await response.blob();
+          sizeInKB = blob.size / 1024;
+        } catch (e) {
+          sizeInKB = 0;
+        }
+      }
+      // 3. Check Base64 data URLs
       else if (item.img.src) {
         sizeInKB = getSourceSizeInKB(item.img.src);
       }
     } 
-    // 2. Alternatively, if it's rendered from imageData
     else if (item.imageData instanceof ImageData) {
       const canvas = document.createElement('canvas');
       canvas.width = item.imageData.width;
@@ -9128,12 +9134,9 @@ organize.addEventListener('click', function() {
       canvas.style.display = 'block';
       container.appendChild(canvas);
 
-      // ImageData size = width * height * 4 bytes (RGBA)
-      const bytes = item.imageData.data.length;
-      sizeInKB = bytes / 1024;
+      sizeInKB = item.imageData.data.length / 1024;
     }
 
-    // Create and append the size label below
     const sizeLabel = document.createElement('div');
     sizeLabel.style.fontSize = '12px';
     sizeLabel.style.color = '#555';
@@ -9142,8 +9145,19 @@ organize.addEventListener('click', function() {
     container.appendChild(sizeLabel);
 
     organizeDataDiv.appendChild(container);
-  });
+  }
 });
+
+function getSourceSizeInKB(src) {
+  if (src.startsWith('data:')) {
+    const base64Marker = ';base64,';
+    const base64Index = src.indexOf(base64Marker);
+    if (base64Index !== -1) {
+      return ((src.substring(base64Index + base64Marker.length).length * 3) / 4) / 1024;
+    }
+  }
+  return 0;
+}
 
 // Helper function to estimate size of base64 data URLs
 function getSourceSizeInKB(src) {
