@@ -1092,11 +1092,6 @@ function processSvgFile(file) {
 
     const output = document.querySelector("#output");
 
-    // Prevent default only if targeting #output or its descendants
-    //if (output && (e.target === output || output.contains(e.target))) {
-        //e.preventDefault();
-    //}
-
     const getAsStringAsync = (item) => new Promise((resolve) => item.getAsString(resolve));
 
     const appendOutput = (content, isCode = false) => {
@@ -1116,7 +1111,6 @@ function processSvgFile(file) {
     const renderUnifiedHtmlBelowOutput = (htmlContent) => {
         if (!output) return;
 
-        // Check if a container already exists to ensure only one is created
         let wrapper = document.querySelector(".pasted-html-container");
         let contentBox;
         let toggleBtn;
@@ -1166,14 +1160,12 @@ function processSvgFile(file) {
             wrapper.appendChild(toolbar);
             wrapper.appendChild(contentBox);
 
-            // Insert wrapper right AFTER #output
             if (output.nextSibling) {
                 output.parentNode.insertBefore(wrapper, output.nextSibling);
             } else {
                 output.parentNode.appendChild(wrapper);
             }
         } else {
-            // If wrapper already exists, append or combine content cleanly
             contentBox = wrapper.querySelector(".html-content-box");
             if (contentBox) {
                 const combinedHtml = (contentBox.dataset.html || "") + "<br>" + htmlContent;
@@ -1184,13 +1176,83 @@ function processSvgFile(file) {
         }
     };
 
+    // Helper: Render single consolidated SVG content with a toggle button, placed below #output
+    const renderUnifiedSvgBelowOutput = (svgContent) => {
+        if (!output) return;
+
+        let wrapper = document.querySelector(".pasted-svg-container");
+        let contentBox;
+        let toggleBtn;
+
+        if (!wrapper) {
+            wrapper = document.createElement("div");
+            wrapper.className = "pasted-svg-container";
+            wrapper.style.cssText = "margin-top: 15px; margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 4px;";
+
+            const toolbar = document.createElement("div");
+            toolbar.style.cssText = "margin-bottom: 8px; text-align: right;";
+            
+            toggleBtn = document.createElement("button");
+            toggleBtn.textContent = "View Raw SVG Source";
+            toggleBtn.type = "button";
+            toggleBtn.className = "toggle-svg-view-btn";
+
+            contentBox = document.createElement("div");
+            contentBox.className = "svg-content-box";
+            
+            let isRaw = false;
+            contentBox.innerHTML = svgContent;
+
+            toggleBtn.onclick = () => {
+                isRaw = !isRaw;
+                if (isRaw) {
+                    contentBox.textContent = contentBox.dataset.raw || svgContent;
+                    contentBox.style.whiteSpace = "pre-wrap";
+                    contentBox.style.fontFamily = "monospace";
+                    contentBox.style.background = "#f4f4f4";
+                    contentBox.style.padding = "8px";
+                    toggleBtn.textContent = "View Rendered SVG";
+                } else {
+                    contentBox.innerHTML = contentBox.dataset.svg || svgContent;
+                    contentBox.style.whiteSpace = "";
+                    contentBox.style.fontFamily = "";
+                    contentBox.style.background = "";
+                    contentBox.style.padding = "";
+                    toggleBtn.textContent = "View Raw SVG Source";
+                }
+            };
+
+            contentBox.dataset.svg = svgContent;
+            contentBox.dataset.raw = svgContent;
+
+            toolbar.appendChild(toggleBtn);
+            wrapper.appendChild(toolbar);
+            wrapper.appendChild(contentBox);
+
+            if (output.nextSibling) {
+                output.parentNode.insertBefore(wrapper, output.nextSibling);
+            } else {
+                output.parentNode.appendChild(wrapper);
+            }
+        } else {
+            contentBox = wrapper.querySelector(".svg-content-box");
+            if (contentBox) {
+                const combinedSvg = (contentBox.dataset.svg || "") + "<br>" + svgContent;
+                contentBox.dataset.svg = combinedSvg;
+                contentBox.dataset.raw = combinedSvg;
+                contentBox.innerHTML = combinedSvg;
+            }
+        }
+    };
+
     const promises = Array.from(clipboardData.items).map(async (item) => {
         try {
             // 1. Handle SVG sent directly as string payload
             if (item.kind === 'string' && item.type === 'image/svg+xml') {
                 const svgString = await getAsStringAsync(item);
                 console.log('Pasted SVG Code:', svgString);
-                appendOutput(svgString, true);
+                
+                renderUnifiedSvgBelowOutput(svgString);
 
                 const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
                 const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
@@ -1207,7 +1269,8 @@ function processSvgFile(file) {
                 if (svgElement) {
                     const svgCode = svgElement.outerHTML;
                     console.log('Extracted SVG from HTML:', svgCode);
-                    appendOutput(svgCode, true);
+                    
+                    renderUnifiedSvgBelowOutput(svgCode);
 
                     const svgBlob = new Blob([svgCode], { type: 'image/svg+xml' });
                     const svgFile = new File([svgBlob], "pasted-shape.svg", { type: 'image/svg+xml' });
@@ -1229,7 +1292,7 @@ function processSvgFile(file) {
                     return { type: 'table', format: 'html', content: tableData };
                 }
 
-                // General HTML fallback: Render unified HTML below output
+                // General HTML fallback
                 console.log('Pasted Rich HTML with Styles:', html);
                 renderUnifiedHtmlBelowOutput(html);
                 return { type: 'html', content: html };
@@ -1252,27 +1315,23 @@ function processSvgFile(file) {
                 }
             }
 
-// 4. Handle plain text fallback (Preserving HTML/<div> structures)
-if (item.kind === 'string' && item.type === 'text/plain') {
-    const text = await getAsStringAsync(item);
-    
-    if (output) {
-        // 1. Check for HTML structures (rendered as standard HTML, no tables enforced)
-        if (text.includes('<div') || text.includes('</div>') || text.trim().startsWith('<')) {
-            const divContainer = document.createElement("div");
-            divContainer.innerHTML = text;
-            output.appendChild(divContainer);
-            return { type: 'html', content: text };
-        } 
-        
-        // 2. Fallback for everything else (plain text / newlines)
-        else {
-            text.split(/\r?\n/).forEach(line => appendOutput(line, false));
-        }
-    }
-    
-    return { type: 'text', content: text };
-}
+            // 4. Handle plain text fallback
+            if (item.kind === 'string' && item.type === 'text/plain') {
+                const text = await getAsStringAsync(item);
+                
+                if (output) {
+                    if (text.includes('<div') || text.includes('</div>') || text.trim().startsWith('<')) {
+                        const divContainer = document.createElement("div");
+                        divContainer.innerHTML = text;
+                        output.appendChild(divContainer);
+                        return { type: 'html', content: text };
+                    } else {
+                        text.split(/\r?\n/).forEach(line => appendOutput(line, false));
+                    }
+                }
+                
+                return { type: 'text', content: text };
+            }
         } catch (err) {
             console.error(`Error processing clipboard item (${item.type}):`, err);
             return { type: 'error', error: err };
