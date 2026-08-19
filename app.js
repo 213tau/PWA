@@ -1093,9 +1093,9 @@ function processSvgFile(file) {
     const output = document.querySelector("#output");
 
     // Prevent default only if targeting #output or its descendants
-    if (output && (e.target === output || output.contains(e.target))) {
-        e.preventDefault();
-    }
+    //if (output && (e.target === output || output.contains(e.target))) {
+        //e.preventDefault();
+    //}
 
     const getAsStringAsync = (item) => new Promise((resolve) => item.getAsString(resolve));
 
