@@ -179,6 +179,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         // Fallback to raw srcUrl if fetch fails (e.g. CORS restrictions)
         payload = info.srcUrl;
       }
+    } else if (info.pageUrl) {
+      // Handles the 'page' context to get the current page URL
+      payload = info.pageUrl;
     }
 
     if (!payload) return;
