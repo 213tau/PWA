@@ -7958,7 +7958,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
     }
 
     function sixpics() {
-    document.querySelector("array").style.display = "block";
+    document.querySelector("#array").style.display = "block";
       const img = document.querySelector("img");
       img.style.height = "45mm";
       img.style.width = "35mm";
