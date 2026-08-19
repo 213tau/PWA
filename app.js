@@ -7672,14 +7672,13 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
   });
   if (clickedTab) clickedTab.classList.add('active');
 
-  // 3. Control Canvas visibility and placement
+  // 3. Toggle Canvas visibility based on the active tab
   const canvas = document.getElementById('canvas');
   if (canvas) {
     if (tabId === 'textEditing' || tabId === 'imageProcessing') {
-      canvas.style.display = 'block'; // Make sure it's visible
-      targetTab.appendChild(canvas);   // Move canvas inside the active tab
+      canvas.style.display = 'block'; // Show canvas
     } else {
-      canvas.style.display = 'none';  // Hide it on other tabs
+      canvas.style.display = 'none';  // Hide canvas on other tabs
     }
   }
 }
