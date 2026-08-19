@@ -7987,7 +7987,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       document.querySelector(".tab-content.active").style.display = "none";
       window.print();
       document.querySelector(".tab-content.active").style = "";
-    });
+    }
     document.querySelector("#fivepics").addEventListener("click", function () {
   const img = document.querySelector("img");
   if (!img) return;
@@ -8018,7 +8018,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
   table.style.marginTop = "0.05in";
 
   document.querySelector(".tab-content.active").style.display = "none";
-}
+});
 
     document.querySelector("#eightpics").addEventListener("click", async function () {
       await rotateCurrentImage();
