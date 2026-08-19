@@ -7659,13 +7659,30 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
 });
 
     function showTab(tabId) {
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
+  // 1. Handle tab content visibility
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const targetTab = document.getElementById(tabId);
+  if (targetTab) targetTab.classList.add('active');
 
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      const clickedTab = Array.from(document.querySelectorAll('.tab')).find(tab => tab.onclick.toString().includes(tabId));
-      if (clickedTab) clickedTab.classList.add('active');
+  // 2. Handle active state on tab buttons
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const clickedTab = Array.from(document.querySelectorAll('.tab')).find(tab => {
+    const onclickAttr = tab.getAttribute('onclick') || tab.onclick?.toString() || '';
+    return onclickAttr.includes(tabId);
+  });
+  if (clickedTab) clickedTab.classList.add('active');
+
+  // 3. Control Canvas visibility and placement
+  const canvas = document.getElementById('canvas');
+  if (canvas) {
+    if (tabId === 'textEditing' || tabId === 'imageProcessing') {
+      canvas.style.display = 'block'; // Make sure it's visible
+      targetTab.appendChild(canvas);   // Move canvas inside the active tab
+    } else {
+      canvas.style.display = 'none';  // Hide it on other tabs
     }
+  }
+}
 
     const scrollContainer = document.getElementById('tabsScroll');
     let isDown = false, startX, scrollLeft;
