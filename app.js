@@ -7957,7 +7957,8 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
         .catch(err => console.error(err));
     }
 
-    document.querySelector("#sixpics").addEventListener("click", function () {
+    function sixpics() {
+    document.querySelector("array").style.display = "block";
       const img = document.querySelector("img");
       img.style.height = "45mm";
       img.style.width = "35mm";
@@ -8017,7 +8018,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
   table.style.marginTop = "0.05in";
 
   document.querySelector(".tab-content.active").style.display = "none";
-});
+}
 
     document.querySelector("#eightpics").addEventListener("click", async function () {
       await rotateCurrentImage();
