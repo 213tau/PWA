@@ -181,6 +181,37 @@ if (window.location.hostname.includes("atauxel.vercel.app")) {
           }
         });
       }
+      // === NEW: Handle Open WhatsApp Request from PWA ===
+      else if (event.data.type === "OPEN_WHATSAPP") {
+        const elementText = document.querySelector('#output')?.innerText || "";
+        const regex = /(?:\+92|0)?3\d{2}[\s\-]?\d{7}/;
+        const match = elementText.match(regex);
+
+        if (match) {
+          let phoneNumber = match[0];
+
+          // Format to international standard (923XXXXXXXXX)
+          if (phoneNumber.startsWith("0")) {
+            phoneNumber = "92" + phoneNumber.substring(1);
+          } else if (phoneNumber.startsWith("+")) {
+            phoneNumber = phoneNumber.replace("+", "");
+          }
+          
+          phoneNumber = phoneNumber.replace(/\D/g, '');
+          const message = encodeURIComponent("Tanveer Studio!"); 
+          const targetUrl = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;
+
+          // Send request to background script to manage tabs/windows
+          chrome.runtime.sendMessage({
+            action: "open_whatsapp_background",
+            targetUrl: targetUrl
+          });
+
+          window.postMessage({ action: "UI_STATUS", status: "Opening WhatsApp..." }, "*");
+        } else {
+          window.postMessage({ action: "UI_STATUS", status: "Error: Please enter a valid phone number in #output." }, "*");
+        }
+      }
     }
   });
 

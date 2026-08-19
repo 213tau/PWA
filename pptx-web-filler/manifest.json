@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PPTX Form Filler",
   "version": "1.0",
-  "permissions": ["tabs","activeTab", "scripting","storage","contextMenus"],  
+  "permissions": ["tabs","activeTab", "scripting","storage","contextMenus","windows"],  
   "host_permissions": [
     "http://*/*",
     "https://*/*"

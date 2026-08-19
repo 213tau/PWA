@@ -93,6 +93,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     return true; // Keep message channel open for async response
   }
+  // ------------------------------------------
+  // 6. NEW: Handle WhatsApp Tab Management
+  // ------------------------------------------
+  if (request.action === "open_whatsapp_background" && request.targetUrl) {
+    const targetUrl = request.targetUrl;
+
+    // Search for an already open web.whatsapp.com tab
+    chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, (tabs) => {
+      if (tabs && tabs.length > 0) {
+        const existingTab = tabs[0];
+        
+        // Update the existing tab and bring it/its window into focus
+        chrome.tabs.update(existingTab.id, { url: targetUrl, active: true }, () => {
+          chrome.windows.update(existingTab.windowId, { focused: true });
+        });
+      } else {
+        // If no WhatsApp tab is open, create a new one
+        chrome.tabs.create({ url: targetUrl });
+      }
+    });
+  }
 });
 
 // Helper function to broadcast messages if the origin tab reference is lost
