@@ -6437,9 +6437,9 @@ images.forEach(function (e, index) {
     }
 }
     function openWhatsAppWeb() {
-    const elementText = document.querySelector('#output').innerText || "";
+    // Assuming this runs in your extension context where you can access document or passed data
+    const elementText = document.querySelector('#output')?.innerText || "";
 
-    // Regex to match Pakistani mobile formats (03XX-XXXXXXX, +92 3XX XXXXXXX, etc.)
     const regex = /(?:\+92|0)?3\d{2}[\s\-]?\d{7}/;
     const match = elementText.match(regex);
 
@@ -6453,15 +6453,27 @@ images.forEach(function (e, index) {
             phoneNumber = phoneNumber.replace("+", "");
         }
         
-        // Remove remaining spaces or dashes
         phoneNumber = phoneNumber.replace(/\D/g, '');
-
         const message = encodeURIComponent("Tanveer Studio!"); 
+        
+        const targetUrl = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;
 
-        // Choose scheme based on your environment (or use app protocol with web fallback)
-        // If you are strictly inside a Microsoft WinUI/WebView2 app where whatsapp:// is guaranteed to work:                
-        const whatsappAppUrl = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;        
-        window.open(whatsappAppUrl, 'whatsapp_window');
+        // Search for an already open web.whatsapp.com tab
+        chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, (tabs) => {
+            if (tabs && tabs.length > 0) {
+                const existingTab = tabs[0];
+                
+                // Update the existing tab to the target URL and bring it to focus
+                chrome.tabs.update(existingTab.id, { url: targetUrl, active: true }, () => {
+                    // Focus the window containing the tab as well
+                    chrome.windows.update(existingTab.windowId, { focused: true });
+                });
+            } else {
+                // If no WhatsApp tab is open, create a new one
+                chrome.tabs.create({ url: targetUrl });
+            }
+        });
+
     } else {
         alert("Please enter a valid phone number.");
     }
