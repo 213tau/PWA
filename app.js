@@ -1056,33 +1056,9 @@ for (const img of SELimages) {
 
 function processSvgFile(file) {
     return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onload = (event) => {
-            const svgContent = event.target.result;
-            
-            // Find your output container
-            const outputContainer = document.querySelector('#output');
-            
-            if (outputContainer) {
-                // Option A: Insert raw SVG markup directly into the DOM
-                outputContainer.innerHTML = svgContent;
-                
-                // Optional: Ensure the SVG scales properly inside the container
-                const svgElement = outputContainer.querySelector('svg');
-                if (svgElement) {
-                    if (!svgElement.getAttribute('width')) svgElement.setAttribute('width', '100%');
-                    if (!svgElement.getAttribute('height')) svgElement.setAttribute('height', '100%');
-                }
-            }
-            
-            resolve();
-        };
-        
-        reader.onerror = (error) => reject(error);
-        
-        // Read the SVG file as text string
-        reader.readAsText(file);
+        // Since renderUnifiedBox already handles displaying the SVG,
+        // we just resolve successfully here and avoid clearing #output.
+        resolve();
     });
 }
 
