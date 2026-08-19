@@ -9207,28 +9207,3 @@ const query = document.querySelector("#output").innerText;
 const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 window.open(searchUrl, '_blank');
 }
-
-
-                                    const output = document.getElementById('output');
-
-output.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault(); // Stop default browser nested div/br insertion
-
-    const selection = window.getSelection();
-    if (!selection.rangeCount) return;
-    const range = selection.getRangeAt(0);
-    
-    // Create a clean, empty row element
-    const newDiv = document.createElement('div');
-    
-    range.deleteContents();
-    range.insertNode(newDiv);
-    
-    // Move the cursor directly into the new line
-    range.setStart(newDiv, 0);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
-});
