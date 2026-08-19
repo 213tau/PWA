@@ -1070,55 +1070,89 @@ function processSvgFile(file) {
     const getAsStringAsync = (item) => new Promise((resolve) => item.getAsString(resolve));
 
     // Generic helper to render/accumulate container content with a toggle button
-    const renderUnifiedBox = (className, rawContent, isSvg = false) => {
-        if (!output) return;
-        let wrapper = document.querySelector(`.${className}`);
-        let contentBox, toggleBtn;
+    // Generic helper to render/accumulate container content with a toggle button
+const renderUnifiedBox = (className, rawContent, isSvg = false) => {
+    if (!output) return;
+    let wrapper = document.querySelector(`.${className}`);
+    let contentBox, toggleBtn;
 
-        if (!wrapper) {
-            wrapper = document.createElement("div");
-            wrapper.className = className;
-            wrapper.style.cssText = "margin: 15px 0; border: 1px solid #ccc; padding: 10px; border-radius: 4px;";
+    if (!wrapper) {
+        wrapper = document.createElement("div");
+        wrapper.className = className;
+        wrapper.style.cssText = "margin: 15px 0; border: 1px solid #ccc; padding: 10px; border-radius: 4px;";
 
-            const toolbar = document.createElement("div");
-            toolbar.style.cssText = "margin-bottom: 8px; text-align: right;";
-            
-            toggleBtn = document.createElement("button");
-            toggleBtn.type = "button";
+        const toolbar = document.createElement("div");
+        toolbar.style.cssText = "margin-bottom: 8px; text-align: right;";
+        
+        toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
 
-            contentBox = document.createElement("div");
-            contentBox.className = "content-box";
+        contentBox = document.createElement("div");
+        contentBox.className = "content-box";
 
-            let isRaw = false;
-            const updateView = () => {
-                if (isRaw) {
-                    contentBox.textContent = contentBox.dataset.raw;
-                    contentBox.style.cssText = "white-space: pre-wrap; font-family: monospace; background: #f4f4f4; padding: 8px;";
-                    toggleBtn.textContent = isSvg ? "View Rendered SVG" : "View Styled HTML";
-                } else {
-                    contentBox.innerHTML = contentBox.dataset.html;
-                    contentBox.style.cssText = "";
-                    toggleBtn.textContent = isSvg ? "View Raw SVG Source" : "View Raw HTML Source";
-                }
-            };
+        let isRaw = false;
+        const updateView = () => {
+            const items = JSON.parse(contentBox.dataset.items || "[]");
+            if (isRaw) {
+                // Join raw sources with spacing
+                contentBox.textContent = items.map(item => item.raw).join("\n\n---\n\n");
+                contentBox.style.cssText = "white-space: pre-wrap; font-family: monospace; background: #f4f4f4; padding: 8px;";
+                toggleBtn.textContent = isSvg ? "View Rendered SVG" : "View Styled HTML";
+            } else {
+                contentBox.innerHTML = "";
+                contentBox.style.cssText = "";
+                // Append each rendered item properly using DOM parsing or SVG container creation
+                items.forEach(item => {
+                    if (isSvg) {
+                        const container = document.createElement("div");
+                        container.innerHTML = item.raw;
+                        const svgElem = container.querySelector("svg");
+                        if (svgElem) contentBox.appendChild(svgElem);
+                    } else {
+                        const div = document.createElement("div");
+                        div.innerHTML = item.html;
+                        contentBox.appendChild(div);
+                    }
+                });
+                toggleBtn.textContent = isSvg ? "View Raw SVG Source" : "View Raw HTML Source";
+            }
+        };
 
-            toggleBtn.onclick = () => { isRaw = !isRaw; updateView(); };
-            toolbar.appendChild(toggleBtn);
-            wrapper.append(toolbar, contentBox);
-            output.parentNode.insertBefore(wrapper, output.nextSibling || null);
-        } else {
-            contentBox = wrapper.querySelector(".content-box");
-            toggleBtn = wrapper.querySelector("button");
-        }
+        toggleBtn.onclick = () => { isRaw = !isRaw; updateView(); };
+        toolbar.appendChild(toggleBtn);
+        wrapper.append(toolbar, contentBox);
+        output.parentNode.insertBefore(wrapper, output.nextSibling || null);
+    } else {
+        contentBox = wrapper.querySelector(".content-box");
+        toggleBtn = wrapper.querySelector("button");
+    }
 
-        const combined = (contentBox.dataset.html || "") + "<br>" + rawContent;
-        contentBox.dataset.html = combined;
-        contentBox.dataset.raw = combined;
-        contentBox.innerHTML = combined;
-        if (toggleBtn && toggleBtn.textContent.includes("Raw")) {
-            toggleBtn.textContent = isSvg ? "View Raw SVG Source" : "View Raw HTML Source";
-        }
-    };
+    // Accumulate items safely using a dataset array instead of raw HTML string concatenation
+    const existingItems = JSON.parse(contentBox.dataset.items || "[]");
+    existingItems.push({ raw: rawContent, html: rawContent });
+    contentBox.dataset.items = JSON.stringify(existingItems);
+
+    // Refresh view state
+    const isRawMode = toggleBtn && toggleBtn.textContent.includes("Rendered");
+    if (isRawMode) {
+        contentBox.textContent = existingItems.map(item => item.raw).join("\n\n---\n\n");
+    } else {
+        contentBox.innerHTML = "";
+        existingItems.forEach(item => {
+            if (isSvg) {
+                const container = document.createElement("div");
+                container.innerHTML = item.raw;
+                const svgElem = container.querySelector("svg");
+                if (svgElem) contentBox.appendChild(svgElem);
+            } else {
+                const div = document.createElement("div");
+                div.innerHTML = item.html;
+                contentBox.appendChild(div);
+            }
+        });
+        toggleBtn.textContent = isSvg ? "View Raw SVG Source" : "View Raw HTML Source";
+    }
+};
 
     const promises = Array.from(clipboardData.items).map(async (item) => {
         try {
