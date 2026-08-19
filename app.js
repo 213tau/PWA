@@ -1107,7 +1107,7 @@ function processSvgFile(file) {
         output.appendChild(container);
     };
 
-    // Helper: Render single consolidated HTML content with a toggle button, placed below #output
+    // Helper: Render single consolidated HTML content with a toggle button
     const renderUnifiedHtmlBelowOutput = (htmlContent) => {
         if (!output) return;
 
@@ -1176,7 +1176,7 @@ function processSvgFile(file) {
         }
     };
 
-    // Helper: Render single consolidated SVG content with a toggle button, placed below #output
+    // Helper: Render single consolidated SVG content with a toggle button
     const renderUnifiedSvgBelowOutput = (svgContent) => {
         if (!output) return;
 
@@ -1298,12 +1298,14 @@ function processSvgFile(file) {
                 return { type: 'html', content: html };
             }
 
-            // 3. Handle standard files
+            // 3. Handle standard files (including SVG files dropped/pasted as files)
             if (item.kind === 'file') {
                 const file = item.getAsFile();
                 if (!file) return null;
 
                 if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+                    const svgString = await file.text(); // Read file content as text!
+                    renderUnifiedSvgBelowOutput(svgString);
                     return await processSvgFile(file);
                 } 
                 if (file.type === 'application/pdf') {
