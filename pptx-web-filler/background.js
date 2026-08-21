@@ -157,7 +157,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "openWithAtauxel") {
     let payload = "";
 
-    // 1. Check if the click happened strictly on the 'page' context
+    // Check if the click happened strictly on the 'page' context
     const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
     if (info.selectionText) {
@@ -186,38 +186,50 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
 
-    // 2. If it's a 'page' context, split-tile two windows. Otherwise, open a normal tab.
-    if (isPageContext) {
-      const rightUrl = tab && tab.url ? tab.url : "https://atauxel.vercel.app/";
+    // If it's a 'page' context, isolate this tab and split it 50/50 with Atauxel
+    if (isPageContext && tab && tab.id) {
       const screenWidth = 1920;
       const screenHeight = 1080;
       const halfWidth = Math.floor(screenWidth / 2);
 
-      // Create Left Window
-      const leftWin = await chrome.windows.create({
-        url: targetUrl,
+      // 1. Detach the current tab into a brand new standalone window
+      const detachedWindow = await chrome.windows.create({
+        tabId: tab.id,
         state: "normal",
         left: 0,
         top: 0,
         width: halfWidth,
         height: screenHeight,
-        focused: true
+        focused: false
       });
 
-      // Create Right Window
+      // 2. Open the Atauxel window on the Right half
       const rightWin = await chrome.windows.create({
-        url: rightUrl,
+        url: targetUrl,
         state: "normal",
         left: halfWidth,
         top: 0,
         width: screenWidth - halfWidth,
         height: screenHeight,
-        focused: false
+        focused: true
       });
 
-      // Force precise dimensions post-creation
-      chrome.windows.update(leftWin.id, { state: "normal", left: 0, top: 0, width: halfWidth, height: screenHeight });
-      chrome.windows.update(rightWin.id, { state: "normal", left: halfWidth, top: 0, width: screenWidth - halfWidth, height: screenHeight });
+      // 3. Enforce precise sizing for both windows
+      chrome.windows.update(detachedWindow.id, {
+        state: "normal",
+        left: 0,
+        top: 0,
+        width: halfWidth,
+        height: screenHeight
+      });
+
+      chrome.windows.update(rightWin.id, {
+        state: "normal",
+        left: halfWidth,
+        top: 0,
+        width: screenWidth - halfWidth,
+        height: screenHeight
+      });
 
     } else {
       // Standard behavior for images, links, selected text, etc.
