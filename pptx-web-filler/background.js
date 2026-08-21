@@ -186,24 +186,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
 
-    // If it's a 'page' context, isolate this tab and split it 50/50 with Atauxel
-    if (isPageContext && tab && tab.id) {
+    // If it's a 'page' context, un-maximize & split current window, then open Atauxel on the right
+    if (isPageContext && tab && tab.windowId) {
       const screenWidth = 1920;
       const screenHeight = 1080;
       const halfWidth = Math.floor(screenWidth / 2);
 
-      // 1. Detach the current tab into a brand new standalone window
-      const detachedWindow = await chrome.windows.create({
-        tabId: tab.id,
+      // 1. MUST set state to "normal" first to exit maximized mode, then snap to left
+      await chrome.windows.update(tab.windowId, {
         state: "normal",
         left: 0,
         top: 0,
         width: halfWidth,
         height: screenHeight,
-        focused: false
+        focused: true
       });
 
-      // 2. Open the Atauxel window on the Right half
+      // 2. Open Atauxel in a new window on the right half
       const rightWin = await chrome.windows.create({
         url: targetUrl,
         state: "normal",
@@ -214,8 +213,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         focused: true
       });
 
-      // 3. Enforce precise sizing for both windows
-      chrome.windows.update(detachedWindow.id, {
+      // 3. Double-enforce bounds on both sides to guarantee the 50/50 split
+      await chrome.windows.update(tab.windowId, {
         state: "normal",
         left: 0,
         top: 0,
@@ -223,12 +222,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         height: screenHeight
       });
 
-      chrome.windows.update(rightWin.id, {
+      await chrome.windows.update(rightWin.id, {
         state: "normal",
         left: halfWidth,
         top: 0,
         width: screenWidth - halfWidth,
-        height: screenHeight
+        height: screenHeight,
+        focused: true
       });
 
     } else {
