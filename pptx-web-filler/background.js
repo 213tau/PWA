@@ -186,8 +186,40 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     if (!payload) return;
 
-    // Open a brand new instance with the payload encoded in the query
     const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
-    chrome.tabs.create({ url: targetUrl, active: true });
+
+    // Get current window bounds to calculate the split layout neatly
+    chrome.windows.getCurrent((currentWindow) => {
+      const screenWidth = currentWindow.width || 1920;
+      const screenHeight = currentWindow.height || 1080;
+      const screenLeft = currentWindow.left || 0;
+      const screenTop = currentWindow.top || 0;
+
+      const halfWidth = Math.floor(screenWidth / 2);
+
+      // 1. Open Left Window (Atauxel with payload)
+      chrome.windows.create({
+        url: targetUrl,
+        left: screenLeft,
+        top: screenTop,
+        width: halfWidth,
+        height: screenHeight,
+        focused: true
+      });
+
+      // 2. Open Right Window (Optional: original tab URL, dashboard, or a companion page)
+      // If you want to show the source page alongside it, pass `tab.url`. 
+      // Otherwise, you can pass another URL or leave it blank.
+      const rightUrl = tab && tab.url ? tab.url : "https://atauxel.vercel.app/";
+      
+      chrome.windows.create({
+        url: rightUrl,
+        left: screenLeft + halfWidth,
+        top: screenTop,
+        width: screenWidth - halfWidth,
+        height: screenHeight,
+        focused: false
+      });
+    });
   }
 });
