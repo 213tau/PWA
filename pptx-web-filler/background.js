@@ -157,17 +157,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "openWithAtauxel") {
     let payload = "";
 
+    // 1. Check if the click happened strictly on the 'page' context
+    const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
+
     if (info.selectionText) {
       payload = info.selectionText;
     } else if (info.linkUrl) {
       payload = info.linkUrl;
     } else if (info.srcUrl) {
-      // If it's an image (handles regular URLs, Data URLs, and Blob URLs)
       try {
         const response = await fetch(info.srcUrl);
         const blob = await response.blob();
-        
-        // Convert blob into a Base64 Data URL so the new tab can read it
         payload = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result);
@@ -176,11 +176,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         });
       } catch (error) {
         console.error("Failed to fetch image source:", error);
-        // Fallback to raw srcUrl if fetch fails (e.g. CORS restrictions)
         payload = info.srcUrl;
       }
     } else if (info.pageUrl) {
-      // Handles the 'page' context to get the current page URL
       payload = info.pageUrl;
     }
 
@@ -188,38 +186,42 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
 
-    // Get current window bounds to calculate the split layout neatly
-    chrome.windows.getCurrent((currentWindow) => {
-      const screenWidth = currentWindow.width || 1920;
-      const screenHeight = currentWindow.height || 1080;
-      const screenLeft = currentWindow.left || 0;
-      const screenTop = currentWindow.top || 0;
-
+    // 2. If it's a 'page' context, split-tile two windows. Otherwise, open a normal tab.
+    if (isPageContext) {
+      const rightUrl = tab && tab.url ? tab.url : "https://atauxel.vercel.app/";
+      const screenWidth = 1920;
+      const screenHeight = 1080;
       const halfWidth = Math.floor(screenWidth / 2);
 
-      // 1. Open Left Window (Atauxel with payload)
-      chrome.windows.create({
+      // Create Left Window
+      const leftWin = await chrome.windows.create({
         url: targetUrl,
-        left: screenLeft,
-        top: screenTop,
+        state: "normal",
+        left: 0,
+        top: 0,
         width: halfWidth,
         height: screenHeight,
         focused: true
       });
 
-      // 2. Open Right Window (Optional: original tab URL, dashboard, or a companion page)
-      // If you want to show the source page alongside it, pass `tab.url`. 
-      // Otherwise, you can pass another URL or leave it blank.
-      const rightUrl = tab && tab.url ? tab.url : "https://atauxel.vercel.app/";
-      
-      chrome.windows.create({
+      // Create Right Window
+      const rightWin = await chrome.windows.create({
         url: rightUrl,
-        left: screenLeft + halfWidth,
-        top: screenTop,
+        state: "normal",
+        left: halfWidth,
+        top: 0,
         width: screenWidth - halfWidth,
         height: screenHeight,
         focused: false
       });
-    });
+
+      // Force precise dimensions post-creation
+      chrome.windows.update(leftWin.id, { state: "normal", left: 0, top: 0, width: halfWidth, height: screenHeight });
+      chrome.windows.update(rightWin.id, { state: "normal", left: halfWidth, top: 0, width: screenWidth - halfWidth, height: screenHeight });
+
+    } else {
+      // Standard behavior for images, links, selected text, etc.
+      chrome.tabs.create({ url: targetUrl, active: true });
+    }
   }
 });
