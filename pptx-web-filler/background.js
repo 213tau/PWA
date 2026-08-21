@@ -186,46 +186,54 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
 
-    // If it's a 'page' context, un-maximize & split current window, then open Atauxel on the right
+    // If it's a 'page' context, dynamically calculate screen size and split 50/50
     if (isPageContext && tab && tab.windowId) {
-      const screenWidth = 1920;
-      const screenHeight = 1080;
+      // Fetch the actual current window's position and screen metrics
+      const currentWin = await chrome.windows.get(tab.windowId);
+      
+      // Fallback coordinates if bounds aren't exposed
+      const screenLeft = currentWin.left || 0;
+      const screenTop = currentWin.top || 0;
+      
+      // Use the monitor's usable width/height or fallback to standard bounds
+      const screenWidth = currentWin.width || 1920;
+      const screenHeight = currentWin.height || 1080;
       const halfWidth = Math.floor(screenWidth / 2);
 
-      // 1. MUST set state to "normal" first to exit maximized mode, then snap to left
+      // 1. Un-maximize current window and snap it strictly to the left half of THIS screen
       await chrome.windows.update(tab.windowId, {
         state: "normal",
-        left: 0,
-        top: 0,
+        left: screenLeft,
+        top: screenTop,
         width: halfWidth,
         height: screenHeight,
         focused: true
       });
 
-      // 2. Open Atauxel in a new window on the right half
+      // 2. Open Atauxel on the right half of THIS screen
       const rightWin = await chrome.windows.create({
         url: targetUrl,
         state: "normal",
-        left: halfWidth,
-        top: 0,
+        left: screenLeft + halfWidth,
+        top: screenTop,
         width: screenWidth - halfWidth,
         height: screenHeight,
         focused: true
       });
 
-      // 3. Double-enforce bounds on both sides to guarantee the 50/50 split
+      // 3. Re-enforce bounds to lock the 50/50 split cleanly
       await chrome.windows.update(tab.windowId, {
         state: "normal",
-        left: 0,
-        top: 0,
+        left: screenLeft,
+        top: screenTop,
         width: halfWidth,
         height: screenHeight
       });
 
       await chrome.windows.update(rightWin.id, {
         state: "normal",
-        left: halfWidth,
-        top: 0,
+        left: screenLeft + halfWidth,
+        top: screenTop,
         width: screenWidth - halfWidth,
         height: screenHeight,
         focused: true
