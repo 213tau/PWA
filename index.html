@@ -4793,8 +4793,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (inputIdsParam) {
     try {
       const inputIds = JSON.parse(inputIdsParam);
-
-      // Populate select element if it exists
+      
+      // If a select element exists, populate it with all available input IDs
       const selectElement = document.querySelector("#target-input-select");
       if (selectElement) {
         selectElement.innerHTML = '<option value="">Select Target Input</option>';
@@ -4805,14 +4805,6 @@ document.addEventListener("DOMContentLoaded", () => {
           selectElement.appendChild(option);
         });
       }
-
-      // Fill matching local inputs
-      inputIds.forEach((id) => {
-        const targetInput = document.getElementById(id);
-        if (targetInput && dataParam && targetInput.type === "text") {
-          targetInput.value = dataParam;
-        }
-      });
     } catch (error) {
       console.error("Failed to parse inputIds parameter:", error);
     }
@@ -4820,7 +4812,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!dataParam) return;
 
-  // --- 2. DETECT PAYLOAD TYPE ---
+  // --- 2. CHECK IF PAYLOAD IS AN IMAGE ---
   const isBase64Image = dataParam.startsWith("data:image/");
   const isBlobImage = dataParam.startsWith("blob:");
   const hasImageExtension = dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i);
@@ -4838,43 +4830,40 @@ document.addEventListener("DOMContentLoaded", () => {
       if (typeof loadCurrentImage === "function") loadCurrentImage();
     };
 
+    // If image loading fails, treat it as text/URL payload
     img.onerror = () => {
-      console.warn("Failed to load image from dataParam, routing to text/URL handler.");
-      handleTextOrUrlPayload(dataParam);
+      console.warn("Failed to load as image, routing to #output as text.");
+      writeToOutput(dataParam);
     };
 
   } else {
-    // --- HANDLE TEXT / URL PAYLOAD ---
-    handleTextOrUrlPayload(dataParam);
+    // --- HANDLE TEXT / WEBPAGE URL PAYLOAD ---
+    writeToOutput(dataParam);
   }
 });
 
-// Helper to handle text or full web URLs cleanly
-function handleTextOrUrlPayload(payload) {
-  // Check if payload is a standard website URL
-  let isValidUrl = false;
-  try {
-    const urlObj = new URL(payload);
-    isValidUrl = urlObj.protocol === "http:" || urlObj.protocol === "https:";
-  } catch (_) {
-    isValidUrl = false;
+// Dedicated helper function for #output
+function writeToOutput(value) {
+  let outputElement = document.querySelector("#output");
+
+  // Fallback: Create #output dynamically if it doesn't exist in DOM
+  if (!outputElement) {
+    console.warn("#output element not found in DOM. Creating a fallback input.");
+    outputElement = document.createElement("input");
+    outputElement.id = "output";
+    outputElement.type = "text";
+    document.body.appendChild(outputElement);
   }
 
-  const outputElement = document.querySelector("#output") || document.querySelector("#textInput");
-  const searchElement = document.querySelector("#searchBox");
-
-  if (isValidUrl && searchElement) {
-    // Populate search box or handle URL target directly
-    searchElement.value = payload;
-  } else if (outputElement) {
-    if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
-      outputElement.value = payload;
-    } else {
-      outputElement.textContent = payload;
-    }
+  // Populate output depending on element type
+  if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
+    outputElement.value = value;
   } else {
-    console.log("Received payload with no designated output element:", payload);
+    outputElement.textContent = value;
   }
+
+  // Dispatch an input event so any listeners on #output trigger automatically
+  outputElement.dispatchEvent(new Event("input", { bubbles: true }));
 }
 </script>
 </body>
