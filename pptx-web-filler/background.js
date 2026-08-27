@@ -145,6 +145,9 @@ function cleanupWorker(targetTabId) {
 // ==========================================
 // CONTEXT MENU SETUP & CLICK HANDLER
 // ==========================================
+// ==========================================
+// CONTEXT MENU SETUP & CLICK HANDLER
+// ==========================================
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openWithAtauxel",
@@ -154,94 +157,104 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === "openWithAtauxel") {
-    let payload = "";
+  if (info.menuItemId !== "openWithAtauxel" || !tab?.id) return;
 
-    // Check if the click happened strictly on the 'page' context
-    const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
+  let payload = "";
+  const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
-    if (info.selectionText) {
-      payload = info.selectionText;
-    } else if (info.linkUrl) {
-      payload = info.linkUrl;
-    } else if (info.srcUrl) {
-      try {
-        const response = await fetch(info.srcUrl);
-        const blob = await response.blob();
-        payload = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } catch (error) {
-        console.error("Failed to fetch image source:", error);
-        payload = info.srcUrl;
-      }
-    } else if (info.pageUrl) {
-      payload = info.pageUrl;
+  // Extract input IDs from the current tab
+  let inputIds = [];
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => Array.from(document.querySelectorAll("input[id]")).map(el => el.id)
+    });
+    if (results && results[0]) {
+      inputIds = results[0].result;
     }
+  } catch (error) {
+    console.error("Failed to fetch input IDs from tab:", error);
+  }
 
-    if (!payload) return;
-
-    const targetUrl = `https://atauxel.vercel.app/?data=${encodeURIComponent(payload)}`;
-
-    // If it's a 'page' context, dynamically calculate screen size and split 50/50
-    if (isPageContext && tab && tab.windowId) {
-      // Fetch the actual current window's position and screen metrics
-      const currentWin = await chrome.windows.get(tab.windowId);
-      
-      // Fallback coordinates if bounds aren't exposed
-      const screenLeft = currentWin.left || 0;
-      const screenTop = currentWin.top || 0;
-      
-      // Use the monitor's usable width/height or fallback to standard bounds
-      const screenWidth = currentWin.width || 1920;
-      const screenHeight = currentWin.height || 1080;
-      const halfWidth = Math.floor(screenWidth / 2);
-
-      // 1. Un-maximize current window and snap it strictly to the left half of THIS screen
-      await chrome.windows.update(tab.windowId, {
-        state: "normal",
-        left: screenLeft,
-        top: screenTop,
-        width: halfWidth,
-        height: screenHeight,
-        focused: true
+  // Handle Payload Selection
+  if (info.selectionText) {
+    payload = info.selectionText;
+  } else if (info.linkUrl) {
+    payload = info.linkUrl;
+  } else if (info.srcUrl) {
+    try {
+      const response = await fetch(info.srcUrl);
+      const blob = await response.blob();
+      payload = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
-
-      // 2. Open Atauxel on the right half of THIS screen
-      const rightWin = await chrome.windows.create({
-        url: targetUrl,
-        state: "normal",
-        left: screenLeft + halfWidth,
-        top: screenTop,
-        width: screenWidth - halfWidth,
-        height: screenHeight,
-        focused: true
-      });
-
-      // 3. Re-enforce bounds to lock the 50/50 split cleanly
-      await chrome.windows.update(tab.windowId, {
-        state: "normal",
-        left: screenLeft,
-        top: screenTop,
-        width: halfWidth,
-        height: screenHeight
-      });
-
-      await chrome.windows.update(rightWin.id, {
-        state: "normal",
-        left: screenLeft + halfWidth,
-        top: screenTop,
-        width: screenWidth - halfWidth,
-        height: screenHeight,
-        focused: true
-      });
-
-    } else {
-      // Standard behavior for images, links, selected text, etc.
-      chrome.tabs.create({ url: targetUrl, active: true });
+    } catch (error) {
+      console.error("Failed to fetch image source:", error);
+      payload = info.srcUrl;
     }
+  } else if (info.pageUrl) {
+    payload = info.pageUrl;
+  }
+
+  if (!payload) return;
+
+  // Append input IDs to payload/target URL (or log them as needed)
+  const encodedPayload = encodeURIComponent(payload);
+  const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds));
+  const targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}`;
+
+  // Handle 50/50 Window Split for Page Context
+  if (isPageContext && tab.windowId) {
+    const currentWin = await chrome.windows.get(tab.windowId);
+    
+    const screenLeft = currentWin.left || 0;
+    const screenTop = currentWin.top || 0;
+    const screenWidth = currentWin.width || 1920;
+    const screenHeight = currentWin.height || 1080;
+    const halfWidth = Math.floor(screenWidth / 2);
+
+    // Snap current window left
+    await chrome.windows.update(tab.windowId, {
+      state: "normal",
+      left: screenLeft,
+      top: screenTop,
+      width: halfWidth,
+      height: screenHeight,
+      focused: true
+    });
+
+    // Create Atauxel window right
+    const rightWin = await chrome.windows.create({
+      url: targetUrl,
+      state: "normal",
+      left: screenLeft + halfWidth,
+      top: screenTop,
+      width: screenWidth - halfWidth,
+      height: screenHeight,
+      focused: true
+    });
+
+    // Re-enforce window bounds
+    await chrome.windows.update(tab.windowId, {
+      state: "normal",
+      left: screenLeft,
+      top: screenTop,
+      width: halfWidth,
+      height: screenHeight
+    });
+
+    await chrome.windows.update(rightWin.id, {
+      state: "normal",
+      left: screenLeft + halfWidth,
+      top: screenTop,
+      width: screenWidth - halfWidth,
+      height: screenHeight,
+      focused: true
+    });
+  } else {
+    chrome.tabs.create({ url: targetUrl, active: true });
   }
 });
