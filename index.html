@@ -4784,10 +4784,39 @@ async function searchText() {
     URL.revokeObjectURL(url);
 }
 // Run when the PWA loads
-// Run when the PWA loads
 document.addEventListener("DOMContentLoaded", () => {
   const urlParams = new URLSearchParams(window.location.search);
   const dataParam = urlParams.get("data");
+  const inputIdsParam = urlParams.get("inputIds");
+
+  // --- HANDLE INPUT IDs PAYLOAD ---
+  if (inputIdsParam) {
+    try {
+      const inputIds = JSON.parse(inputIdsParam);
+
+      // Option A: Populate a select dropdown with the target tab's input IDs
+      const selectElement = document.querySelector("#target-input-select");
+      if (selectElement) {
+        selectElement.innerHTML = '<option value="">Select Target Input</option>';
+        inputIds.forEach((id) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = `#${id}`;
+          selectElement.appendChild(option);
+        });
+      }
+
+      // Option B: Automatically populate local/matching fields if IDs exist in PWA
+      inputIds.forEach((id) => {
+        const targetInput = document.getElementById(id);
+        if (targetInput && dataParam) {
+          targetInput.value = dataParam;
+        }
+      });
+    } catch (error) {
+      console.error("Failed to parse inputIds parameter:", error);
+    }
+  }
 
   if (!dataParam) return;
 
