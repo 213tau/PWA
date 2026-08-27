@@ -4789,12 +4789,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const dataParam = urlParams.get("data");
   const inputIdsParam = urlParams.get("inputIds");
 
-  // --- HANDLE INPUT IDs PAYLOAD ---
+  // --- 1. HANDLE INPUT IDs PAYLOAD ---
   if (inputIdsParam) {
     try {
       const inputIds = JSON.parse(inputIdsParam);
 
-      // Option A: Populate a select dropdown with the target tab's input IDs
+      // Populate select element if it exists
       const selectElement = document.querySelector("#target-input-select");
       if (selectElement) {
         selectElement.innerHTML = '<option value="">Select Target Input</option>';
@@ -4806,10 +4806,10 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      // Option B: Automatically populate local/matching fields if IDs exist in PWA
+      // Fill matching local inputs
       inputIds.forEach((id) => {
         const targetInput = document.getElementById(id);
-        if (targetInput && dataParam) {
+        if (targetInput && dataParam && targetInput.type === "text") {
           targetInput.value = dataParam;
         }
       });
@@ -4820,39 +4820,62 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!dataParam) return;
 
-  // Check if the incoming data is a Base64 data URL, a blob URL, or a standard image URL
-  if (
-    dataParam.startsWith("data:image/") || 
-    dataParam.startsWith("blob:") || 
-    dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
-  ) {
+  // --- 2. DETECT PAYLOAD TYPE ---
+  const isBase64Image = dataParam.startsWith("data:image/");
+  const isBlobImage = dataParam.startsWith("blob:");
+  const hasImageExtension = dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i);
+
+  if (isBase64Image || isBlobImage || hasImageExtension) {
     // --- HANDLE IMAGE PAYLOAD ---
     const img = new Image();
-    img.crossOrigin = "anonymous"; 
+    img.crossOrigin = "anonymous";
     img.src = dataParam;
 
-    images.push({
-      img: img,
-      dpi: 300
-    });
+    img.onload = () => {
+      images.push({ img: img, dpi: 300 });
+      currentImageIndex = images.length - 1;
+      if (typeof updateImageSelector === "function") updateImageSelector();
+      if (typeof loadCurrentImage === "function") loadCurrentImage();
+    };
 
-    currentImageIndex = 0;
-    updateImageSelector();
-    loadCurrentImage();
+    img.onerror = () => {
+      console.warn("Failed to load image from dataParam, routing to text/URL handler.");
+      handleTextOrUrlPayload(dataParam);
+    };
 
   } else {
-    // --- HANDLE TEXT PAYLOAD ---
-    const outputElement = document.querySelector("#output");
-    if (outputElement) {
-      // If #output is a textarea or input, use .value; otherwise use .textContent or .innerHTML
-      if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
-        outputElement.value = dataParam;
-      } else {
-        outputElement.textContent = dataParam;
-      }
-    }
+    // --- HANDLE TEXT / URL PAYLOAD ---
+    handleTextOrUrlPayload(dataParam);
   }
 });
+
+// Helper to handle text or full web URLs cleanly
+function handleTextOrUrlPayload(payload) {
+  // Check if payload is a standard website URL
+  let isValidUrl = false;
+  try {
+    const urlObj = new URL(payload);
+    isValidUrl = urlObj.protocol === "http:" || urlObj.protocol === "https:";
+  } catch (_) {
+    isValidUrl = false;
+  }
+
+  const outputElement = document.querySelector("#output") || document.querySelector("#textInput");
+  const searchElement = document.querySelector("#searchBox");
+
+  if (isValidUrl && searchElement) {
+    // Populate search box or handle URL target directly
+    searchElement.value = payload;
+  } else if (outputElement) {
+    if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
+      outputElement.value = payload;
+    } else {
+      outputElement.textContent = payload;
+    }
+  } else {
+    console.log("Received payload with no designated output element:", payload);
+  }
+}
 </script>
 </body>
 
