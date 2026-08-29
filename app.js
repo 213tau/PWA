@@ -256,11 +256,8 @@ for (const img of SELimages) {
 }
     }
 
-    console.log(fullText);
-
-    //if (pdfDoc.numPages < 10) {
-        document.querySelector("#output").innerHTML = fullText;
-    //}
+            document.querySelector("#output").innerHTML += fullText;
+    
    return images; // <-- this is crucial
 
         } else if (file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
