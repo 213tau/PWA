@@ -4865,6 +4865,26 @@ function writeToOutput(value) {
   // Dispatch an input event so any listeners on #output trigger automatically
   outputElement.dispatchEvent(new Event("input", { bubbles: true }));
 }
+    let dragCount = 0;
+let lastDragTime = Date.now();
+
+window.addEventListener('dragstart', (e) => {
+  const now = Date.now();
+  
+  // If drags happen less than 300ms apart rapidly
+  if (now - lastDragTime < 300) {
+    dragCount++;
+    if (dragCount > 3) { // If they rapid-fire more than 3 times
+      // Clear the current text selection to force-stop the drag
+      window.getSelection().removeAllRanges();
+      dragCount = 0;
+    }
+  } else {
+    dragCount = 1; // Reset counter
+  }
+  
+  lastDragTime = now;
+}, { passive: true });
 </script>
 </body>
 
