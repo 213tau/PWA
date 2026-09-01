@@ -239,18 +239,26 @@ if (window.location.hostname.includes("atauxel.vercel.app")) {
   // 2. LISTEN FOR MESSAGES FROM EXTENSION BACKGROUND SCRIPT (Extension -> PWA)
   // =========================================================================
   chrome.runtime.onMessage.addListener((message) => {
-    const outputElement = document.querySelector("#output");
-    if (!outputElement) return;
+  const outputElement = document.querySelector("#output");
+  if (!outputElement) return;
 
-    if (message.action === "DLIMS_DATA_RESPONSE") {
-      outputElement.innerHTML = message.data.html;
-      window.postMessage({ action: "UI_STATUS", status: "DLIMS Data loaded successfully!" }, "*");
-    } 
-    else if (message.action === "IRIS_DATA_RESPONSE") {
-      outputElement.innerHTML = message.data.html;
-      window.postMessage({ action: "UI_STATUS", status: "IRIS Data loaded successfully!" }, "*");
-    }
-  });
+  if (message.action === "DLIMS_DATA_RESPONSE" || message.action === "IRIS_DATA_RESPONSE") {
+    // 1. Inject HTML content
+    outputElement.innerHTML = message.data.html;
+
+    // 2. Apply dimensions to .img-fluid elements inside #output
+    const images = outputElement.querySelectorAll(".img-fluid");
+    images.forEach((img) => {
+      img.style.width = "2.2in";
+      img.style.height = "3.4in";
+      img.style.objectFit = "cover"; // Prevents image distortion
+    });
+
+    // 3. Send postMessage status
+    const label = message.action === "DLIMS_DATA_RESPONSE" ? "DLIMS" : "IRIS";
+    window.postMessage({ action: "UI_STATUS", status: `${label} Data loaded successfully!` }, "*");
+  }
+});
 
 }
 
