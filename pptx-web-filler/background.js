@@ -143,20 +143,20 @@ function cleanupWorker(targetTabId) {
   ]);
 }
 // ==========================================
-// 1. GLOBAL MESSAGE RELAY (Atauxel -> Source)
+// 1. MESSAGING RELAY (Atauxel -> Background -> Original Web Page)
 // ==========================================
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === "syncToSource" && message.targetTabId) {
-    chrome.tabs.sendMessage(message.targetTabId, {
-      action: "updateSourceInput",
-      targetInputId: message.targetInputId,
+  if (message.action === "syncValueToSourcePage" && message.sourceTabId) {
+    chrome.tabs.sendMessage(message.sourceTabId, {
+      action: "updateInputValue",
+      inputId: message.inputId,
       value: message.value
-    }).catch(err => console.error("Failed to relay message to source tab:", err));
+    }).catch(err => console.error("Could not sync value to origin tab:", err));
   }
 });
 
 // ==========================================
-// 2. CONTEXT MENU SETUP & CLICK HANDLER
+// 2. CONTEXT MENU SETUP & MAIN EVENT HANDLER
 // ==========================================
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -189,29 +189,29 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error("Failed to fetch input IDs from tab:", error);
   }
 
-  // Inject input listener onto source tab to receive updates from Atauxel
+  // Inject listener into original web page to receive typed values
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
-        if (window.hasAtauxelSyncListener) return;
-        window.hasAtauxelSyncListener = true;
+        if (window.hasAtauxelSyncHandler) return;
+        window.hasAtauxelSyncHandler = true;
 
-        chrome.runtime.onMessage.addListener((message) => {
-          if (message.action === "updateSourceInput") {
-            const inputEl = document.getElementById(message.targetInputId);
-            if (inputEl) {
-              inputEl.value = message.value;
-              // Dispatch events to support modern reactive frameworks (React, Vue, Svelte)
-              inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-              inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+        chrome.runtime.onMessage.addListener((msg) => {
+          if (msg.action === "updateInputValue") {
+            const targetInput = document.getElementById(msg.inputId);
+            if (targetInput) {
+              targetInput.value = msg.value;
+              // Trigger input events to notify framework state managers (React, Vue, Svelte)
+              targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+              targetInput.dispatchEvent(new Event("change", { bubbles: true }));
             }
           }
         });
       }
     });
   } catch (error) {
-    console.error("Failed to inject sync listener into source tab:", error);
+    console.error("Failed to inject sync listener on source tab:", error);
   }
 
   // Handle Payload Selection
@@ -282,7 +282,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // Inject dynamic, synced elements into Atauxel tab's #output
+  // Inject content & wire typing sync into Atauxel tab
   if (isPageContext && atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -290,7 +290,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
-          func: (data, sourceTabId) => {
+          func: (extractedInputs, payloadUrl, sourceTabId) => {
             let outputDiv = document.querySelector("#output");
             if (!outputDiv) {
               outputDiv = document.createElement("div");
@@ -298,22 +298,36 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               document.body.appendChild(outputDiv);
             }
 
+            // Clear previous nodes
             outputDiv.innerHTML = "";
 
-            data.forEach(item => {
+            // 1. Restore & append URL payload block inside #output
+            const payloadContainer = document.createElement("div");
+            payloadContainer.className = "payload-url-block";
+            payloadContainer.style.marginBottom = "12px";
+            payloadContainer.style.fontWeight = "bold";
+            payloadContainer.textContent = `Page URL: ${payloadUrl}`;
+            outputDiv.appendChild(payloadContainer);
+
+            // 2. Append editable divs for input ID fields
+            extractedInputs.forEach(item => {
               const childDiv = document.createElement("div");
               childDiv.id = item.label || item.id;
               
-              // Enable typing & sync settings
+              // Make div editable to receive keystrokes
               childDiv.contentEditable = "true";
-              childDiv.textContent = item.id;
+              childDiv.style.border = "1px solid #ccc";
+              childDiv.style.padding = "6px";
+              childDiv.style.margin = "4px 0";
+              childDiv.style.minHeight = "20px";
+              childDiv.dataset.inputId = item.id;
 
-              // Send typed updates back to background script on input
+              // Fire sync event directly on typing
               childDiv.addEventListener("input", () => {
                 chrome.runtime.sendMessage({
-                  action: "syncToSource",
-                  targetTabId: sourceTabId,
-                  targetInputId: item.id,
+                  action: "syncValueToSourcePage",
+                  sourceTabId: sourceTabId,
+                  inputId: item.id,
                   value: childDiv.textContent
                 });
               });
@@ -321,8 +335,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               outputDiv.appendChild(childDiv);
             });
           },
-          args: [inputIds, tab.id]
-        }).catch(err => console.error("Failed to inject into Atauxel tab:", err));
+          args: [inputIds, payload, tab.id]
+        }).catch(err => console.error("Failed to inject scripts into Atauxel tab:", err));
       }
     });
   }
