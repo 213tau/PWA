@@ -243,18 +243,22 @@ if (window.location.hostname.includes("atauxel.vercel.app")) {
   if (!outputElement) return;
 
   if (message.action === "DLIMS_DATA_RESPONSE" || message.action === "IRIS_DATA_RESPONSE") {
-    // 1. Inject HTML content
-    outputElement.innerHTML = message.data.html;
+    // 1. Parse raw HTML off-screen
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(message.data.html, "text/html");
 
-    // 2. Apply dimensions to .img-fluid elements inside #output
-    const images = outputElement.querySelectorAll(".img-fluid");
+    // 2. Modify images in memory before live DOM attachment
+    const images = doc.querySelectorAll(".img-fluid");
     images.forEach((img) => {
       img.style.width = "2.2in";
       img.style.height = "3.4in";
-      img.style.objectFit = "cover"; // Prevents image distortion
+      img.style.objectFit = "cover";
     });
 
-    // 3. Send postMessage status
+    // 3. Inject fully processed nodes into the main DOM
+    outputElement.replaceChildren(...doc.body.childNodes);
+
+    // 4. Notify UI status
     const label = message.action === "DLIMS_DATA_RESPONSE" ? "DLIMS" : "IRIS";
     window.postMessage({ action: "UI_STATUS", status: `${label} Data loaded successfully!` }, "*");
   }
