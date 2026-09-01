@@ -164,7 +164,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => Array.from(document.querySelectorAll("input[id]")).map(el => el.id)
+      func: () => Array.from(document.querySelectorAll("input[id]")).map(el => ({
+        id: el.id,
+        label: el.name || el.placeholder || el.id
+      }))
     });
     if (results && results[0]) {
       inputIds = results[0].result;
@@ -196,14 +199,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     payload = info.pageUrl;
   }
 
-  
-
   if (!payload) return;
 
-  // Append input IDs to payload/target URL (or log them as needed)
   const encodedPayload = encodeURIComponent(payload);
-  const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds));
+  const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds.map(item => item.id)));
   const targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}`;
+
+  let atauxelTabId = null;
 
   // Handle 50/50 Window Split for Page Context
   if (isPageContext && tab.windowId) {
@@ -236,64 +238,46 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       focused: true
     });
 
-    // Re-enforce window bounds
-    await chrome.windows.update(tab.windowId, {
-      state: "normal",
-      left: screenLeft,
-      top: screenTop,
-      width: halfWidth,
-      height: screenHeight
-    });
-
-    await chrome.windows.update(rightWin.id, {
-      state: "normal",
-      left: screenLeft + halfWidth,
-      top: screenTop,
-      width: screenWidth - halfWidth,
-      height: screenHeight,
-      focused: true
-    });
+    atauxelTabId = rightWin.tabs?.[0]?.id || null;
   } else {
-    chrome.tabs.create({ url: targetUrl, active: true });
+    const newTab = await chrome.tabs.create({ url: targetUrl, active: true });
+    atauxelTabId = newTab.id;
   }
 
-  if (isPageContext) {
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          // Extract all input IDs from the page
-          const inputs = Array.from(document.querySelectorAll("input[id]"));
-          
-          // Locate or construct the container: #output div#ids
-          let outputDiv = document.querySelector("#output");
-          if (!outputDiv) {
-            outputDiv = document.createElement("div");
-            outputDiv.id = "output";
-            document.body.appendChild(outputDiv);
-          }
+  // Inject extracted IDs into the newly created Atauxel tab
+  if (isPageContext && atauxelTabId) {
+    // Wait for the Atauxel tab to finish loading before injecting DOM
+    chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+      if (tabId === atauxelTabId && changeInfo.status === "complete") {
+        chrome.tabs.onUpdated.removeListener(listener);
 
-          let idsDiv = outputDiv.querySelector("#ids");
-          if (!idsDiv) {
-            idsDiv = document.createElement("div");
-            idsDiv.id = "ids";
-            outputDiv.appendChild(idsDiv);
-          }
+        chrome.scripting.executeScript({
+          target: { tabId: atauxelTabId },
+          func: (data) => {
+            let outputDiv = document.querySelector("#output");
+            if (!outputDiv) {
+              outputDiv = document.createElement("div");
+              outputDiv.id = "output";
+              document.body.appendChild(outputDiv);
+            }
 
-          // Build and inject editable label:value rows
-          idsDiv.innerHTML = inputs.map(el => {
-            const labelText = el.name || el.placeholder || el.id;
-            return `
+            let idsDiv = outputDiv.querySelector("#ids");
+            if (!idsDiv) {
+              idsDiv = document.createElement("div");
+              idsDiv.id = "ids";
+              outputDiv.appendChild(idsDiv);
+            }
+
+            idsDiv.innerHTML = data.map(item => `
               <div class="input-id-row" style="margin: 4px 0;">
-                <label style="font-weight: bold;">${labelText}: </label>
-                <input type="text" value="${el.id}" class="id-value-field" style="border: 1px solid #ccc; padding: 2px 4px;" />
+                <label style="font-weight: bold;">${item.label}: </label>
+                <input type="text" value="${item.id}" class="id-value-field" style="border: 1px solid #ccc; padding: 2px 4px;" />
               </div>
-            `;
-          }).join("");
-        }
-      });
-    } catch (error) {
-      console.error("Failed to inject input IDs into DOM:", error);
-    }
+            `).join("");
+          },
+          args: [inputIds]
+        }).catch(err => console.error("Failed to inject into Atauxel tab:", err));
+      }
+    });
   }
 });
