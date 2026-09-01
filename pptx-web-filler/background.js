@@ -142,9 +142,6 @@ function cleanupWorker(targetTabId) {
     "isSubmitted"
   ]);
 }
-// ==========================================
-// 1. CONTEXT MENU SETUP & MAIN HANDLER
-// ==========================================
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openWithAtauxel",
@@ -159,7 +156,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let payload = "";
   const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
-  // Extract input IDs from the current source tab
+  // Extract input IDs from current source tab
   let inputIds = [];
   try {
     const results = await chrome.scripting.executeScript({
@@ -169,22 +166,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         label: el.name || el.placeholder || el.id
       }))
     });
-    if (results && results[0]) {
-      inputIds = results[0].result;
-    }
+    if (results && results[0]) inputIds = results[0].result;
   } catch (error) {
-    console.error("Failed to fetch input IDs from tab:", error);
+    console.error("Failed to fetch input IDs:", error);
   }
 
-  // STEP 1: Inject Storage Listener onto the SOURCE TAB
+  // Inject Storage Listener into SOURCE TAB to receive updates
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
-        if (window.hasAtauxelStorageSync) return;
-        window.hasAtauxelStorageSync = true;
+        if (window.hasAtauxelSync) return;
+        window.hasAtauxelSync = true;
 
-        // Listen for chrome.storage updates (bypasses messaging isolation)
         chrome.storage.onChanged.addListener((changes, area) => {
           if (area === "local" && changes.atauxelSync) {
             const { inputId, value } = changes.atauxelSync.newValue || {};
@@ -193,12 +187,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             const targetInput = document.getElementById(inputId);
             if (targetInput) {
               targetInput.value = value;
-
-              // React / Vue value tracker bypass
+              
+              // Support React/Vue internal state updates
               const tracker = targetInput._valueTracker;
               if (tracker) tracker.setValue(value);
 
-              // Trigger DOM events so forms detect changes
               targetInput.dispatchEvent(new Event("input", { bubbles: true }));
               targetInput.dispatchEvent(new Event("change", { bubbles: true }));
             }
@@ -206,32 +199,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         });
       }
     });
-  } catch (error) {
-    console.error("Failed to inject storage listener into source tab:", error);
+  } catch (err) {
+    console.error("Failed to inject storage listener on source page:", err);
   }
 
-  // Handle Payload Selection
-  if (info.selectionText) {
-    payload = info.selectionText;
-  } else if (info.linkUrl) {
-    payload = info.linkUrl;
-  } else if (info.srcUrl) {
-    try {
-      const response = await fetch(info.srcUrl);
-      const blob = await response.blob();
-      payload = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error("Failed to fetch image source:", error);
-      payload = info.srcUrl;
-    }
-  } else if (info.pageUrl) {
-    payload = info.pageUrl;
-  }
+  // Determine payload
+  if (info.selectionText) payload = info.selectionText;
+  else if (info.linkUrl) payload = info.linkUrl;
+  else if (info.srcUrl) payload = info.srcUrl;
+  else if (info.pageUrl) payload = info.pageUrl;
 
   if (!payload) return;
 
@@ -241,17 +217,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   let atauxelTabId = null;
 
-  // Handle 50/50 Window Split for Page Context
   if (isPageContext && tab.windowId) {
     const currentWin = await chrome.windows.get(tab.windowId);
-    
     const screenLeft = currentWin.left || 0;
     const screenTop = currentWin.top || 0;
     const screenWidth = currentWin.width || 1920;
     const screenHeight = currentWin.height || 1080;
     const halfWidth = Math.floor(screenWidth / 2);
 
-    // Snap current window left
     await chrome.windows.update(tab.windowId, {
       state: "normal",
       left: screenLeft,
@@ -261,7 +234,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       focused: true
     });
 
-    // Create Atauxel window right
     const rightWin = await chrome.windows.create({
       url: targetUrl,
       state: "normal",
@@ -278,7 +250,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // STEP 2: Inject writer into ATAUXEL TAB (Writes typed values into chrome.storage)
+  // Populate #output once Atauxel tab loads
   if (isPageContext && atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -296,40 +268,36 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
             outputDiv.innerHTML = "";
 
-            // 1. Keep payload URL inside #output
+            // Render URL Payload
             const urlBlock = document.createElement("div");
-            urlBlock.className = "payload-url";
             urlBlock.style.fontWeight = "bold";
-            urlBlock.style.marginBottom = "10px";
+            urlBlock.style.marginBottom = "8px";
             urlBlock.textContent = payloadUrl;
             outputDiv.appendChild(urlBlock);
 
-            // 2. Inject editable divs for each input ID
+            // Render Input IDs
             extractedInputs.forEach(item => {
               const childDiv = document.createElement("div");
               childDiv.id = item.label || item.id;
               childDiv.contentEditable = "true";
               childDiv.style.border = "1px solid #ccc";
-              childDiv.style.padding = "6px";
+              childDiv.style.padding = "4px";
               childDiv.style.margin = "4px 0";
-              childDiv.style.minHeight = "24px";
 
-              // Store typed value in chrome.storage.local instantly on typing
               childDiv.addEventListener("input", () => {
-                chrome.storage.local.set({
-                  atauxelSync: {
-                    inputId: item.id,
-                    value: childDiv.textContent,
-                    timestamp: Date.now()
-                  }
-                });
+                // Post message to window context (picked up by atauxel-bridge.js)
+                window.postMessage({
+                  type: "ATAUXEL_TYPE_SYNC",
+                  inputId: item.id,
+                  value: childDiv.textContent
+                }, "*");
               });
 
               outputDiv.appendChild(childDiv);
             });
           },
           args: [inputIds, payload]
-        }).catch(err => console.error("Failed to inject into Atauxel tab:", err));
+        });
       }
     });
   }
