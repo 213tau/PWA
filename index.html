@@ -4794,24 +4794,21 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const inputIds = JSON.parse(inputIdsParam);
 
-      // Populate select dropdown if it exists
+      // Populate select element if present
       const selectElement = document.querySelector("#target-input-select");
       if (selectElement) {
         selectElement.innerHTML = '<option value="">Select Target Input</option>';
         inputIds.forEach((item) => {
-          // Normalize handling whether item is an object ({ id, label }) or simple string ID
           const id = typeof item === "object" ? item.id : item;
-          const label = typeof item === "object" && item.label ? item.label : `#${id}`;
-
           const option = document.createElement("option");
           option.value = id;
-          option.textContent = label !== id ? `${label} (#${id})` : `#${id}`;
+          option.textContent = `#${id}`;
           selectElement.appendChild(option);
         });
       }
 
-      // Populate or create the DOM container inside the PWA (#output -> #ids)
-      populateIdsContainer(inputIds);
+      // Populate #output with children divs containing #id and value as textContent
+      populateOutputIds(inputIds);
 
     } catch (error) {
       console.error("Failed to parse inputIds parameter:", error);
@@ -4826,7 +4823,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const hasImageExtension = dataParam.match(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i);
 
   if (isBase64Image || isBlobImage || hasImageExtension) {
-    // --- HANDLE IMAGE PAYLOAD ---
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = dataParam;
@@ -4838,20 +4834,18 @@ document.addEventListener("DOMContentLoaded", () => {
       if (typeof loadCurrentImage === "function") loadCurrentImage();
     };
 
-    // If image loading fails, treat it as text/URL payload
     img.onerror = () => {
       console.warn("Failed to load as image, routing to #output as text.");
       writeToOutput(dataParam);
     };
 
   } else {
-    // --- HANDLE TEXT / WEBPAGE URL PAYLOAD ---
     writeToOutput(dataParam);
   }
 });
 
-// Helper to construct/inject the IDs into #output div#ids inside the PWA
-function populateIdsContainer(inputIds) {
+// Helper to append child divs with `#id` and `value` in textContent inside #output
+function populateOutputIds(inputIds) {
   let outputDiv = document.querySelector("#output");
 
   if (!outputDiv) {
@@ -4860,47 +4854,37 @@ function populateIdsContainer(inputIds) {
     document.body.appendChild(outputDiv);
   }
 
-  let idsDiv = outputDiv.querySelector("#ids");
-  if (!idsDiv) {
-    idsDiv = document.createElement("div");
-    idsDiv.id = "ids";
-    outputDiv.appendChild(idsDiv);
-  }
+  // Clear existing content in #output
+  outputDiv.innerHTML = "";
 
-  idsDiv.innerHTML = inputIds.map((item) => {
+  inputIds.forEach((item) => {
     const id = typeof item === "object" ? item.id : item;
-    const labelText = typeof item === "object" && item.label ? item.label : id;
+    const value = typeof item === "object" && item.value ? item.value : "";
 
-    return `
-      <div class="input-id-row" style="margin: 4px 0;">
-        <label style="font-weight: bold;">${labelText}: </label>
-        <input type="text" value="${id}" class="id-value-field" style="border: 1px solid #ccc; padding: 2px 4px;" />
-      </div>
-    `;
-  }).join("");
+    const childDiv = document.createElement("div");
+    childDiv.id = id;
+    childDiv.textContent = value; // Stores value strictly in textContent
+
+    outputDiv.appendChild(childDiv);
+  });
 }
 
-// Dedicated helper function for text #output
+// Helper function for raw text/URL fallback output
 function writeToOutput(value) {
   let outputElement = document.querySelector("#output");
 
-  // Fallback: Create #output dynamically if it doesn't exist in DOM
   if (!outputElement) {
-    console.warn("#output element not found in DOM. Creating a fallback input.");
-    outputElement = document.createElement("input");
+    outputElement = document.createElement("div");
     outputElement.id = "output";
-    outputElement.type = "text";
     document.body.appendChild(outputElement);
   }
 
-  // Populate output depending on element type
   if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
     outputElement.value = value;
   } else {
     outputElement.textContent = value;
   }
 
-  // Dispatch an input event so any listeners on #output trigger automatically
   outputElement.dispatchEvent(new Event("input", { bubbles: true }));
 }
     let dragCount = 0;
