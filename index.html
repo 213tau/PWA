@@ -4793,18 +4793,26 @@ document.addEventListener("DOMContentLoaded", () => {
   if (inputIdsParam) {
     try {
       const inputIds = JSON.parse(inputIdsParam);
-      
-      // If a select element exists, populate it with all available input IDs
+
+      // Populate select dropdown if it exists
       const selectElement = document.querySelector("#target-input-select");
       if (selectElement) {
         selectElement.innerHTML = '<option value="">Select Target Input</option>';
-        inputIds.forEach((id) => {
+        inputIds.forEach((item) => {
+          // Normalize handling whether item is an object ({ id, label }) or simple string ID
+          const id = typeof item === "object" ? item.id : item;
+          const label = typeof item === "object" && item.label ? item.label : `#${id}`;
+
           const option = document.createElement("option");
           option.value = id;
-          option.textContent = `#${id}`;
+          option.textContent = label !== id ? `${label} (#${id})` : `#${id}`;
           selectElement.appendChild(option);
         });
       }
+
+      // Populate or create the DOM container inside the PWA (#output -> #ids)
+      populateIdsContainer(inputIds);
+
     } catch (error) {
       console.error("Failed to parse inputIds parameter:", error);
     }
@@ -4842,7 +4850,37 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// Dedicated helper function for #output
+// Helper to construct/inject the IDs into #output div#ids inside the PWA
+function populateIdsContainer(inputIds) {
+  let outputDiv = document.querySelector("#output");
+
+  if (!outputDiv) {
+    outputDiv = document.createElement("div");
+    outputDiv.id = "output";
+    document.body.appendChild(outputDiv);
+  }
+
+  let idsDiv = outputDiv.querySelector("#ids");
+  if (!idsDiv) {
+    idsDiv = document.createElement("div");
+    idsDiv.id = "ids";
+    outputDiv.appendChild(idsDiv);
+  }
+
+  idsDiv.innerHTML = inputIds.map((item) => {
+    const id = typeof item === "object" ? item.id : item;
+    const labelText = typeof item === "object" && item.label ? item.label : id;
+
+    return `
+      <div class="input-id-row" style="margin: 4px 0;">
+        <label style="font-weight: bold;">${labelText}: </label>
+        <input type="text" value="${id}" class="id-value-field" style="border: 1px solid #ccc; padding: 2px 4px;" />
+      </div>
+    `;
+  }).join("");
+}
+
+// Dedicated helper function for text #output
 function writeToOutput(value) {
   let outputElement = document.querySelector("#output");
 
