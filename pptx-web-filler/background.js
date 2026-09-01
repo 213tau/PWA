@@ -266,7 +266,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               document.body.appendChild(outputDiv);
             }
 
-            outputDiv.innerHTML = "";
+            //outputDiv.innerHTML = "";
 
             // Render URL Payload
             const urlBlock = document.createElement("div");

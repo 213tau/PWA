@@ -195,7 +195,7 @@ if (window.location.hostname.includes("atauxel.vercel.app")) {
       }, (response) => {
         const outputElement = document.querySelector("#output");
         if (response && response.success) {
-          if (outputElement) outputElement.innerHTML = response.data;
+          if (outputElement) outputElement.innerHTML += response.data;
           window.postMessage({ action: "UI_STATUS", status: "Domicile Data loaded successfully!" }, "*");
         } else {
           window.postMessage({ action: "UI_STATUS", status: "Error: " + (response?.error || "Failed to fetch") }, "*");
