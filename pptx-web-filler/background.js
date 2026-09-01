@@ -145,9 +145,6 @@ function cleanupWorker(targetTabId) {
 // ==========================================
 // CONTEXT MENU SETUP & CLICK HANDLER
 // ==========================================
-// ==========================================
-// CONTEXT MENU SETUP & CLICK HANDLER
-// ==========================================
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openWithAtauxel",
@@ -198,6 +195,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   } else if (info.pageUrl) {
     payload = info.pageUrl;
   }
+
+  
 
   if (!payload) return;
 
@@ -256,5 +255,45 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     });
   } else {
     chrome.tabs.create({ url: targetUrl, active: true });
+  }
+
+  if (isPageContext) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          // Extract all input IDs from the page
+          const inputs = Array.from(document.querySelectorAll("input[id]"));
+          
+          // Locate or construct the container: #output div#ids
+          let outputDiv = document.querySelector("#output");
+          if (!outputDiv) {
+            outputDiv = document.createElement("div");
+            outputDiv.id = "output";
+            document.body.appendChild(outputDiv);
+          }
+
+          let idsDiv = outputDiv.querySelector("#ids");
+          if (!idsDiv) {
+            idsDiv = document.createElement("div");
+            idsDiv.id = "ids";
+            outputDiv.appendChild(idsDiv);
+          }
+
+          // Build and inject editable label:value rows
+          idsDiv.innerHTML = inputs.map(el => {
+            const labelText = el.name || el.placeholder || el.id;
+            return `
+              <div class="input-id-row" style="margin: 4px 0;">
+                <label style="font-weight: bold;">${labelText}: </label>
+                <input type="text" value="${el.id}" class="id-value-field" style="border: 1px solid #ccc; padding: 2px 4px;" />
+              </div>
+            `;
+          }).join("");
+        }
+      });
+    } catch (error) {
+      console.error("Failed to inject input IDs into DOM:", error);
+    }
   }
 });
