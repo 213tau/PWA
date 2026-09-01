@@ -140,82 +140,104 @@
 // ==========================================
 // PWA BRIDGE: Runs on atauxel.vercel.app
 // ==========================================
+// Ensure this script only runs on your target host
 if (window.location.hostname.includes("atauxel.vercel.app")) {
 
-  // Listen for commands from your PWA UI to trigger the fetch
+  // =========================================================================
+  // 1. LISTEN FOR MESSAGES FROM THE PWA PAGE (window.postMessage -> Extension)
+  // =========================================================================
   window.addEventListener("message", (event) => {
-    if (event.origin !== window.location.origin) return; // Security check
-    
-    if (event.data) {
-      if (event.data.type === "FETCH_DLIMS_DATA") {
-        window.postMessage({ action: "UI_STATUS", status: "Initializing DLIMS request..." }, "*");
-        
-        chrome.runtime.sendMessage({
-          action: "open_dlims_background",
-          cnic: event.data.cnic,
-          dob: event.data.dob
-        });
-      } 
-      else if (event.data.type === "FETCH_IRIS_DATA") {
-        window.postMessage({ action: "UI_STATUS", status: "Initializing IRIS request..." }, "*");
-        
-        chrome.runtime.sendMessage({
-          action: "open_iris_background",
-          cnic: event.data.cnic
-        });
-      }
-      // NEW: Handle Domicile Ajax fetch request triggered from PWA button
-      else if (event.data.type === "FETCH_DOMICILE_DATA") {
-        window.postMessage({ action: "UI_STATUS", status: "Fetching Domicile data..." }, "*");
-        
-        chrome.runtime.sendMessage({
-          action: "fetch_domicile_background",
-          id: event.data.id
-        }, (response) => {
-          const outputElement = document.querySelector("#output");
-          if (response && response.success) {
-            if (outputElement) outputElement.innerHTML = response.data;
-            window.postMessage({ action: "UI_STATUS", status: "Domicile Data loaded successfully!" }, "*");
-          } else {
-            window.postMessage({ action: "UI_STATUS", status: "Error: " + (response?.error || "Failed to fetch") }, "*");
-          }
-        });
-      }
-      // === NEW: Handle Open WhatsApp Request from PWA ===
-      else if (event.data.type === "OPEN_WHATSAPP") {
-        const elementText = document.querySelector('#output')?.innerText || "";
-        const regex = /(?:\+92|0)?3\d{2}[\s\-]?\d{7}/;
-        const match = elementText.match(regex);
+    // Security check: drop messages from external sources
+    if (event.origin !== window.location.origin) return;
 
-        if (match) {
-          let phoneNumber = match[0];
+    if (!event.data) return;
 
-          // Format to international standard (923XXXXXXXXX)
-          if (phoneNumber.startsWith("0")) {
-            phoneNumber = "92" + phoneNumber.substring(1);
-          } else if (phoneNumber.startsWith("+")) {
-            phoneNumber = phoneNumber.replace("+", "");
-          }
-          
-          phoneNumber = phoneNumber.replace(/\D/g, '');
-          const message = encodeURIComponent("Tanveer Studio!"); 
-          const targetUrl = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;
-
-          // Send request to background script to manage tabs/windows
-          chrome.runtime.sendMessage({
-            action: "open_whatsapp_background",
-            targetUrl: targetUrl
-          });
-
-          window.postMessage({ action: "UI_STATUS", status: "Opening WhatsApp..." }, "*");
-        } else {
-          window.postMessage({ action: "UI_STATUS", status: "Error: Please enter a valid phone number in #output." }, "*");
+    // --- TYPING SYNC BACK TO SOURCE PAGE ---
+    if (event.data.type === "ATAUXEL_TYPE_SYNC") {
+      const { inputId, value } = event.data;
+      chrome.storage.local.set({
+        atauxelSync: {
+          inputId: inputId,
+          value: value,
+          timestamp: Date.now()
         }
+      });
+    }
+
+    // --- FETCH DLIMS DATA ---
+    else if (event.data.type === "FETCH_DLIMS_DATA") {
+      window.postMessage({ action: "UI_STATUS", status: "Initializing DLIMS request..." }, "*");
+
+      chrome.runtime.sendMessage({
+        action: "open_dlims_background",
+        cnic: event.data.cnic,
+        dob: event.data.dob
+      });
+    }
+
+    // --- FETCH IRIS DATA ---
+    else if (event.data.type === "FETCH_IRIS_DATA") {
+      window.postMessage({ action: "UI_STATUS", status: "Initializing IRIS request..." }, "*");
+
+      chrome.runtime.sendMessage({
+        action: "open_iris_background",
+        cnic: event.data.cnic
+      });
+    }
+
+    // --- FETCH DOMICILE DATA ---
+    else if (event.data.type === "FETCH_DOMICILE_DATA") {
+      window.postMessage({ action: "UI_STATUS", status: "Fetching Domicile data..." }, "*");
+
+      chrome.runtime.sendMessage({
+        action: "fetch_domicile_background",
+        id: event.data.id
+      }, (response) => {
+        const outputElement = document.querySelector("#output");
+        if (response && response.success) {
+          if (outputElement) outputElement.innerHTML = response.data;
+          window.postMessage({ action: "UI_STATUS", status: "Domicile Data loaded successfully!" }, "*");
+        } else {
+          window.postMessage({ action: "UI_STATUS", status: "Error: " + (response?.error || "Failed to fetch") }, "*");
+        }
+      });
+    }
+
+    // --- OPEN WHATSAPP REQUEST ---
+    else if (event.data.type === "OPEN_WHATSAPP") {
+      const elementText = document.querySelector("#output")?.innerText || "";
+      const regex = /(?:\+92|0)?3\d{2}[\s\-]?\d{7}/;
+      const match = elementText.match(regex);
+
+      if (match) {
+        let phoneNumber = match[0];
+
+        // Format phone number to standard international format (923XXXXXXXXX)
+        if (phoneNumber.startsWith("0")) {
+          phoneNumber = "92" + phoneNumber.substring(1);
+        } else if (phoneNumber.startsWith("+")) {
+          phoneNumber = phoneNumber.replace("+", "");
+        }
+
+        phoneNumber = phoneNumber.replace(/\D/g, "");
+        const message = encodeURIComponent("Tanveer Studio!");
+        const targetUrl = `https://web.whatsapp.com/send/?phone=${phoneNumber}&text=${message}&type=phone_number&app_absent=0`;
+
+        chrome.runtime.sendMessage({
+          action: "open_whatsapp_background",
+          targetUrl: targetUrl
+        });
+
+        window.postMessage({ action: "UI_STATUS", status: "Opening WhatsApp..." }, "*");
+      } else {
+        window.postMessage({ action: "UI_STATUS", status: "Error: Please enter a valid phone number in #output." }, "*");
       }
     }
   });
 
-  // Listen for data coming back from the extension background script (DLIMS/IRIS)
+  // =========================================================================
+  // 2. LISTEN FOR MESSAGES FROM EXTENSION BACKGROUND SCRIPT (Extension -> PWA)
+  // =========================================================================
   chrome.runtime.onMessage.addListener((message) => {
     const outputElement = document.querySelector("#output");
     if (!outputElement) return;
@@ -229,6 +251,7 @@ if (window.location.hostname.includes("atauxel.vercel.app")) {
       window.postMessage({ action: "UI_STATUS", status: "IRIS Data loaded successfully!" }, "*");
     }
   });
+
 }
 
 // ==========================================
