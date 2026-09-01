@@ -244,9 +244,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // Inject extracted IDs into the newly created Atauxel tab
+  // Inject clean divs directly into target tab's #output
   if (isPageContext && atauxelTabId) {
-    // Wait for the Atauxel tab to finish loading before injecting DOM
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
         chrome.tabs.onUpdated.removeListener(listener);
@@ -261,19 +260,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               document.body.appendChild(outputDiv);
             }
 
-            let idsDiv = outputDiv.querySelector("#ids");
-            if (!idsDiv) {
-              idsDiv = document.createElement("div");
-              idsDiv.id = "ids";
-              outputDiv.appendChild(idsDiv);
-            }
+            // Remove previous content/nodes
+            outputDiv.innerHTML = "";
 
-            idsDiv.innerHTML = data.map(item => `
-              <div class="input-id-row" style="margin: 4px 0;">
-                <label style="font-weight: bold;">${item.label}: </label>
-                <input type="text" value="${item.id}" class="id-value-field" style="border: 1px solid #ccc; padding: 2px 4px;" />
-              </div>
-            `).join("");
+            // Inject <div id="labelid">value</div>
+            data.forEach(item => {
+              const childDiv = document.createElement("div");
+              childDiv.id = item.label || item.id;
+              childDiv.textContent = item.id;
+              outputDiv.appendChild(childDiv);
+            });
           },
           args: [inputIds]
         }).catch(err => console.error("Failed to inject into Atauxel tab:", err));
