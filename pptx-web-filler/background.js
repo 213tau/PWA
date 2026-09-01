@@ -143,7 +143,20 @@ function cleanupWorker(targetTabId) {
   ]);
 }
 // ==========================================
-// CONTEXT MENU SETUP & CLICK HANDLER
+// 1. GLOBAL MESSAGE RELAY (Atauxel -> Source)
+// ==========================================
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === "syncToSource" && message.targetTabId) {
+    chrome.tabs.sendMessage(message.targetTabId, {
+      action: "updateSourceInput",
+      targetInputId: message.targetInputId,
+      value: message.value
+    }).catch(err => console.error("Failed to relay message to source tab:", err));
+  }
+});
+
+// ==========================================
+// 2. CONTEXT MENU SETUP & CLICK HANDLER
 // ==========================================
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -159,7 +172,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let payload = "";
   const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
-  // Extract input IDs from the current tab
+  // Extract input IDs from the current source tab
   let inputIds = [];
   try {
     const results = await chrome.scripting.executeScript({
@@ -174,6 +187,31 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
   } catch (error) {
     console.error("Failed to fetch input IDs from tab:", error);
+  }
+
+  // Inject input listener onto source tab to receive updates from Atauxel
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        if (window.hasAtauxelSyncListener) return;
+        window.hasAtauxelSyncListener = true;
+
+        chrome.runtime.onMessage.addListener((message) => {
+          if (message.action === "updateSourceInput") {
+            const inputEl = document.getElementById(message.targetInputId);
+            if (inputEl) {
+              inputEl.value = message.value;
+              // Dispatch events to support modern reactive frameworks (React, Vue, Svelte)
+              inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+              inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          }
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Failed to inject sync listener into source tab:", error);
   }
 
   // Handle Payload Selection
@@ -244,7 +282,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // Inject clean divs directly into target tab's #output
+  // Inject dynamic, synced elements into Atauxel tab's #output
   if (isPageContext && atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -252,7 +290,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
-          func: (data) => {
+          func: (data, sourceTabId) => {
             let outputDiv = document.querySelector("#output");
             if (!outputDiv) {
               outputDiv = document.createElement("div");
@@ -260,18 +298,30 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               document.body.appendChild(outputDiv);
             }
 
-            // Remove previous content/nodes
             outputDiv.innerHTML = "";
 
-            // Inject <div id="labelid">value</div>
             data.forEach(item => {
               const childDiv = document.createElement("div");
               childDiv.id = item.label || item.id;
+              
+              // Enable typing & sync settings
+              childDiv.contentEditable = "true";
               childDiv.textContent = item.id;
+
+              // Send typed updates back to background script on input
+              childDiv.addEventListener("input", () => {
+                chrome.runtime.sendMessage({
+                  action: "syncToSource",
+                  targetTabId: sourceTabId,
+                  targetInputId: item.id,
+                  value: childDiv.textContent
+                });
+              });
+
               outputDiv.appendChild(childDiv);
             });
           },
-          args: [inputIds]
+          args: [inputIds, tab.id]
         }).catch(err => console.error("Failed to inject into Atauxel tab:", err));
       }
     });
