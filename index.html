@@ -4793,23 +4793,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (inputIdsParam) {
     try {
       const inputIds = JSON.parse(inputIdsParam);
-
-      // Populate select element if present
-      const selectElement = document.querySelector("#target-input-select");
-      if (selectElement) {
-        selectElement.innerHTML = '<option value="">Select Target Input</option>';
-        inputIds.forEach((item) => {
-          const id = typeof item === "object" ? item.id : item;
-          const option = document.createElement("option");
-          option.value = id;
-          option.textContent = `#${id}`;
-          selectElement.appendChild(option);
-        });
-      }
-
-      // Populate #output with children divs containing #id and value as textContent
       populateOutputIds(inputIds);
-
     } catch (error) {
       console.error("Failed to parse inputIds parameter:", error);
     }
@@ -4844,7 +4828,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// Helper to append child divs with `#id` and `value` in textContent inside #output
+// Helper to construct/inject child divs directly inside #output
 function populateOutputIds(inputIds) {
   let outputDiv = document.querySelector("#output");
 
@@ -4854,16 +4838,16 @@ function populateOutputIds(inputIds) {
     document.body.appendChild(outputDiv);
   }
 
-  // Clear existing content in #output
+  // Preserve initial URL text if present or clear
   outputDiv.innerHTML = "";
 
   inputIds.forEach((item) => {
-    const id = typeof item === "object" ? item.id : item;
-    const value = typeof item === "object" && item.value ? item.value : "";
+    const labelId = typeof item === "object" ? (item.label || item.id) : item;
+    const val = typeof item === "object" ? (item.value || item.id) : item;
 
     const childDiv = document.createElement("div");
-    childDiv.id = id;
-    childDiv.textContent = value; // Stores value strictly in textContent
+    childDiv.id = labelId;
+    childDiv.textContent = val;
 
     outputDiv.appendChild(childDiv);
   });
@@ -4882,7 +4866,8 @@ function writeToOutput(value) {
   if (outputElement.tagName === "TEXTAREA" || outputElement.tagName === "INPUT") {
     outputElement.value = value;
   } else {
-    outputElement.textContent = value;
+    // Append URL above the child divs if needed, or set direct content
+    outputElement.insertBefore(document.createTextNode(value), outputElement.firstChild);
   }
 
   outputElement.dispatchEvent(new Event("input", { bubbles: true }));
