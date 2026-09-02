@@ -4881,30 +4881,22 @@ async function searchText() {
             };
 
             // Directly fetch record from IndexedDB by ID and attach to #jsfileinput
-            div.querySelector('.load-file-btn').onclick = async () => {
-                const fileInput = document.getElementById("jsfileInput");
-                if (!fileInput) return;
+            // Assign file to #jsfileInput on button click using r.blob directly
+div.querySelector('.load-file-btn').onclick = () => {
+    const fileInput = document.getElementById("jsfileInput");
+    if (!fileInput || !r.blob) return;
 
-                // Re-open transaction to ensure clean state and fetch direct Blob from IndexedDB
-                const fetchTx = db.transaction("files", "readonly");
-                const getReq = fetchTx.objectStore("files").get(r.id);
+    // Convert IndexedDB blob directly into a File instance
+    const file = new File([r.blob], r.name, { type: r.blob.type || "application/octet-stream" });
 
-                getReq.onsuccess = () => {
-                    const record = getReq.result;
-                    if (!record || !record.blob) return;
+    // Use DataTransfer to populate the input's FileList
+    const container = new DataTransfer();
+    container.items.add(file);
+    fileInput.files = container.files;
 
-                    // Reconstruct File directly from IndexedDB Blob
-                    const file = new File([record.blob], record.name, { type: record.blob.type });
-                    
-                    // Assign to input file array via DataTransfer
-                    const container = new DataTransfer();
-                    container.items.add(file);
-                    fileInput.files = container.files;
-
-                    // Trigger input change listener
-                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                };
-            };
+    // Dispatch change event to notify any change listeners
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+};
 
             output.appendChild(div);
 
