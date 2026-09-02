@@ -4867,15 +4867,34 @@ async function searchText() {
             div.innerHTML = `
                 <span class="file-path">${r.displayPath}</span>
                 <a class="file-link">${icon} ${r.name}</a>
+                <button class="load-file-btn" style="margin-left:8px; cursor:pointer;">Load File</button>
                 ${isPptx ? `<div id="${thumbContainerId}" class="thumb-box" style="margin:6px 0;"></div>` : ''}
                 <div class="extracted-data">${dataHtml}</div>
             `;
             
+            // Download file on link click
             div.querySelector('.file-link').onclick = () => {
                 const url = URL.createObjectURL(r.blob);
                 const a = document.createElement("a");
                 a.href = url; a.download = r.name; a.click();
                 URL.revokeObjectURL(url);
+            };
+
+            // Assign file to #jsfileinput on button click
+            div.querySelector('.load-file-btn').onclick = () => {
+                const fileInput = document.getElementById("jsfileinput");
+                if (!fileInput) return;
+
+                // Convert Blob back to a File instance
+                const file = new File([r.blob], r.name, { type: r.blob.type });
+                
+                // Construct a DataTransfer payload to assign files programmatically
+                const container = new DataTransfer();
+                container.items.add(file);
+                fileInput.files = container.files;
+
+                // Dispatch a change event so input listeners trigger
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
             };
 
             output.appendChild(div);
