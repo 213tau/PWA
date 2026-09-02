@@ -3573,22 +3573,33 @@ images.forEach(function (e, index) {
 
     async function downscaleAllImages(maxWidth, maxHeight) {
     for (let i = 0; i < images.length; i++) {
-        const img = images[i].img || images[i]; // supports ImageObject or Image
+        const currentItem = images[i];
+        const img = currentItem.img || currentItem; // supports ImageObject or Image
 
+        // 1. Calculate target dimensions while preserving aspect ratio
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+            const ratio = Math.min(maxWidth / width, maxHeight / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+        }
+
+        // 2. Create canvas with the target downscaled size
         const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth || img.width;
-        canvas.height = img.naturalHeight || img.height;
+        canvas.width = width;
+        canvas.height = height;
 
         const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, width, height);
 
-        downscaleImage(canvas, maxWidth, maxHeight);
-
+        // 3. Convert to new Image object asynchronously
         await new Promise((resolve) => {
             const newImg = new Image();
 
             newImg.onload = () => {
-                if (images[i] instanceof ImageObject) {
+                if (currentItem instanceof ImageObject) {
                     images[i] = new ImageObject(newImg);
                 } else {
                     images[i] = newImg;
