@@ -9580,7 +9580,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   const zip = new JSZip();
   const outputEl = document.querySelector('#output');
 
-  // 1. Process Images
+  // 1. Process Base Images
   let imagesarray = Array.from(document.querySelectorAll('img'));
   if (imagesarray.length && typeof images !== 'undefined' && images.length > 0) {
     imagesarray = await Promise.all(images.map(async (e) => {
@@ -9602,12 +9602,11 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     }
   }
 
-  // 2. Prepare XML Boilerplate Structures
-  // Slide dimensions: A4 in EMU (1 inch = 914,400 EMUs)
-  const slideWidthEmu = 7561584;  // 8.27 inches
+  // A4 dimensions in EMUs (1 inch = 914,400 EMUs)
+  const slideWidthEmu = 7561584;   // 8.27 inches
   const slideHeightEmu = 10689588; // 11.69 inches
 
-  // Base relationships & content types
+  // 2. Add Package-Wide Files
   zip.file('[Content_Types].xml', getContentTypesXml(validImages.length, !!outputEl));
   zip.file('_rels/.rels', getRootRelsXml());
   
@@ -9615,40 +9614,39 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   pptFolder.file('presentation.xml', getPresentationXml(validImages.length, !!outputEl));
   pptFolder.file('_rels/presentation.xml.rels', getPresentationRelsXml(validImages.length, !!outputEl));
 
-  // Base layout and master
   pptFolder.file('slideMasters/slideMaster1.xml', getSlideMasterXml());
   pptFolder.file('slideMasters/_rels/slideMaster1.xml.rels', getSlideMasterRelsXml());
   pptFolder.file('slideLayouts/slideLayout1.xml', getSlideLayoutXml());
   pptFolder.file('slideLayouts/_rels/slideLayout1.xml.rels', getSlideLayoutRelsXml());
 
-  // 3. Add Image Slides (OOXML)
   const slidesFolder = pptFolder.folder('slides');
   const slideRelsFolder = slidesFolder.folder('_rels');
   const mediaFolder = pptFolder.folder('media');
 
+  // 3. Build Image Slides
   for (let i = 0; i < validImages.length; i++) {
     const src = validImages[i];
     const imageNumber = i + 1;
     const base64Data = src.split(',')[1];
-    const extension = src.substring("data:image/".length, src.indexOf(";base64")) || "png";
+    
+    // Determine proper extension
+    let extension = "png";
+    if (src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg")) {
+      extension = "jpeg";
+    }
 
-    // Add raw image asset
     mediaFolder.file(`image${imageNumber}.${extension}`, base64Data, { base64: true });
 
-    // Calculate Aspect Ratio Fit
     const img = new Image();
     img.src = src;
     await new Promise(res => img.onload = res);
 
-    const imgWidth = img.naturalWidth;
-    const imgHeight = img.naturalHeight;
-    const aspectRatio = imgHeight / imgWidth;
-
+    const aspectRatio = img.naturalHeight / img.naturalWidth;
     const targetWidthEmu = slideWidthEmu;
     const targetHeightEmu = Math.round(targetWidthEmu * aspectRatio);
     const yOffsetEmu = Math.max(Math.round((slideHeightEmu - targetHeightEmu) / 2), 0);
 
-    // Slide XML (Image element drawing)
+    // Image Slide XML
     slidesFolder.file(`slide${imageNumber}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld>
@@ -9658,8 +9656,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
       <p:pic>
         <p:nvPicPr>
           <p:cNvPr id="2" name="Image ${imageNumber}"/>
-          <p:cNvPicPr/>
-          <p:nvPr/>
+          <p:cNvPicPr/><p:nvPr/>
         </p:nvPicPr>
         <p:blipFill>
           <a:blip r:embed="rId2"/>
@@ -9677,7 +9674,6 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   </p:cSld>
 </p:sld>`);
 
-    // Slide Relationship XML
     slideRelsFolder.file(`slide${imageNumber}.xml.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
@@ -9685,23 +9681,53 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
 </Relationships>`);
   }
 
-  // 4. Add Text Slide (if output element exists)
+  // 4. Build Rich Text & Native Tables Slide
   if (outputEl && outputEl.textContent.trim() !== '') {
     const textSlideIndex = validImages.length + 1;
-    const lines = Array.from(outputEl.children)
-      .map(div => div.innerText.trim())
-      .filter(line => line.length > 0);
+    const elementsXml = [];
+    
+    let currentY = 457200; // 0.5 inches margin
+    const marginX = 457200;
+    const contentWidth = slideWidthEmu - (marginX * 2);
 
-    const paragraphsXml = lines.map(line => `
-      <a:p>
-        <a:r>
-          <a:rPr lang="en-US" sz="1800" dirty="0">
-            <a:solidFill><a:srgbClr val="363636"/></a:solidFill>
-          </a:rPr>
-          <a:t>${escapeXml(line)}</a:t>
-        </a:r>
-      </a:p>
-    `).join('');
+    let shapeId = 2;
+
+    for (const child of Array.from(outputEl.children)) {
+      if (child.tagName === 'TABLE') {
+        const tableXml = buildValidOoxmlTable(child, shapeId++, marginX, currentY, contentWidth);
+        if (tableXml.xml) {
+          elementsXml.push(tableXml.xml);
+          currentY += tableXml.estimatedHeight + 200000;
+        }
+      } else {
+        const paragraphsXml = parseRichTextNode(child);
+        if (!paragraphsXml.trim()) continue;
+
+        const textShapeHeight = 400000;
+        elementsXml.push(`
+          <p:sp>
+            <p:nvSpPr>
+              <p:cNvPr id="${shapeId++}" name="TextShape"/>
+              <p:cNvSpPr txBox="1"/><p:nvPr/>
+            </p:nvSpPr>
+            <p:spPr>
+              <a:xfrm>
+                <a:off x="${marginX}" y="${currentY}"/>
+                <a:ext cx="${contentWidth}" cy="${textShapeHeight}"/>
+              </a:xfrm>
+              <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+              <a:noFill/>
+            </p:spPr>
+            <p:txBody>
+              <a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" wrap="square"/>
+              <a:lstStyle/>
+              ${paragraphsXml}
+            </p:txBody>
+          </p:sp>
+        `);
+        currentY += textShapeHeight + 100000;
+      }
+    }
 
     slidesFolder.file(`slide${textSlideIndex}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
@@ -9709,26 +9735,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     <p:spTree>
       <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
       <p:grpSpPr/>
-      <p:sp>
-        <p:nvSpPr>
-          <p:cNvPr id="2" name="TextBox"/>
-          <p:cNvSpPr txBox="1"/>
-          <p:nvPr/>
-        </p:nvSpPr>
-        <p:spPr>
-          <a:xfrm>
-            <a:off x="457200" y="457200"/>
-            <a:ext cx="6647184" cy="9775188"/>
-          </a:xfrm>
-          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-          <a:noFill/>
-        </p:spPr>
-        <p:txBody>
-          <a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0"/>
-          <a:lstStyle/>
-          ${paragraphsXml}
-        </p:txBody>
-      </p:sp>
+      ${elementsXml.join('')}
     </p:spTree>
   </p:cSld>
 </p:sld>`);
@@ -9739,7 +9746,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
 </Relationships>`);
   }
 
-  // 5. Determine Filename & Export
+  // 5. Trigger File Download
   let fileName = "a4-images-presentation.pptx";
   if (outputEl) {
     const match = outputEl.textContent.match(/\d{5}-\d{7}-\d{1}/);
@@ -9751,7 +9758,6 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     }
   }
 
-  // Trigger download using JSZip
   const blob = await zip.generateAsync({ type: 'blob' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
@@ -9759,8 +9765,124 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   link.click();
 });
 
-// Helper XML String Generators
+// Helper: Schema-Valid HTML Rich Text Parser
+function parseRichTextNode(element) {
+  let runsXml = '';
+  
+  function walk(node, isBold = false, isItalic = false) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (!text) return;
+      
+      const bAttr = isBold ? ' b="1"' : '';
+      const iAttr = isItalic ? ' i="1"' : '';
+      
+      runsXml += `<a:r><a:rPr lang="en-US" sz="1600"${bAttr}${iAttr}><a:solidFill><a:srgbClr val="363636"/></a:solidFill></a:rPr><a:t>${escapeXml(text)}</a:t></a:r>`;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const tag = node.tagName.toLowerCase();
+      const bold = isBold || tag === 'b' || tag === 'strong' || /^h[1-6]$/.test(tag);
+      const italic = isItalic || tag === 'i' || tag === 'em';
+
+      node.childNodes.forEach(child => walk(child, bold, italic));
+    }
+  }
+
+  walk(element);
+  return runsXml ? `<a:p>${runsXml}</a:p>` : '';
+}
+
+// Helper: Schema-Valid OOXML Graphic Frame Table Generator
+function buildValidOoxmlTable(tableEl, id, x, y, availableWidth) {
+  const rows = Array.from(tableEl.querySelectorAll('tr'));
+  if (!rows.length) return { xml: '', estimatedHeight: 0 };
+
+  // Calculate strict uniform grid lengths across all rows
+  let maxCols = 0;
+  rows.forEach(r => {
+    const count = r.querySelectorAll('th, td').length;
+    if (count > maxCols) maxCols = count;
+  });
+
+  if (maxCols === 0) return { xml: '', estimatedHeight: 0 };
+
+  const colWidth = Math.floor(availableWidth / maxCols);
+  let gridColsXml = '';
+  for (let i = 0; i < maxCols; i++) {
+    gridColsXml += `<a:gridCol w="${colWidth}"/>`;
+  }
+
+  let rowsXml = '';
+  const rowHeight = 360000;
+
+  rows.forEach(tr => {
+    const cells = Array.from(tr.querySelectorAll('th, td'));
+    let cellsXml = '';
+
+    for (let c = 0; c < maxCols; c++) {
+      const cell = cells[c];
+      const isHeader = cell ? cell.tagName === 'TH' : false;
+      const cellText = cell ? cell.innerText.trim() : '';
+
+      cellsXml += `
+        <a:tc>
+          <a:txBody>
+            <a:bodyPr/>
+            <a:lstStyle/>
+            <a:p>
+              <a:r>
+                <a:rPr lang="en-US" sz="1400" ${isHeader ? 'b="1"' : ''}>
+                  <a:solidFill><a:srgbClr val="${isHeader ? 'FFFFFF' : '363636'}"/></a:solidFill>
+                </a:rPr>
+                <a:t>${escapeXml(cellText)}</a:t>
+              </a:r>
+            </a:p>
+          </a:txBody>
+          <a:tcPr>
+            <a:solidFill>
+              <a:srgbClr val="${isHeader ? '4472C4' : 'F2F2F2'}"/>
+            </a:solidFill>
+          </a:tcPr>
+        </a:tc>
+      `;
+    }
+
+    rowsXml += `<a:tr h="${rowHeight}">${cellsXml}</a:tr>`;
+  });
+
+  const estimatedHeight = rows.length * rowHeight;
+
+  // Graphic Frame strictly obeying DrawingML schema
+  const xml = `
+    <p:graphicFrame>
+      <p:nvGraphicFramePr>
+        <p:cNvPr id="${id}" name="Table ${id}"/>
+        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
+        <p:nvPr/>
+      </p:nvGraphicFramePr>
+      <p:xfrm>
+        <a:off x="${x}" y="${y}"/>
+        <a:ext cx="${availableWidth}" cy="${estimatedHeight}"/>
+      </p:xfrm>
+      <a:graphic>
+        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:tbl>
+            <a:tblPr firstRow="1" bandRow="1"/>
+            <a:tblGrid>
+              ${gridColsXml}
+            </a:tblGrid>
+            ${rowsXml}
+          </a:tbl>
+        </a:graphicData>
+      </a:graphic>
+    </p:graphicFrame>
+  `;
+
+  return { xml, estimatedHeight };
+}
+
+// Utility: Strict Entity Escaper
 function escapeXml(unsafe) {
+  if (!unsafe) return '';
   return unsafe.replace(/[<>&'"]/g, c => {
     switch (c) {
       case '<': return '&lt;';
@@ -9768,10 +9890,12 @@ function escapeXml(unsafe) {
       case '&': return '&amp;';
       case '\'': return '&apos;';
       case '"': return '&quot;';
+      default: return c;
     }
   });
 }
 
+// Fixed Package Configuration Structures
 function getContentTypesXml(imageCount, hasTextSlide) {
   const totalSlides = imageCount + (hasTextSlide ? 1 : 0);
   let slidesOverride = '';
