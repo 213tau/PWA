@@ -731,6 +731,9 @@ background: brown;
   <!-- MAIN TAB CONTENTS -->
   <main>
     <div class="tab-content" id="imageProcessing">
+      <button onclick="savecanvas()" class="primary">Save Canvas</button>
+      <button id="canvastoimage">Canvas to Array</button>      
+      <button id="savecanvas">Save Canvas</button>
       <button id="warpBtn">Warp Image</button>
       <button onclick="contrastStretchingWithHistogramClipping(document.querySelector('canvas'), 2, 'both')">Histogram Clipping Both</button>
       <button onclick="applyContrastStretching(true);">Auto Light Enhancement</button>
@@ -744,10 +747,7 @@ background: brown;
       <button onclick="downscaleImage(canvas, 1024, 1024);">Downscale</button>
       <button onclick="downscaleAllImages(1024,1024);">Downscale All</button>
       <button onclick="upscaleAndSharpen(canvas, 1024, 1024);">Upscale & Sharpen</button>
-      <button id="ocrrequired">Canvas to Text</button>      
-      <button onclick="savecanvas()" class="primary">Save Canvas</button>
-      <button id="canvastoimage">Canvas to Array</button>      
-      <button id="savecanvas">Save Canvas</button>
+      <button id="ocrrequired">Canvas to Text</button>            
       <button id="InvertContrastStreching">Invert Contrast</button>
       <button id="invertcolor">Invert Colors</button>
       <button onclick="removeBackgroundFromCorners()">Remove Background</button>
