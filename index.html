@@ -3325,6 +3325,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
+<!-- PPTXjs for rendering slide 1 when no thumbnail preview exists -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pptxjs@1.21.1/dist/pptxjs.css">
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxjs@1.21.1/dist/pptxjs.min.js"></script>
   <script>
 const EMU_TO_PX = 96 / 914400;
 const PX_TO_EMU = 914400 / 96;
@@ -4801,51 +4805,101 @@ function handleDataAction(value, type, el) {
     }
 }
 
+async function getPptxThumbnail(fileBlob, fallbackContainerId) {
+    try {
+        const zip = await JSZip.loadAsync(fileBlob);
+        
+        // Check for PowerPoint's built-in thumbnail
+        const thumbnailFile = zip.file("docProps/thumbnail.jpeg") || zip.file("docProps/thumbnail.png");
+        
+        if (thumbnailFile) {
+            const imgBlob = await thumbnailFile.async("blob");
+            return { type: "image", url: URL.createObjectURL(imgBlob) };
+        }
+    } catch (e) {
+        console.warn("Fast zip extraction failed, falling back to dynamic rendering:", e);
+    }
+
+    // Fallback: Render Slide 1 dynamically if embedded thumbnail was not found
+    return new Promise((resolve) => {
+        try {
+            $(`#${fallbackContainerId}`).pptxToHtml({
+                pptxFileUrl: URL.createObjectURL(fileBlob),
+                slideMode: false,
+                keyProcess: false,
+                slideNum: 1,
+                defaultVisible: true,
+                slidesScale: "30%",
+                mediaProcess: false
+            });
+            resolve({ type: "rendered" });
+        } catch (err) {
+            console.error("Dynamic slide rendering failed:", err);
+            resolve(null);
+        }
+    });
+}
+
 async function searchText() {
     const query = document.getElementById("searchBox").value.toLowerCase().trim();
     const db = await openDB();
     const tx = db.transaction("files", "readonly");
     const request = tx.objectStore("files").getAll();
-    
+
     request.onsuccess = () => {
         const results = request.result.filter(f => 
             query === "" ? ((f.links && f.links.length > 0) || (f.phones && f.phones.length > 0)) : f.content.includes(query)
         );
-        
+
         const output = document.getElementById("results");
         output.innerHTML = `<h3>Matches: ${results.length}</h3>`;
-        
-        results.forEach(r => {
+
+        results.forEach((r, idx) => {
             const div = document.createElement("div");
             div.className = "result-item";
-            
+
             let dataHtml = "";
-            if(r.links && r.links.length) {
+            if (r.links && r.links.length) {
                 dataHtml += `<div><span class="label">Links:</span>${r.links.map(l => 
                     `<span class="data-tag" onclick="handleDataAction('${l}', 'link', this)">${l}</span>`
                 ).join('')}</div>`;
             }
-            if(r.phones && r.phones.length) {
+            if (r.phones && r.phones.length) {
                 dataHtml += `<div style="margin-top:5px"><span class="label">Phones:</span>${r.phones.map(p => 
                     `<span class="data-tag" onclick="handleDataAction('${p}', 'phone', this)">${p}</span>`
                 ).join('')}</div>`;
             }
 
-            const icon = r.name.toLowerCase().endsWith('.docx') ? '📝' : '📄';
+            const isPptx = r.name.toLowerCase().endsWith('.pptx');
+            const icon = r.name.toLowerCase().endsWith('.docx') ? '📝' : (isPptx ? '📊' : '📄');
+            const thumbContainerId = `pptx-thumb-${idx}`;
 
             div.innerHTML = `
                 <span class="file-path">${r.displayPath}</span>
                 <a class="file-link">${icon} ${r.name}</a>
+                ${isPptx ? `<div id="${thumbContainerId}" class="thumb-box" style="min-height:60px; max-width:180px; margin:5px 0;"></div>` : ''}
                 <div class="extracted-data">${dataHtml}</div>
             `;
-            
+
             div.querySelector('.file-link').onclick = () => {
                 const url = URL.createObjectURL(r.blob);
                 const a = document.createElement("a");
                 a.href = url; a.download = r.name; a.click();
                 URL.revokeObjectURL(url);
             };
+
             output.appendChild(div);
+
+            // Lazy load thumbnail in background without blocking UI rendering
+            if (isPptx && r.blob) {
+                setTimeout(async () => {
+                    const thumbResult = await getPptxThumbnail(r.blob, thumbContainerId);
+                    const container = document.getElementById(thumbContainerId);
+                    if (container && thumbResult && thumbResult.type === "image") {
+                        container.innerHTML = `<img src="${thumbResult.url}" style="max-width:140px; max-height:100px; border:1px solid #ccc; border-radius:4px;" />`;
+                    }
+                }, 0);
+            }
         });
     };
 }
