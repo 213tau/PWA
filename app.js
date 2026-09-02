@@ -9072,8 +9072,8 @@ organize.addEventListener('click', async function() {
     let sizeInKB = 0;
     let currentCanvasOrImage = null;
     let currentBlob = null;
+    let currentBase64 = '';
     
-    // Default file name determination
     let currentFileName = item.name || item.file?.name || 'image.jpg';
 
     // 1. File Name Input Field
@@ -9086,6 +9086,17 @@ organize.addEventListener('click', async function() {
     nameInput.style.textAlign = 'center';
     container.appendChild(nameInput);
 
+    // Helper to keep blob, size, and base64 cache synchronized
+    async function updateBlobAndBase64(blob) {
+      currentBlob = blob;
+      sizeInKB = blob.size / 1024;
+      currentBase64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+
     if (item.img instanceof HTMLElement) {
       const clone = item.img.cloneNode(true);      
       clone.style.maxWidth = '150px';
@@ -9096,19 +9107,19 @@ organize.addEventListener('click', async function() {
       currentCanvasOrImage = clone;
 
       if (item.blob instanceof Blob || item.file instanceof Blob) {
-        currentBlob = item.blob || item.file;
-        sizeInKB = currentBlob.size / 1024;
+        await updateBlobAndBase64(item.blob || item.file);
       } 
       else if (item.img.src && item.img.src.startsWith('blob:')) {
         try {
           const response = await fetch(item.img.src);
-          currentBlob = await response.blob();
-          sizeInKB = currentBlob.size / 1024;
+          const blob = await response.blob();
+          await updateBlobAndBase64(blob);
         } catch (e) {
           sizeInKB = 0;
         }
       }
       else if (item.img.src) {
+        currentBase64 = item.img.src;
         sizeInKB = getSourceSizeInKB(item.img.src);
       }
     } 
@@ -9127,6 +9138,7 @@ organize.addEventListener('click', async function() {
       currentCanvasOrImage = canvas;
 
       sizeInKB = item.imageData.data.length / 1024;
+      currentBase64 = canvas.toDataURL('image/jpeg');
     }
 
     // Editable Size Input Container
@@ -9163,8 +9175,9 @@ organize.addEventListener('click', async function() {
         ctx.drawImage(currentCanvasOrImage, 0, 0);
       }
 
-      findBestJPEGQuality(targetCanvas, targetKB, (newBlob) => {
-        currentBlob = newBlob;
+      findBestJPEGQuality(targetCanvas, targetKB, async (newBlob) => {
+        // Cache the new blob and its Base64 representation immediately
+        await updateBlobAndBase64(newBlob);
         const newObjectURL = URL.createObjectURL(newBlob);
         
         if (currentCanvasOrImage instanceof HTMLImageElement) {
@@ -9183,31 +9196,19 @@ organize.addEventListener('click', async function() {
           currentCanvasOrImage = newImg;
         }
 
-        sizeInput.value = (newBlob.size / 1024).toFixed(1);
+        sizeInput.value = sizeInKB.toFixed(1);
       });
     });
 
-    // Helper to attach drag event using Base64 data conversion
+    // Helper to attach drag event using the pre-cached Base64 string
     function attachDragEvent(element) {
       element.addEventListener('dragstart', function(e) {
-        let targetCanvas = element;
-        if (!(targetCanvas instanceof HTMLCanvasElement)) {
-          targetCanvas = document.createElement('canvas');
-          targetCanvas.width = element.naturalWidth || element.width;
-          targetCanvas.height = element.naturalHeight || element.height;
-          const ctx = targetCanvas.getContext('2d');
-          ctx.drawImage(element, 0, 0);
-        }
-
-        // Convert blob/element to Base64 data URL synchronously on drag
-        const base64Data = targetCanvas.toDataURL('image/jpeg');
         const finalFileName = nameInput.value.trim() || 'image.jpg';
-
-        // Set DownloadURL payload format (MIME:filename:Base64DataURL)
-        const downloadUrl = `image/jpeg:${finalFileName}:${base64Data}`;
+        const downloadUrl = `image/jpeg:${finalFileName}:${currentBase64}`;
+        
         e.dataTransfer.setData('DownloadURL', downloadUrl);
-        e.dataTransfer.setData('text/uri-list', base64Data);
-        e.dataTransfer.setData('text/plain', base64Data);
+        e.dataTransfer.setData('text/uri-list', currentBase64);
+        e.dataTransfer.setData('text/plain', currentBase64);
       });
     }
 
