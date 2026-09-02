@@ -4867,7 +4867,7 @@ async function searchText() {
             div.innerHTML = `
                 <span class="file-path">${r.displayPath}</span>
                 <a class="file-link">${icon} ${r.name}</a>
-                <button class="load-file-btn" style="margin-left:8px; cursor:pointer;">Load File</button>
+                <button class="load-file-btn" data-id="${r.id}" style="margin-left:8px; cursor:pointer;">Load File</button>
                 ${isPptx ? `<div id="${thumbContainerId}" class="thumb-box" style="margin:6px 0;"></div>` : ''}
                 <div class="extracted-data">${dataHtml}</div>
             `;
@@ -4880,21 +4880,30 @@ async function searchText() {
                 URL.revokeObjectURL(url);
             };
 
-            // Assign file to #jsfileinput on button click
-            div.querySelector('.load-file-btn').onclick = () => {
+            // Directly fetch record from IndexedDB by ID and attach to #jsfileinput
+            div.querySelector('.load-file-btn').onclick = async () => {
                 const fileInput = document.getElementById("jsfileinput");
                 if (!fileInput) return;
 
-                // Convert Blob back to a File instance
-                const file = new File([r.blob], r.name, { type: r.blob.type });
-                
-                // Construct a DataTransfer payload to assign files programmatically
-                const container = new DataTransfer();
-                container.items.add(file);
-                fileInput.files = container.files;
+                // Re-open transaction to ensure clean state and fetch direct Blob from IndexedDB
+                const fetchTx = db.transaction("files", "readonly");
+                const getReq = fetchTx.objectStore("files").get(r.id);
 
-                // Dispatch a change event so input listeners trigger
-                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                getReq.onsuccess = () => {
+                    const record = getReq.result;
+                    if (!record || !record.blob) return;
+
+                    // Reconstruct File directly from IndexedDB Blob
+                    const file = new File([record.blob], record.name, { type: record.blob.type });
+                    
+                    // Assign to input file array via DataTransfer
+                    const container = new DataTransfer();
+                    container.items.add(file);
+                    fileInput.files = container.files;
+
+                    // Trigger input change listener
+                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                };
             };
 
             output.appendChild(div);
@@ -4908,7 +4917,6 @@ async function searchText() {
                     if (thumbnailUrl) {
                         container.innerHTML = `<img src="${thumbnailUrl}" style="max-width:140px; max-height:100px; border:1px solid #ccc; border-radius:4px; display:block;" />`;
                     } else {
-                        // Fallback badge when PPTX lacks embedded media
                         container.innerHTML = `<span style="font-size:11px; color:#666; background:#f0f0f0; padding:2px 6px; border-radius:3px; border:1px solid #ddd;">No preview available</span>`;
                     }
                 });
