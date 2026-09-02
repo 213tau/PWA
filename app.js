@@ -9285,3 +9285,227 @@ const query = document.querySelector("#output").innerText;
 const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 window.open(searchUrl, '_blank');
 }
+
+/**
+ * Reads from 'canvas#canvas', processes text and bounding boxes, 
+ * creates/appends a container via JS if missing, and appends the SVG inside it.
+ */
+async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetContainer = null) {
+    const sourceCanvas = document.getElementById('canvas');
+    if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
+
+    const w = sourceCanvas.width;
+    const h = sourceCanvas.height;
+    const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+    const SVG_NS = "http://www.w3.org/2000/svg";
+
+    // Text Normalization
+    const fixText = (str) => (str || '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+        .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+        .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+        .trim();
+
+    // Two-Pass CCL Bounding Box Extraction
+    function computeCCL(dilationX = 4) {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const binaryMap = new Uint8Array(w * h);
+
+        for (let i = 0; i < data.length; i += 4) {
+            const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+            binaryMap[i / 4] = lum < 140 ? 1 : 0;
+        }
+
+        const dilatedMap = new Uint8Array(w * h);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                if (binaryMap[y * w + x] === 1) {
+                    for (let dx = -dilationX; dx <= dilationX; dx++) {
+                        const nx = x + dx;
+                        if (nx >= 0 && nx < w) dilatedMap[y * w + nx] = 1;
+                    }
+                }
+            }
+        }
+
+        const labels = new Int32Array(w * h);
+        const parent = [0];
+        let nextLabel = 1;
+
+        const find = (i) => {
+            let root = i;
+            while (root !== parent[root]) root = parent[root];
+            let curr = i;
+            while (curr !== root) {
+                let nxt = parent[curr];
+                parent[curr] = root;
+                curr = nxt;
+            }
+            return root;
+        };
+
+        const union = (i, j) => {
+            const rootI = find(i);
+            const rootJ = find(j);
+            if (rootI !== rootJ) parent[rootI] = rootJ;
+        };
+
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const idx = y * w + x;
+                if (!dilatedMap[idx]) continue;
+
+                const west = x > 0 ? labels[idx - 1] : 0;
+                const north = y > 0 ? labels[idx - w] : 0;
+
+                if (!west && !north) {
+                    labels[idx] = nextLabel;
+                    parent[nextLabel] = nextLabel;
+                    nextLabel++;
+                } else if (west && !north) {
+                    labels[idx] = west;
+                } else if (!west && north) {
+                    labels[idx] = north;
+                } else {
+                    labels[idx] = west;
+                    union(west, north);
+                }
+            }
+        }
+
+        const boxMap = {};
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const idx = y * w + x;
+                if (!labels[idx]) continue;
+                const root = find(labels[idx]);
+                if (!boxMap[root]) boxMap[root] = { x0: x, y0: y, x1: x, y1: y, count: 0 };
+                const b = boxMap[root];
+                if (x < b.x0) b.x0 = x;
+                if (x > b.x1) b.x1 = x;
+                if (y < b.y0) b.y0 = y;
+                if (y > b.y1) b.y1 = y;
+                b.count++;
+            }
+        }
+        return Object.values(boxMap).filter(b => b.count > 12);
+    }
+
+    // Color Sampler
+    function sampleColor(bbox) {
+        const bx = Math.max(0, Math.floor(bbox.x0));
+        const by = Math.max(0, Math.floor(bbox.y0));
+        const bw = Math.min(w - bx, Math.max(1, Math.floor(bbox.x1 - bbox.x0)));
+        const bh = Math.min(h - by, Math.max(1, Math.floor(bbox.y1 - bbox.y0)));
+
+        const imgData = ctx.getImageData(bx, by, bw, bh).data;
+        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+
+        for (let i = 0; i < imgData.length; i += 4) {
+            const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
+            if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 180) {
+                rSum += r; gSum += g; bSum += b;
+                count++;
+            }
+        }
+        return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
+    }
+
+    // Bounding Box Matcher
+    function getMatchedBox(wordBbox, cclBoxes) {
+        let bestMatch = null, maxOverlap = 0;
+        const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
+
+        for (const box of cclBoxes) {
+            const interX0 = Math.max(wordBbox.x0, box.x0);
+            const interY0 = Math.max(wordBbox.y0, box.y0);
+            const interX1 = Math.min(wordBbox.x1, box.x1);
+            const interY1 = Math.min(wordBbox.y1, box.y1);
+
+            if (interX1 > interX0 && interY1 > interY0) {
+                const overlap = (interX1 - interX0) * (interY1 - interY0);
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    bestMatch = box;
+                }
+            }
+        }
+        return (maxOverlap / wArea > 0.3) ? { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 } : wordBbox;
+    }
+
+    // Binarize Canvas
+    const binarizedCanvas = document.createElement('canvas');
+    binarizedCanvas.width = w;
+    binarizedCanvas.height = h;
+    const bCtx = binarizedCanvas.getContext('2d');
+    const bData = ctx.getImageData(0, 0, w, h);
+    for (let i = 0; i < bData.data.length; i += 4) {
+        const v = (0.2126 * bData.data[i] + 0.7152 * bData.data[i + 1] + 0.0722 * bData.data[i + 2]) < 140 ? 0 : 255;
+        bData.data[i] = bData.data[i + 1] = bData.data[i + 2] = v;
+    }
+    bCtx.putImageData(bData, 0, 0);
+
+    const cclBoxes = mode === 'word' ? computeCCL() : [];
+    
+    // Perform OCR
+    const worker = await OCRPool.getWorker();
+    const ocrResult = await worker.recognize(binarizedCanvas);
+
+    // Build SVG Node
+    const svgEl = document.createElementNS(SVG_NS, "svg");
+    svgEl.setAttribute("xmlns", SVG_NS);
+    svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    svgEl.setAttribute("width", "100%");
+    svgEl.setAttribute("height", "100%");
+
+    const bgRect = document.createElementNS(SVG_NS, "rect");
+    bgRect.setAttribute("width", w);
+    bgRect.setAttribute("height", h);
+    bgRect.setAttribute("fill", "#ffffff");
+    svgEl.appendChild(bgRect);
+
+    const items = mode === 'line' ? ocrResult.data.lines : ocrResult.data.words;
+    const minConfidence = mode === 'line' ? 40 : 35;
+
+    items.forEach(item => {
+        const cleanText = fixText(item.text);
+        if (item.confidence < minConfidence || !cleanText) return;
+
+        const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
+        const boxW = Math.max(1, bbox.x1 - bbox.x0);
+        const boxH = Math.max(8, bbox.y1 - bbox.y0);
+        const textColor = sampleColors ? sampleColor(bbox) : "#000000";
+
+        const svgText = document.createElementNS(SVG_NS, "text");
+        svgText.setAttribute("x", bbox.x0);
+        svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
+        svgText.setAttribute("font-size", `${boxH * 0.85}px`);
+        svgText.setAttribute("font-family", "Arial, sans-serif");
+        svgText.setAttribute("fill", textColor);
+        svgText.setAttribute("textLength", boxW);
+        svgText.setAttribute("lengthAdjust", "spacingAndGlyphs");
+        svgText.textContent = cleanText;
+
+        svgEl.appendChild(svgText);
+    });
+
+    // Determine/Create Container dynamically
+    let container = null;
+    if (targetContainer) {
+        container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
+    }
+
+    // If no target container exists or is provided, create one and append it to document.body
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'generated-svg-container';
+        document.body.appendChild(container);
+    }
+
+    // Append the SVG into the container
+    container.appendChild(svgEl);
+
+    return svgEl;
+}
