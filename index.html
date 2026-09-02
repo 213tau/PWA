@@ -4882,7 +4882,7 @@ async function searchText() {
 
             // Directly fetch record from IndexedDB by ID and attach to #jsfileinput
             div.querySelector('.load-file-btn').onclick = async () => {
-                const fileInput = document.getElementById("jsfileinput");
+                const fileInput = document.getElementById("jsfileInput");
                 if (!fileInput) return;
 
                 // Re-open transaction to ensure clean state and fetch direct Blob from IndexedDB
