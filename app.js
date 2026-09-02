@@ -9525,3 +9525,53 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 
     return svgEl;
 }
+
+function stripShadowsAndBinarize() {
+  const canvas = document.querySelector("canvas");
+  const ctx = canvas.getContext("2d");
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  // 1. Grayscale
+  const gray = new Uint8Array(width * height);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    gray[j] = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+  }
+
+  // 2. Estimate Background Illumination via a heavy Box Filter / Max Filter
+  // (A kernel larger than stroke widths isolates the background light level)
+  const bg = new Uint8Array(width * height);
+  const blurRadius = 16; 
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let maxVal = 0;
+      // Sampling points around the neighborhood to find local background intensity
+      for (let dy = -blurRadius; dy <= blurRadius; dy += 4) {
+        for (let dx = -blurRadius; dx <= blurRadius; dx += 4) {
+          const nx = Math.min(Math.max(x + dx, 0), width - 1);
+          const ny = Math.min(Math.max(y + dy, 0), height - 1);
+          const val = gray[ny * width + nx];
+          if (val > maxVal) maxVal = val;
+        }
+      }
+      bg[y * width + x] = maxVal;
+    }
+  }
+
+  // 3. Division Normalization + Binarization
+  for (let i = 0; i < gray.length; i++) {
+    // Normalizing pixel intensity relative to background light level
+    const normalized = Math.min(255, (gray[i] / (bg[i] || 1)) * 255);
+    
+    // Thresholding the clean, shadow-free image
+    const val = normalized < 180 ? 0 : 255;
+
+    const idx = i * 4;
+    data[idx] = data[idx + 1] = data[idx + 2] = val;
+    data[idx + 3] = 255;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
