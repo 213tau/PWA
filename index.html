@@ -745,18 +745,12 @@ background: brown;
       <button onclick="downscaleAllImages(1024,1024);">Downscale All</button>
       <button onclick="upscaleAndSharpen(canvas, 1024, 1024);">Upscale & Sharpen</button>
       <button id="ocrrequired">Canvas to Text</button>      
-      <div style="margin-top: 15px;">
-        <label for="rotationSlider">Rotation: </label>
-        <input type="range" id="rotationSlider" min="-45" max="45" value="0" step="0.01" style="width: 100%; max-width: 500px;">
-        <span id="angleValue">0°</span>
-      </div>
-      <br>
       <button onclick="savecanvas()" class="primary">Save Canvas</button>
       <button id="canvastoimage">Canvas to Array</button>      
-      <button id="savecanvas">Save Canvas</button>      
+      <button id="savecanvas">Save Canvas</button>
       <button id="InvertContrastStreching">Invert Contrast</button>
       <button id="invertcolor">Invert Colors</button>
-      <button id="canvastoimage">Canvas to Image</button>
+      <button onclick="removeBackgroundFromCorners()">Remove Background</button>
       <button id="sharpenImage">Sharpening Kernel</button>
       <button onclick="applyMagicFilter()">Magic Filter</button>
       <button onclick="applyBiHistogramEqualizationWithEdgePreservation()">Bi Histogram Eq</button>
@@ -789,6 +783,11 @@ background: brown;
       <button onclick="edgeAwareAdaptiveThresholdingSobel()">Edge-Aware (Sobel)</button>      
       <button onclick="edgeAwareAdaptiveThresholding()">Adaptive Thresholding</button>
       <button onclick="cclForOCR()">CCL for OCR</button>
+      <div style="margin-top: 15px;">
+        <label for="rotationSlider">Rotation: </label>
+        <input type="range" id="rotationSlider" min="-45" max="45" value="0" step="0.01" style="width: 100%; max-width: 500px;">
+        <span id="angleValue">0°</span>
+      </div>      
     </div>
 
     <div class="tab-content" id="organizeData">  
@@ -2246,6 +2245,118 @@ function handleMagicWandClick(e) {
   const feathered = boxBlurMask(normalizeFuzzyMask(mask), width, height, 3);
   addMask(feathered);
   redrawWithMask();
+}
+
+function removeBackgroundFromCorners(fuzziness = 10) {
+  const canvas = document.getElementById("canvas");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  // 1. Target starting corners: [0,0] (upper-left) and [width-1, 0] (upper-right)
+  const seedPoints = [
+    [0, 0],
+    [width - 1, 0]
+  ];
+
+  // 2. Local state tracking
+  const mask = new Float32Array(width * height);
+  const visited = new Uint8Array(width * height);
+
+  function getColor(x, y) {
+    const i = (y * width + x) * 4;
+    return [data[i], data[i + 1], data[i + 2]];
+  }
+
+  function fuzzyColorMatch(c1, c2) {
+    const dist =
+      (c1[0] - c2[0]) ** 2 +
+      (c1[1] - c2[1]) ** 2 +
+      (c1[2] - c2[2]) ** 2;
+    const maxDist = fuzziness * fuzziness * 30;
+    if (dist >= maxDist) return 0;
+    const prob = 1 - dist / maxDist;
+    return prob * prob;
+  }
+
+  // 3. Flood fill both corners in a single unified traversal loop
+  for (const [startX, startY] of seedPoints) {
+    const targetColor = getColor(startX, startY);
+    const stack = [[startX, startY]];
+
+    while (stack.length) {
+      const [x, y] = stack.pop();
+      if (x < 0 || y < 0 || x >= width || y >= height) continue;
+
+      const idx = y * width + x;
+      if (visited[idx]) continue;
+      visited[idx] = 1;
+
+      const currentColor = getColor(x, y);
+      if (fuzzyColorMatch(currentColor, targetColor) > 0.05) {
+        mask[idx] = 1;
+        stack.push([x + 1, y]);
+        stack.push([x - 1, y]);
+        stack.push([x, y + 1]);
+        stack.push([x, y - 1]);
+      }
+    }
+  }
+
+  // 4. Single-pass Box Blur for edge softening
+  const radius = 3;
+  const temp = new Float32Array(width * height);
+
+  // Horizontal pass
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0, count = 0;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = x + dx;
+        if (nx >= 0 && nx < width) {
+          sum += (mask[y * width + nx] > 0.25 ? 1 : 0);
+          count++;
+        }
+      }
+      temp[y * width + x] = sum / count;
+    }
+  }
+
+  // Vertical pass & write directly to output ImageData
+  const output = ctx.createImageData(width, height);
+  const outData = output.data;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0, count = 0;
+      for (let dy = -radius; dy <= radius; dy++) {
+        const ny = y + dy;
+        if (ny >= 0 && ny < height) {
+          sum += temp[ny * width + x];
+          count++;
+        }
+      }
+      
+      const idx = y * width + x;
+      const isSelected = (sum / count) > 0.1;
+
+      if (!isSelected) {
+        outData[idx * 4] = data[idx * 4];
+        outData[idx * 4 + 1] = data[idx * 4 + 1];
+        outData[idx * 4 + 2] = data[idx * 4 + 2];
+        outData[idx * 4 + 3] = 255;
+      } else {
+        outData[idx * 4 + 3] = 0; // Transparent
+      }
+    }
+  }
+
+  // 5. Draw result to canvas
+  ctx.putImageData(output, 0, 0);
 }
 
 /*
