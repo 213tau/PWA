@@ -9290,6 +9290,22 @@ window.open(searchUrl, '_blank');
  * Reads from 'canvas#canvas', processes text and bounding boxes, 
  * creates/appends a container via JS if missing, and appends the SVG inside it.
  */
+
+// OCRPool wrapper for CDN-loaded Tesseract.js
+const OCRPool = {
+    _workerPromise: null,
+    async getWorker() {
+        if (!this._workerPromise) {
+            this._workerPromise = (async () => {
+                // Initialize worker for English (v5 syntax)
+                const worker = await Tesseract.createWorker('eng');
+                return worker;
+            })();
+        }
+        return this._workerPromise;
+    }
+};
+
 async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
