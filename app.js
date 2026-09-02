@@ -9064,14 +9064,17 @@ organize.addEventListener('click', async function() {
     container.style.display = 'inline-block';
     container.style.textAlign = 'center';
     container.style.margin = '5px';
+    container.style.verticalAlign = 'top';
 
     let sizeInKB = 0;
+    let currentCanvasOrImage = null;
 
     if (item.img instanceof HTMLElement) {
       const clone = item.img.cloneNode(true);      
       clone.style.maxWidth = '150px';
       clone.style.display = 'block';
       container.appendChild(clone);
+      currentCanvasOrImage = clone;
 
       // 1. Check direct Blob/File property
       if (item.blob instanceof Blob || item.file instanceof Blob) {
@@ -9102,31 +9105,71 @@ organize.addEventListener('click', async function() {
       canvas.style.maxWidth = '150px';
       canvas.style.display = 'block';
       container.appendChild(canvas);
+      currentCanvasOrImage = canvas;
 
       sizeInKB = item.imageData.data.length / 1024;
     }
 
-    const sizeLabel = document.createElement('div');
-    sizeLabel.style.fontSize = '12px';
-    sizeLabel.style.color = '#555';
-    sizeLabel.style.marginTop = '4px';
-    sizeLabel.textContent = `${sizeInKB.toFixed(1)} KB`;
-    container.appendChild(sizeLabel);
+    // Editable Size Input Container
+    const inputWrapper = document.createElement('div');
+    inputWrapper.style.marginTop = '4px';
+
+    const sizeInput = document.createElement('input');
+    sizeInput.type = 'number';
+    sizeInput.value = sizeInKB.toFixed(1);
+    sizeInput.style.width = '70px';
+    sizeInput.style.textAlign = 'center';
+    sizeInput.style.fontSize = '12px';
+
+    const kbLabel = document.createElement('span');
+    kbLabel.textContent = ' KB';
+    kbLabel.style.fontSize = '12px';
+    kbLabel.style.color = '#555';
+
+    inputWrapper.appendChild(sizeInput);
+    inputWrapper.appendChild(kbLabel);
+    container.appendChild(inputWrapper);
+
+    // Event listener to trigger compression/resize on typing/entering target KB
+    sizeInput.addEventListener('change', async function() {
+      const targetKB = parseFloat(sizeInput.value);
+      if (isNaN(targetKB) || targetKB <= 0) return;
+
+      // Convert current element to canvas if it's an <img> element
+      let targetCanvas = currentCanvasOrImage;
+      if (!(targetCanvas instanceof HTMLCanvasElement)) {
+        targetCanvas = document.createElement('canvas');
+        targetCanvas.width = currentCanvasOrImage.naturalWidth || currentCanvasOrImage.width;
+        targetCanvas.height = currentCanvasOrImage.naturalHeight || currentCanvasOrImage.height;
+        const ctx = targetCanvas.getContext('2d');
+        ctx.drawImage(currentCanvasOrImage, 0, 0);
+      }
+
+      // Find the best quality to match the target KB
+      findBestJPEGQuality(targetCanvas, targetKB, (newBlob) => {
+        const newObjectURL = URL.createObjectURL(newBlob);
+        
+        // Update the displayed element with the newly compressed image
+        if (currentCanvasOrImage instanceof HTMLImageElement) {
+          currentCanvasOrImage.src = newObjectURL;
+        } else {
+          // Replace canvas preview or update it
+          const newImg = document.createElement('img');
+          newImg.src = newObjectURL;
+          newImg.style.maxWidth = '150px';
+          newImg.style.display = 'block';
+          container.replaceChild(newImg, currentCanvasOrImage);
+          currentCanvasOrImage = newImg;
+        }
+
+        // Update input field to reflect the actual achieved size
+        sizeInput.value = (newBlob.size / 1024).toFixed(1);
+      });
+    });
 
     organizeDataDiv.appendChild(container);
   }
 });
-
-function getSourceSizeInKB(src) {
-  if (src.startsWith('data:')) {
-    const base64Marker = ';base64,';
-    const base64Index = src.indexOf(base64Marker);
-    if (base64Index !== -1) {
-      return ((src.substring(base64Index + base64Marker.length).length * 3) / 4) / 1024;
-    }
-  }
-  return 0;
-}
 
 // Helper function to estimate size of base64 data URLs
 function getSourceSizeInKB(src) {
@@ -9139,7 +9182,44 @@ function getSourceSizeInKB(src) {
       return bytes / 1024;
     }
   }
-  return 0; // Fallback if size cannot be determined synchronously
+  return 0;
+}
+
+function getJPEGBlob(canvas, quality, callback) {
+  canvas.toBlob((blob) => {
+    callback(blob);
+  }, 'image/jpeg', quality);
+}
+
+function findBestJPEGQuality(canvas, targetKB, callback) {
+  let low = 0.1;
+  let high = 1.0;
+  let iterations = 10;
+  let i = 0;
+
+  function next() {
+    if (i >= iterations) {
+      getJPEGBlob(canvas, (low + high) / 2, callback);
+      return;
+    }
+
+    const mid = (low + high) / 2;
+
+    getJPEGBlob(canvas, mid, (blob) => {
+      const sizeKB = blob.size / 1024;
+
+      if (sizeKB > targetKB) {
+        high = mid;
+      } else {
+        low = mid;
+      }
+
+      i++;
+      next();
+    });
+  }
+
+  next();
 }
 
 function googlesearch(){
