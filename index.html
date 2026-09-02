@@ -2921,12 +2921,18 @@ async function loadImagesToGallery() {
     app.imageUrls.forEach(url => URL.revokeObjectURL(url));
     app.imageUrls = [];
 
-    const media = Object.keys(app.zip.files).filter(f => f.startsWith("ppt/media/"));
+    // Filter out directories (paths ending with '/')
+    const media = Object.keys(app.zip.files).filter(f => f.startsWith("ppt/media/") && !f.endsWith("/"));
     if (!media.length) { grid.innerHTML = "No images found."; return; }
 
     grid.innerHTML = "";
     for (let path of media) {
-        const blob = await app.zip.file(path).async("blob");
+        const zipFile = app.zip.file(path);
+        
+        // Ensure the file object actually exists
+        if (!zipFile) continue;
+
+        const blob = await zipFile.async("blob");
         const url = URL.createObjectURL(blob);
         app.imageUrls.push(url);
 
