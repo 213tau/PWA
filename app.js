@@ -1316,6 +1316,7 @@ rotateBtn?.addEventListener("click", async () => {
 
   try {
     await rotateCurrentImage();
+    loadCurrentImage();
   } catch (err) {
     console.error("Rotation failed:", err);
   } finally {
