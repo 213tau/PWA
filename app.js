@@ -9063,34 +9063,51 @@ organize.addEventListener('click', async function() {
     const container = document.createElement('div');
     container.style.display = 'inline-block';
     container.style.textAlign = 'center';
-    container.style.margin = '5px';
+    container.style.margin = '10px';
     container.style.verticalAlign = 'top';
+    container.style.border = '1px solid #ddd';
+    container.style.padding = '8px';
+    container.style.borderRadius = '4px';
 
     let sizeInKB = 0;
     let currentCanvasOrImage = null;
+    let currentBlob = null;
+    
+    // Default file name determination
+    let currentFileName = item.name || item.file?.name || 'image.jpg';
+
+    // 1. File Name Input Field
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = currentFileName;
+    nameInput.style.width = '140px';
+    nameInput.style.marginBottom = '6px';
+    nameInput.style.fontSize = '12px';
+    nameInput.style.textAlign = 'center';
+    container.appendChild(nameInput);
 
     if (item.img instanceof HTMLElement) {
       const clone = item.img.cloneNode(true);      
       clone.style.maxWidth = '150px';
       clone.style.display = 'block';
+      clone.style.margin = '0 auto';
+      clone.draggable = true;
       container.appendChild(clone);
       currentCanvasOrImage = clone;
 
-      // 1. Check direct Blob/File property
       if (item.blob instanceof Blob || item.file instanceof Blob) {
-        sizeInKB = (item.blob || item.file).size / 1024;
+        currentBlob = item.blob || item.file;
+        sizeInKB = currentBlob.size / 1024;
       } 
-      // 2. Check if src is a blob: URL and fetch its size
       else if (item.img.src && item.img.src.startsWith('blob:')) {
         try {
           const response = await fetch(item.img.src);
-          const blob = await response.blob();
-          sizeInKB = blob.size / 1024;
+          currentBlob = await response.blob();
+          sizeInKB = currentBlob.size / 1024;
         } catch (e) {
           sizeInKB = 0;
         }
       }
-      // 3. Check Base64 data URLs
       else if (item.img.src) {
         sizeInKB = getSourceSizeInKB(item.img.src);
       }
@@ -9104,6 +9121,8 @@ organize.addEventListener('click', async function() {
       
       canvas.style.maxWidth = '150px';
       canvas.style.display = 'block';
+      canvas.style.margin = '0 auto';
+      canvas.draggable = true;
       container.appendChild(canvas);
       currentCanvasOrImage = canvas;
 
@@ -9112,7 +9131,7 @@ organize.addEventListener('click', async function() {
 
     // Editable Size Input Container
     const inputWrapper = document.createElement('div');
-    inputWrapper.style.marginTop = '4px';
+    inputWrapper.style.marginTop = '6px';
 
     const sizeInput = document.createElement('input');
     sizeInput.type = 'number';
@@ -9130,12 +9149,11 @@ organize.addEventListener('click', async function() {
     inputWrapper.appendChild(kbLabel);
     container.appendChild(inputWrapper);
 
-    // Event listener to trigger compression/resize on typing/entering target KB
+    // Event listener to trigger compression/resize on typing target KB
     sizeInput.addEventListener('change', async function() {
       const targetKB = parseFloat(sizeInput.value);
       if (isNaN(targetKB) || targetKB <= 0) return;
 
-      // Convert current element to canvas if it's an <img> element
       let targetCanvas = currentCanvasOrImage;
       if (!(targetCanvas instanceof HTMLCanvasElement)) {
         targetCanvas = document.createElement('canvas');
@@ -9145,33 +9163,60 @@ organize.addEventListener('click', async function() {
         ctx.drawImage(currentCanvasOrImage, 0, 0);
       }
 
-      // Find the best quality to match the target KB
       findBestJPEGQuality(targetCanvas, targetKB, (newBlob) => {
+        currentBlob = newBlob;
         const newObjectURL = URL.createObjectURL(newBlob);
         
-        // Update the displayed element with the newly compressed image
         if (currentCanvasOrImage instanceof HTMLImageElement) {
           currentCanvasOrImage.src = newObjectURL;
         } else {
-          // Replace canvas preview or update it
           const newImg = document.createElement('img');
           newImg.src = newObjectURL;
           newImg.style.maxWidth = '150px';
           newImg.style.display = 'block';
+          newImg.style.margin = '0 auto';
+          newImg.draggable = true;
+          
+          attachDragEvent(newImg);
+          
           container.replaceChild(newImg, currentCanvasOrImage);
           currentCanvasOrImage = newImg;
         }
 
-        // Update input field to reflect the actual achieved size
         sizeInput.value = (newBlob.size / 1024).toFixed(1);
       });
     });
 
+    // Helper to attach drag event using Base64 data conversion
+    function attachDragEvent(element) {
+      element.addEventListener('dragstart', function(e) {
+        let targetCanvas = element;
+        if (!(targetCanvas instanceof HTMLCanvasElement)) {
+          targetCanvas = document.createElement('canvas');
+          targetCanvas.width = element.naturalWidth || element.width;
+          targetCanvas.height = element.naturalHeight || element.height;
+          const ctx = targetCanvas.getContext('2d');
+          ctx.drawImage(element, 0, 0);
+        }
+
+        // Convert blob/element to Base64 data URL synchronously on drag
+        const base64Data = targetCanvas.toDataURL('image/jpeg');
+        const finalFileName = nameInput.value.trim() || 'image.jpg';
+
+        // Set DownloadURL payload format (MIME:filename:Base64DataURL)
+        const downloadUrl = `image/jpeg:${finalFileName}:${base64Data}`;
+        e.dataTransfer.setData('DownloadURL', downloadUrl);
+        e.dataTransfer.setData('text/uri-list', base64Data);
+        e.dataTransfer.setData('text/plain', base64Data);
+      });
+    }
+
+    attachDragEvent(currentCanvasOrImage);
     organizeDataDiv.appendChild(container);
   }
 });
 
-// Helper function to estimate size of base64 data URLs
+// Helper functions
 function getSourceSizeInKB(src) {
   if (src.startsWith('data:')) {
     const base64Marker = ';base64,';
