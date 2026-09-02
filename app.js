@@ -9580,7 +9580,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   const zip = new JSZip();
   const outputEl = document.querySelector('#output');
 
-  // 1. Process Base Images
+  // 1. Process Images
   let imagesarray = Array.from(document.querySelectorAll('img'));
   if (imagesarray.length && typeof images !== 'undefined' && images.length > 0) {
     imagesarray = await Promise.all(images.map(async (e) => {
@@ -9602,11 +9602,12 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     }
   }
 
-  // A4 dimensions in EMUs (1 inch = 914,400 EMUs)
-  const slideWidthEmu = 7561584;   // 8.27 inches
+  // 2. Prepare XML Boilerplate Structures
+  // Slide dimensions: A4 in EMU (1 inch = 914,400 EMUs)
+  const slideWidthEmu = 7561584;  // 8.27 inches
   const slideHeightEmu = 10689588; // 11.69 inches
 
-  // 2. Package-Wide Configurations
+  // Base relationships & content types
   zip.file('[Content_Types].xml', getContentTypesXml(validImages.length, !!outputEl));
   zip.file('_rels/.rels', getRootRelsXml());
   
@@ -9614,37 +9615,40 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   pptFolder.file('presentation.xml', getPresentationXml(validImages.length, !!outputEl));
   pptFolder.file('_rels/presentation.xml.rels', getPresentationRelsXml(validImages.length, !!outputEl));
 
+  // Base layout and master
   pptFolder.file('slideMasters/slideMaster1.xml', getSlideMasterXml());
   pptFolder.file('slideMasters/_rels/slideMaster1.xml.rels', getSlideMasterRelsXml());
   pptFolder.file('slideLayouts/slideLayout1.xml', getSlideLayoutXml());
   pptFolder.file('slideLayouts/_rels/slideLayout1.xml.rels', getSlideLayoutRelsXml());
 
+  // 3. Add Image Slides (OOXML)
   const slidesFolder = pptFolder.folder('slides');
   const slideRelsFolder = slidesFolder.folder('_rels');
   const mediaFolder = pptFolder.folder('media');
 
-  // 3. Build Image Slides
   for (let i = 0; i < validImages.length; i++) {
     const src = validImages[i];
     const imageNumber = i + 1;
     const base64Data = src.split(',')[1];
-    
-    let extension = "png";
-    if (src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg")) {
-      extension = "jpeg";
-    }
+    const extension = src.substring("data:image/".length, src.indexOf(";base64")) || "png";
 
+    // Add raw image asset
     mediaFolder.file(`image${imageNumber}.${extension}`, base64Data, { base64: true });
 
+    // Calculate Aspect Ratio Fit
     const img = new Image();
     img.src = src;
     await new Promise(res => img.onload = res);
 
-    const aspectRatio = img.naturalHeight / img.naturalWidth;
+    const imgWidth = img.naturalWidth;
+    const imgHeight = img.naturalHeight;
+    const aspectRatio = imgHeight / imgWidth;
+
     const targetWidthEmu = slideWidthEmu;
     const targetHeightEmu = Math.round(targetWidthEmu * aspectRatio);
     const yOffsetEmu = Math.max(Math.round((slideHeightEmu - targetHeightEmu) / 2), 0);
 
+    // Slide XML (Image element drawing)
     slidesFolder.file(`slide${imageNumber}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld>
@@ -9654,7 +9658,8 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
       <p:pic>
         <p:nvPicPr>
           <p:cNvPr id="2" name="Image ${imageNumber}"/>
-          <p:cNvPicPr/><p:nvPr/>
+          <p:cNvPicPr/>
+          <p:nvPr/>
         </p:nvPicPr>
         <p:blipFill>
           <a:blip r:embed="rId2"/>
@@ -9672,6 +9677,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   </p:cSld>
 </p:sld>`);
 
+    // Slide Relationship XML
     slideRelsFolder.file(`slide${imageNumber}.xml.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
@@ -9679,53 +9685,23 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
 </Relationships>`);
   }
 
-  // 4. Build Rich Text & Table Slide
+  // 4. Add Text Slide (if output element exists)
   if (outputEl && outputEl.textContent.trim() !== '') {
     const textSlideIndex = validImages.length + 1;
-    const elementsXml = [];
-    
-    let currentY = 457200; // 0.5 inches margin
-    const marginX = 457200;
-    const contentWidth = slideWidthEmu - (marginX * 2);
-    let shapeId = 2;
+    const lines = Array.from(outputEl.children)
+      .map(div => div.innerText.trim())
+      .filter(line => line.length > 0);
 
-    for (const child of Array.from(outputEl.children)) {
-      if (child.tagName === 'TABLE') {
-        const tableXml = buildStrictOoxmlTable(child, shapeId++, marginX, currentY, contentWidth);
-        if (tableXml.xml) {
-          elementsXml.push(tableXml.xml);
-          currentY += tableXml.estimatedHeight + 200000;
-        }
-      } else {
-        const paragraphsXml = parseRichTextNode(child);
-        if (!paragraphsXml.trim()) continue;
-
-        const textShapeHeight = 400000;
-        // Strict element ordering: <p:nvSpPr> -> <p:spPr> -> <p:txBody>
-        elementsXml.push(`
-          <p:sp>
-            <p:nvSpPr>
-              <p:cNvPr id="${shapeId++}" name="TextShape ${shapeId}"/>
-              <p:cNvSpPr txBox="1"/><p:nvPr/>
-            </p:nvSpPr>
-            <p:spPr>
-              <a:xfrm>
-                <a:off x="${marginX}" y="${currentY}"/>
-                <a:ext cx="${contentWidth}" cy="${textShapeHeight}"/>
-              </a:xfrm>
-              <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-              <a:noFill/>
-            </p:spPr>
-            <p:txBody>
-              <a:bodyPr lIns="91440" tIns="45720" rIns="91440" bIns="45720" wrap="square"/>
-              <a:lstStyle/>
-              ${paragraphsXml}
-            </p:txBody>
-          </p:sp>
-        `);
-        currentY += textShapeHeight + 100000;
-      }
-    }
+    const paragraphsXml = lines.map(line => `
+      <a:p>
+        <a:r>
+          <a:rPr lang="en-US" sz="1800" dirty="0">
+            <a:solidFill><a:srgbClr val="363636"/></a:solidFill>
+          </a:rPr>
+          <a:t>${escapeXml(line)}</a:t>
+        </a:r>
+      </a:p>
+    `).join('');
 
     slidesFolder.file(`slide${textSlideIndex}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
@@ -9733,7 +9709,26 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     <p:spTree>
       <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
       <p:grpSpPr/>
-      ${elementsXml.join('')}
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="2" name="TextBox"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="457200" y="457200"/>
+            <a:ext cx="6647184" cy="9775188"/>
+          </a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0"/>
+          <a:lstStyle/>
+          ${paragraphsXml}
+        </p:txBody>
+      </p:sp>
     </p:spTree>
   </p:cSld>
 </p:sld>`);
@@ -9744,7 +9739,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
 </Relationships>`);
   }
 
-  // 5. Save Presentation
+  // 5. Determine Filename & Export
   let fileName = "a4-images-presentation.pptx";
   if (outputEl) {
     const match = outputEl.textContent.match(/\d{5}-\d{7}-\d{1}/);
@@ -9756,6 +9751,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     }
   }
 
+  // Trigger download using JSZip
   const blob = await zip.generateAsync({ type: 'blob' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
@@ -9763,123 +9759,8 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   link.click();
 });
 
-// Helper: Schema-Compliant Rich Text Parser
-function parseRichTextNode(element) {
-  let runsXml = '';
-
-  function walk(node, isBold = false, isItalic = false) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent;
-      if (!text) return;
-      
-      const bAttr = isBold ? ' b="1"' : ' b="0"';
-      const iAttr = isItalic ? ' i="1"' : ' i="0"';
-      
-      runsXml += `<a:r><a:rPr lang="en-US" sz="1600"${bAttr}${iAttr}><a:solidFill><a:srgbClr val="363636"/></a:solidFill></a:rPr><a:t>${escapeXml(text)}</a:t></a:r>`;
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const tag = node.tagName.toLowerCase();
-      const bold = isBold || tag === 'b' || tag === 'strong' || /^h[1-6]$/.test(tag);
-      const italic = isItalic || tag === 'i' || tag === 'em';
-
-      node.childNodes.forEach(child => walk(child, bold, italic));
-    }
-  }
-
-  walk(element);
-  return runsXml ? `<a:p><a:pPr algn="l"/>${runsXml}<a:endParaRPr lang="en-US" sz="1600"/></a:p>` : '';
-}
-
-// Helper: Strict DrawingML Table Builder
-function buildStrictOoxmlTable(tableEl, id, x, y, availableWidth) {
-  const rows = Array.from(tableEl.querySelectorAll('tr'));
-  if (!rows.length) return { xml: '', estimatedHeight: 0 };
-
-  let maxCols = 0;
-  rows.forEach(r => {
-    const count = r.querySelectorAll('th, td').length;
-    if (count > maxCols) maxCols = count;
-  });
-
-  if (maxCols === 0) return { xml: '', estimatedHeight: 0 };
-
-  const colWidth = Math.floor(availableWidth / maxCols);
-  let gridColsXml = '';
-  for (let i = 0; i < maxCols; i++) {
-    gridColsXml += `<a:gridCol w="${colWidth}"/>`;
-  }
-
-  let rowsXml = '';
-  const rowHeight = 360000;
-
-  rows.forEach(tr => {
-    const cells = Array.from(tr.querySelectorAll('th, td'));
-    let cellsXml = '';
-
-    for (let c = 0; c < maxCols; c++) {
-      const cell = cells[c];
-      const isHeader = cell ? cell.tagName === 'TH' : false;
-      const cellText = cell ? cell.innerText.trim() : '';
-
-      cellsXml += `
-        <a:tc>
-          <a:txBody>
-            <a:bodyPr lIns="91440" tIns="45720" rIns="91440" bIns="45720" wrap="square"/>
-            <a:lstStyle/>
-            <a:p>
-              <a:pPr algn="l"/>
-              <a:r>
-                <a:rPr lang="en-US" sz="1400" ${isHeader ? 'b="1"' : 'b="0"'}>
-                  <a:solidFill><a:srgbClr val="${isHeader ? 'FFFFFF' : '363636'}"/></a:solidFill>
-                </a:rPr>
-                <a:t>${escapeXml(cellText)}</a:t>
-              </a:r>
-              <a:endParaRPr lang="en-US" sz="1400"/>
-            </a:p>
-          </a:txBody>
-          <a:tcPr>
-            <a:solidFill>
-              <a:srgbClr val="${isHeader ? '4472C4' : 'F2F2F2'}"/>
-            </a:solidFill>
-          </a:tcPr>
-        </a:tc>`;
-    }
-
-    rowsXml += `<a:tr h="${rowHeight}">${cellsXml}</a:tr>`;
-  });
-
-  const estimatedHeight = rows.length * rowHeight;
-
-  // Strict sequence: <p:nvGraphicFramePr> -> <p:xfrm> -> <a:graphic>
-  const xml = `
-    <p:graphicFrame>
-      <p:nvGraphicFramePr>
-        <p:cNvPr id="${id}" name="Table ${id}"/>
-        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
-        <p:nvPr/>
-      </p:nvGraphicFramePr>
-      <p:xfrm>
-        <a:off x="${x}" y="${y}"/>
-        <a:ext cx="${availableWidth}" cy="${estimatedHeight}"/>
-      </p:xfrm>
-      <a:graphic>
-        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/main">
-          <a:tbl>
-            <a:tblPr firstRow="1" bandRow="1"/>
-            <a:tblGrid>
-              ${gridColsXml}
-            </a:tblGrid>
-            ${rowsXml}
-          </a:tbl>
-        </a:graphicData>
-      </a:graphic>
-    </p:graphicFrame>`;
-
-  return { xml, estimatedHeight };
-}
-
-// Utility: Strict XML Escaper
+// Helper XML String Generators
 function escapeXml(unsafe) {
-  if (!unsafe) return '';
   return unsafe.replace(/[<>&'"]/g, c => {
     switch (c) {
       case '<': return '&lt;';
@@ -9887,7 +9768,91 @@ function escapeXml(unsafe) {
       case '&': return '&amp;';
       case '\'': return '&apos;';
       case '"': return '&quot;';
-      default: return c;
     }
   });
+}
+
+function getContentTypesXml(imageCount, hasTextSlide) {
+  const totalSlides = imageCount + (hasTextSlide ? 1 : 0);
+  let slidesOverride = '';
+  for (let i = 1; i <= totalSlides; i++) {
+    slidesOverride += `<Override PartName="/ppt/slides/slide${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
+  }
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Default Extension="jpeg" ContentType="image/jpeg"/>
+  <Default Extension="jpg" ContentType="image/jpeg"/>
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+  ${slidesOverride}
+</Types>`;
+}
+
+function getRootRelsXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+</Relationships>`;
+}
+
+function getPresentationXml(imageCount, hasTextSlide) {
+  const totalSlides = imageCount + (hasTextSlide ? 1 : 0);
+  let slideList = '';
+  for (let i = 1; i <= totalSlides; i++) {
+    slideList += `<p:sldId id="${255 + i}" r:id="rId${i + 1}"/>`;
+  }
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>
+  <p:sldIdLst>${slideList}</p:sldIdLst>
+  <p:sldSz cx="7561584" cy="10689588"/>
+  <p:notesSz cx="6858000" cy="9144000"/>
+</p:presentation>`;
+}
+
+function getPresentationRelsXml(imageCount, hasTextSlide) {
+  const totalSlides = imageCount + (hasTextSlide ? 1 : 0);
+  let slideRels = '';
+  for (let i = 1; i <= totalSlides; i++) {
+    slideRels += `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i}.xml"/>`;
+  }
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
+  ${slideRels}
+</Relationships>`;
+}
+
+function getSlideMasterXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+  <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
+</p:sldMaster>`;
+}
+
+function getSlideMasterRelsXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+</Relationships>`;
+}
+
+function getSlideLayoutXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank">
+  <p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
+</p:sldLayout>`;
+}
+
+function getSlideLayoutRelsXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
+</Relationships>`;
 }
