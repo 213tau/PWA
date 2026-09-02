@@ -3325,10 +3325,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
-<!-- PPTXjs for rendering slide 1 when no thumbnail preview exists -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pptxjs@1.21.1/dist/pptxjs.css">
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pptxjs@1.21.1/dist/pptxjs.min.js"></script>
   <script>
 const EMU_TO_PX = 96 / 914400;
 const PX_TO_EMU = 914400 / 96;
@@ -4805,39 +4801,33 @@ function handleDataAction(value, type, el) {
     }
 }
 
-async function getPptxThumbnail(fileBlob, fallbackContainerId) {
+async function getPptxThumbnail(fileBlob) {
     try {
         const zip = await JSZip.loadAsync(fileBlob);
         
-        // Check for PowerPoint's built-in thumbnail
-        const thumbnailFile = zip.file("docProps/thumbnail.jpeg") || zip.file("docProps/thumbnail.png");
+        // 1. Try default PowerPoint embedded thumbnail
+        let thumbnailFile = zip.file("docProps/thumbnail.jpeg") || 
+                            zip.file("docProps/thumbnail.jpg") || 
+                            zip.file("docProps/thumbnail.png");
         
-        if (thumbnailFile) {
-            const imgBlob = await thumbnailFile.async("blob");
-            return { type: "image", url: URL.createObjectURL(imgBlob) };
+        // 2. Fallback: If no docProps thumbnail, grab the first image found in media folder
+        if (!thumbnailFile) {
+            const mediaFiles = Object.keys(zip.files).filter(fileName => 
+                fileName.startsWith("ppt/media/") && /\.(jpg|jpeg|png|gif)$/i.test(fileName)
+            );
+            if (mediaFiles.length > 0) {
+                thumbnailFile = zip.file(mediaFiles[0]);
+            }
         }
+        
+        if (!thumbnailFile) return null;
+        
+        const imgBlob = await thumbnailFile.async("blob");
+        return URL.createObjectURL(imgBlob);
     } catch (e) {
-        console.warn("Fast zip extraction failed, falling back to dynamic rendering:", e);
+        console.warn("Zip extraction failed:", e);
+        return null;
     }
-
-    // Fallback: Render Slide 1 dynamically if embedded thumbnail was not found
-    return new Promise((resolve) => {
-        try {
-            $(`#${fallbackContainerId}`).pptxToHtml({
-                pptxFileUrl: URL.createObjectURL(fileBlob),
-                slideMode: false,
-                keyProcess: false,
-                slideNum: 1,
-                defaultVisible: true,
-                slidesScale: "30%",
-                mediaProcess: false
-            });
-            resolve({ type: "rendered" });
-        } catch (err) {
-            console.error("Dynamic slide rendering failed:", err);
-            resolve(null);
-        }
-    });
 }
 
 async function searchText() {
@@ -4845,19 +4835,19 @@ async function searchText() {
     const db = await openDB();
     const tx = db.transaction("files", "readonly");
     const request = tx.objectStore("files").getAll();
-
+    
     request.onsuccess = () => {
         const results = request.result.filter(f => 
             query === "" ? ((f.links && f.links.length > 0) || (f.phones && f.phones.length > 0)) : f.content.includes(query)
         );
-
+        
         const output = document.getElementById("results");
         output.innerHTML = `<h3>Matches: ${results.length}</h3>`;
-
+        
         results.forEach((r, idx) => {
             const div = document.createElement("div");
             div.className = "result-item";
-
+            
             let dataHtml = "";
             if (r.links && r.links.length) {
                 dataHtml += `<div><span class="label">Links:</span>${r.links.map(l => 
@@ -4872,15 +4862,15 @@ async function searchText() {
 
             const isPptx = r.name.toLowerCase().endsWith('.pptx');
             const icon = r.name.toLowerCase().endsWith('.docx') ? '📝' : (isPptx ? '📊' : '📄');
-            const thumbContainerId = `pptx-thumb-${idx}`;
+            const thumbContainerId = `thumb-container-${idx}`;
 
             div.innerHTML = `
                 <span class="file-path">${r.displayPath}</span>
                 <a class="file-link">${icon} ${r.name}</a>
-                ${isPptx ? `<div id="${thumbContainerId}" class="thumb-box" style="min-height:60px; max-width:180px; margin:5px 0;"></div>` : ''}
+                ${isPptx ? `<div id="${thumbContainerId}" class="thumb-box" style="margin:6px 0;"></div>` : ''}
                 <div class="extracted-data">${dataHtml}</div>
             `;
-
+            
             div.querySelector('.file-link').onclick = () => {
                 const url = URL.createObjectURL(r.blob);
                 const a = document.createElement("a");
@@ -4890,15 +4880,19 @@ async function searchText() {
 
             output.appendChild(div);
 
-            // Lazy load thumbnail in background without blocking UI rendering
+            // Lazy extraction in background
             if (isPptx && r.blob) {
-                setTimeout(async () => {
-                    const thumbResult = await getPptxThumbnail(r.blob, thumbContainerId);
+                getPptxThumbnail(r.blob).then(thumbnailUrl => {
                     const container = document.getElementById(thumbContainerId);
-                    if (container && thumbResult && thumbResult.type === "image") {
-                        container.innerHTML = `<img src="${thumbResult.url}" style="max-width:140px; max-height:100px; border:1px solid #ccc; border-radius:4px;" />`;
+                    if (!container) return;
+                    
+                    if (thumbnailUrl) {
+                        container.innerHTML = `<img src="${thumbnailUrl}" style="max-width:140px; max-height:100px; border:1px solid #ccc; border-radius:4px; display:block;" />`;
+                    } else {
+                        // Fallback badge when PPTX lacks embedded media
+                        container.innerHTML = `<span style="font-size:11px; color:#666; background:#f0f0f0; padding:2px 6px; border-radius:3px; border:1px solid #ddd;">No preview available</span>`;
                     }
-                }, 0);
+                });
             }
         });
     };
