@@ -735,6 +735,7 @@ background: brown;
       <button id="canvastoimage">Canvas to Array</button>      
       <button id="savecanvas">Save Canvas</button>
       <button id="warpBtn">Warp Image</button>
+      <button id="generatepptx">Download A4 PPTX</button>
       <button onclick="contrastStretchingWithHistogramClipping(document.querySelector('canvas'), 2, 'both')">Histogram Clipping Both</button>
       <button onclick="applyContrastStretching(true);">Auto Light Enhancement</button>
       <button onclick="edgeAwareAdaptiveThresholdingColorPreserved()">Color Preserved</button>
@@ -746,8 +747,7 @@ background: brown;
       <button id="resizeimage">Resize (KB)</button>
       <button onclick="downscaleImage(canvas, 1024, 1024);">Downscale</button>
       <button onclick="downscaleAllImages(1024,1024);">Downscale All</button>
-      <button onclick="upscaleAndSharpen(canvas, 1024, 1024);">Upscale & Sharpen</button>
-      <button id="ocrrequired">Canvas to Text</button>            
+      <button onclick="upscaleAndSharpen(canvas, 1024, 1024);">Upscale & Sharpen</button>      
       <button id="InvertContrastStreching">Invert Contrast</button>
       <button id="invertcolor">Invert Colors</button>
       <button onclick="removeBackgroundFromCorners()">Remove Background</button>
@@ -940,8 +940,7 @@ background: brown;
       <button id="heightresize">Resize to 285mm</button>
       <button id="centercontent">Center Content</button>
       <button id="displayblock">Display Block</button>
-      <button id="resizetoA4">Resize to A4</button>
-      <button id="generatepptx">Download A4 PPTX</button>
+      <button id="resizetoA4">Resize to A4</button>      
       <button id="texttoimage">Add Text to Image</button>
       <button id="noofprint" onclick="generatefidaPDF()">Pending Page Slip</button>
       <button onclick="window.location.href='camscanner://scan'">Open CamScanner</button>
@@ -1100,6 +1099,7 @@ background: brown;
         <button onclick="openMepcobill()">Open Mepco Bill</button>
         <button onclick="openGasbill()">Open Suigas Bill</button>
         <button onclick="saveoutput()">Load Output</button>
+        <button id="urduStyle">Urdu Style (Jameel Noori)</button>
         <button onclick="editoutput()">Edit Output</button>
         <button onclick="textup()">TextUp</button>
         <button onclick="moveLineUp()">Move Line Up</button>
@@ -1110,7 +1110,7 @@ background: brown;
         <button onclick="irisdata()">IRIS Data</button>
         <button onclick="tabling()">Text To Table</button>
         <button onclick="tablingLine()">NewLine To Table</button>
-        <button id="urduStyle">Urdu Style (Jameel Noori)</button>
+        <button id="ocrrequired">Canvas to Text</button>
         <button onclick="googletranslate()">Translate Urdu → English</button>
         <button onclick="document.querySelector('#output').style.margin = '1in 1in 0.7in 1in';">Margin 0.7in</button>
         <button id="lowercase">Lowercase</button>
