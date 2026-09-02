@@ -4848,6 +4848,9 @@ async function searchText() {
             const div = document.createElement("div");
             div.className = "result-item";
             
+            // Extract clean filename without path
+            const cleanFileName = r.name.split(/[/\\]/).pop();
+
             let dataHtml = "";
             if (r.links && r.links.length) {
                 dataHtml += `<div><span class="label">Links:</span>${r.links.map(l => 
@@ -4860,43 +4863,44 @@ async function searchText() {
                 ).join('')}</div>`;
             }
 
-            const isPptx = r.name.toLowerCase().endsWith('.pptx');
-            const icon = r.name.toLowerCase().endsWith('.docx') ? '📝' : (isPptx ? '📊' : '📄');
+            const isPptx = cleanFileName.toLowerCase().endsWith('.pptx');
+            const icon = cleanFileName.toLowerCase().endsWith('.docx') ? '📝' : (isPptx ? '📊' : '📄');
             const thumbContainerId = `thumb-container-${idx}`;
 
             div.innerHTML = `
                 <span class="file-path">${r.displayPath}</span>
-                <a class="file-link">${icon} ${r.name}</a>
+                <a class="file-link">${icon} ${cleanFileName}</a>
                 <button class="load-file-btn" data-id="${r.id}" style="margin-left:8px; cursor:pointer;">Load File</button>
                 ${isPptx ? `<div id="${thumbContainerId}" class="thumb-box" style="margin:6px 0;"></div>` : ''}
                 <div class="extracted-data">${dataHtml}</div>
             `;
             
-            // Download file on link click
+            // Download file on link click using clean file name
             div.querySelector('.file-link').onclick = () => {
                 const url = URL.createObjectURL(r.blob);
                 const a = document.createElement("a");
-                a.href = url; a.download = r.name; a.click();
+                a.href = url; 
+                a.download = cleanFileName; 
+                a.click();
                 URL.revokeObjectURL(url);
             };
 
-            // Directly fetch record from IndexedDB by ID and attach to #jsfileinput
-            // Assign file to #jsfileInput on button click using r.blob directly
-div.querySelector('.load-file-btn').onclick = () => {
-    const fileInput = document.getElementById("jsfileInput");
-    if (!fileInput || !r.blob) return;
+            // Assign file to #jsfileInput on button click using clean file name
+            div.querySelector('.load-file-btn').onclick = () => {
+                const fileInput = document.getElementById("jsfileInput");
+                if (!fileInput || !r.blob) return;
 
-    // Convert IndexedDB blob directly into a File instance
-    const file = new File([r.blob], r.name, { type: r.blob.type || "application/octet-stream" });
+                // Convert IndexedDB blob directly into a File instance with clean filename
+                const file = new File([r.blob], cleanFileName, { type: r.blob.type || "application/octet-stream" });
 
-    // Use DataTransfer to populate the input's FileList
-    const container = new DataTransfer();
-    container.items.add(file);
-    fileInput.files = container.files;
+                // Use DataTransfer to populate the input's FileList
+                const container = new DataTransfer();
+                container.items.add(file);
+                fileInput.files = container.files;
 
-    // Dispatch change event to notify any change listeners
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-};
+                // Dispatch change event to notify any change listeners
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            };
 
             output.appendChild(div);
 
