@@ -1335,7 +1335,7 @@ async function rotateCurrentImage() {
       const oldWidth = canvas.width;
       const oldHeight = canvas.height;
 
-      // Save canvas to offscreen canvas
+      // Save canvas to offscreen canvas (more efficient than DOM canvas)
       const offscreen = document.createElement("canvas");
       offscreen.width = oldWidth;
       offscreen.height = oldHeight;
@@ -1364,8 +1364,8 @@ async function rotateCurrentImage() {
 
       // Create new image from rotated canvas
       const newImg = new Image();
-      
-      // 1. Attach onload BEFORE setting src
+      newImg.src = canvas.toDataURL();
+
       newImg.onload = () => {
         try {
           const imgObj = new ImageObject(newImg);
@@ -1373,19 +1373,14 @@ async function rotateCurrentImage() {
 
           images[currentImageIndex] = imgObj;
 
-          // 2. Trigger redraw/rerender here if needed
-          // e.g., drawImageOnCanvas();
-
+          // Cleanup old state only after success
           resolve();
         } catch (e) {
           reject(e);
         }
       };
 
-      newImg.onerror = (err) => reject(err);
-
-      // 2. Set src AFTER attaching listeners
-      newImg.src = canvas.toDataURL();
+      newImg.onerror = reject;
 
     } catch (error) {
       reject(error);
