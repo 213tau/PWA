@@ -9606,7 +9606,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   const slideWidthEmu = 7561584;   // 8.27 inches
   const slideHeightEmu = 10689588; // 11.69 inches
 
-  // 2. Add Package-Wide Files
+  // 2. Package-Wide Configurations
   zip.file('[Content_Types].xml', getContentTypesXml(validImages.length, !!outputEl));
   zip.file('_rels/.rels', getRootRelsXml());
   
@@ -9629,7 +9629,6 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     const imageNumber = i + 1;
     const base64Data = src.split(',')[1];
     
-    // Determine proper extension
     let extension = "png";
     if (src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg")) {
       extension = "jpeg";
@@ -9646,7 +9645,6 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     const targetHeightEmu = Math.round(targetWidthEmu * aspectRatio);
     const yOffsetEmu = Math.max(Math.round((slideHeightEmu - targetHeightEmu) / 2), 0);
 
-    // Image Slide XML
     slidesFolder.file(`slide${imageNumber}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld>
@@ -9681,7 +9679,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
 </Relationships>`);
   }
 
-  // 4. Build Rich Text & Native Tables Slide
+  // 4. Build Rich Text & Table Slide
   if (outputEl && outputEl.textContent.trim() !== '') {
     const textSlideIndex = validImages.length + 1;
     const elementsXml = [];
@@ -9689,12 +9687,11 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
     let currentY = 457200; // 0.5 inches margin
     const marginX = 457200;
     const contentWidth = slideWidthEmu - (marginX * 2);
-
     let shapeId = 2;
 
     for (const child of Array.from(outputEl.children)) {
       if (child.tagName === 'TABLE') {
-        const tableXml = buildValidOoxmlTable(child, shapeId++, marginX, currentY, contentWidth);
+        const tableXml = buildStrictOoxmlTable(child, shapeId++, marginX, currentY, contentWidth);
         if (tableXml.xml) {
           elementsXml.push(tableXml.xml);
           currentY += tableXml.estimatedHeight + 200000;
@@ -9704,10 +9701,11 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
         if (!paragraphsXml.trim()) continue;
 
         const textShapeHeight = 400000;
+        // Strict element ordering: <p:nvSpPr> -> <p:spPr> -> <p:txBody>
         elementsXml.push(`
           <p:sp>
             <p:nvSpPr>
-              <p:cNvPr id="${shapeId++}" name="TextShape"/>
+              <p:cNvPr id="${shapeId++}" name="TextShape ${shapeId}"/>
               <p:cNvSpPr txBox="1"/><p:nvPr/>
             </p:nvSpPr>
             <p:spPr>
@@ -9719,7 +9717,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
               <a:noFill/>
             </p:spPr>
             <p:txBody>
-              <a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" wrap="square"/>
+              <a:bodyPr lIns="91440" tIns="45720" rIns="91440" bIns="45720" wrap="square"/>
               <a:lstStyle/>
               ${paragraphsXml}
             </p:txBody>
@@ -9746,7 +9744,7 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
 </Relationships>`);
   }
 
-  // 5. Trigger File Download
+  // 5. Save Presentation
   let fileName = "a4-images-presentation.pptx";
   if (outputEl) {
     const match = outputEl.textContent.match(/\d{5}-\d{7}-\d{1}/);
@@ -9765,17 +9763,17 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
   link.click();
 });
 
-// Helper: Schema-Valid HTML Rich Text Parser
+// Helper: Schema-Compliant Rich Text Parser
 function parseRichTextNode(element) {
   let runsXml = '';
-  
+
   function walk(node, isBold = false, isItalic = false) {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent;
       if (!text) return;
       
-      const bAttr = isBold ? ' b="1"' : '';
-      const iAttr = isItalic ? ' i="1"' : '';
+      const bAttr = isBold ? ' b="1"' : ' b="0"';
+      const iAttr = isItalic ? ' i="1"' : ' i="0"';
       
       runsXml += `<a:r><a:rPr lang="en-US" sz="1600"${bAttr}${iAttr}><a:solidFill><a:srgbClr val="363636"/></a:solidFill></a:rPr><a:t>${escapeXml(text)}</a:t></a:r>`;
     } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -9788,15 +9786,14 @@ function parseRichTextNode(element) {
   }
 
   walk(element);
-  return runsXml ? `<a:p>${runsXml}</a:p>` : '';
+  return runsXml ? `<a:p><a:pPr algn="l"/>${runsXml}<a:endParaRPr lang="en-US" sz="1600"/></a:p>` : '';
 }
 
-// Helper: Schema-Valid OOXML Graphic Frame Table Generator
-function buildValidOoxmlTable(tableEl, id, x, y, availableWidth) {
+// Helper: Strict DrawingML Table Builder
+function buildStrictOoxmlTable(tableEl, id, x, y, availableWidth) {
   const rows = Array.from(tableEl.querySelectorAll('tr'));
   if (!rows.length) return { xml: '', estimatedHeight: 0 };
 
-  // Calculate strict uniform grid lengths across all rows
   let maxCols = 0;
   rows.forEach(r => {
     const count = r.querySelectorAll('th, td').length;
@@ -9826,15 +9823,17 @@ function buildValidOoxmlTable(tableEl, id, x, y, availableWidth) {
       cellsXml += `
         <a:tc>
           <a:txBody>
-            <a:bodyPr/>
+            <a:bodyPr lIns="91440" tIns="45720" rIns="91440" bIns="45720" wrap="square"/>
             <a:lstStyle/>
             <a:p>
+              <a:pPr algn="l"/>
               <a:r>
-                <a:rPr lang="en-US" sz="1400" ${isHeader ? 'b="1"' : ''}>
+                <a:rPr lang="en-US" sz="1400" ${isHeader ? 'b="1"' : 'b="0"'}>
                   <a:solidFill><a:srgbClr val="${isHeader ? 'FFFFFF' : '363636'}"/></a:solidFill>
                 </a:rPr>
                 <a:t>${escapeXml(cellText)}</a:t>
               </a:r>
+              <a:endParaRPr lang="en-US" sz="1400"/>
             </a:p>
           </a:txBody>
           <a:tcPr>
@@ -9842,8 +9841,7 @@ function buildValidOoxmlTable(tableEl, id, x, y, availableWidth) {
               <a:srgbClr val="${isHeader ? '4472C4' : 'F2F2F2'}"/>
             </a:solidFill>
           </a:tcPr>
-        </a:tc>
-      `;
+        </a:tc>`;
     }
 
     rowsXml += `<a:tr h="${rowHeight}">${cellsXml}</a:tr>`;
@@ -9851,7 +9849,7 @@ function buildValidOoxmlTable(tableEl, id, x, y, availableWidth) {
 
   const estimatedHeight = rows.length * rowHeight;
 
-  // Graphic Frame strictly obeying DrawingML schema
+  // Strict sequence: <p:nvGraphicFramePr> -> <p:xfrm> -> <a:graphic>
   const xml = `
     <p:graphicFrame>
       <p:nvGraphicFramePr>
@@ -9874,13 +9872,12 @@ function buildValidOoxmlTable(tableEl, id, x, y, availableWidth) {
           </a:tbl>
         </a:graphicData>
       </a:graphic>
-    </p:graphicFrame>
-  `;
+    </p:graphicFrame>`;
 
   return { xml, estimatedHeight };
 }
 
-// Utility: Strict Entity Escaper
+// Utility: Strict XML Escaper
 function escapeXml(unsafe) {
   if (!unsafe) return '';
   return unsafe.replace(/[<>&'"]/g, c => {
@@ -9893,90 +9890,4 @@ function escapeXml(unsafe) {
       default: return c;
     }
   });
-}
-
-// Fixed Package Configuration Structures
-function getContentTypesXml(imageCount, hasTextSlide) {
-  const totalSlides = imageCount + (hasTextSlide ? 1 : 0);
-  let slidesOverride = '';
-  for (let i = 1; i <= totalSlides; i++) {
-    slidesOverride += `<Override PartName="/ppt/slides/slide${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
-  }
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Default Extension="png" ContentType="image/png"/>
-  <Default Extension="jpeg" ContentType="image/jpeg"/>
-  <Default Extension="jpg" ContentType="image/jpeg"/>
-  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
-  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
-  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
-  ${slidesOverride}
-</Types>`;
-}
-
-function getRootRelsXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
-</Relationships>`;
-}
-
-function getPresentationXml(imageCount, hasTextSlide) {
-  const totalSlides = imageCount + (hasTextSlide ? 1 : 0);
-  let slideList = '';
-  for (let i = 1; i <= totalSlides; i++) {
-    slideList += `<p:sldId id="${255 + i}" r:id="rId${i + 1}"/>`;
-  }
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>
-  <p:sldIdLst>${slideList}</p:sldIdLst>
-  <p:sldSz cx="7561584" cy="10689588"/>
-  <p:notesSz cx="6858000" cy="9144000"/>
-</p:presentation>`;
-}
-
-function getPresentationRelsXml(imageCount, hasTextSlide) {
-  const totalSlides = imageCount + (hasTextSlide ? 1 : 0);
-  let slideRels = '';
-  for (let i = 1; i <= totalSlides; i++) {
-    slideRels += `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i}.xml"/>`;
-  }
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
-  ${slideRels}
-</Relationships>`;
-}
-
-function getSlideMasterXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
-  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
-  <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
-</p:sldMaster>`;
-}
-
-function getSlideMasterRelsXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-</Relationships>`;
-}
-
-function getSlideLayoutXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank">
-  <p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
-</p:sldLayout>`;
-}
-
-function getSlideLayoutRelsXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
-</Relationships>`;
 }
