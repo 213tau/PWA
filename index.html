@@ -4887,7 +4887,7 @@ async function searchText() {
 
             // Assign file to #jsfileInput on button click using clean file name
             div.querySelector('.load-file-btn').onclick = () => {
-                const fileInput = document.getElementById("jsfileInput");
+                const fileInput = document.getElementById("upload");
                 if (!fileInput || !r.blob) return;
 
                 // Convert IndexedDB blob directly into a File instance with clean filename
