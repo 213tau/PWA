@@ -8833,7 +8833,7 @@ function printSVGElement() {
 
 async function exportEditableSvgToPdf() {
   // 1. Select the specific editable SVG canvas
-  const svgElement = document.querySelector("svg.editable-svg-canvas");
+  const svgElement = document.querySelector("#svgTools").querySelector("svg");
 
   if (!svgElement) {
     alert("Target SVG canvas not found!");
