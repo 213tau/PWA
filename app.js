@@ -9574,3 +9574,30 @@ document.querySelector('#generatepptx').addEventListener('click', async () => {
 
       await pptx.writeFile(name);
     });
+
+function TrimWhite(canvas = document.querySelector("canvas"), marginInches = 0.5, dpi = 96) {
+  if (!canvas) {
+    console.error("Canvas element not found.");
+    return;
+  }
+
+  const ctx = canvas.getContext("2d");
+  const { width, height } = canvas;
+
+  const marginPixels = Math.round(marginInches * dpi);
+
+  const left = marginPixels;
+  const top = marginPixels;
+  const trimmedWidth = width - (marginPixels * 2);
+  const trimmedHeight = height - (marginPixels * 2);
+
+  if (trimmedWidth <= 0 || trimmedHeight <= 0) {
+    console.warn("Margin is larger than or equal to the canvas dimensions.");
+    return;
+  }
+
+  const trimmedData = ctx.getImageData(left, top, trimmedWidth, trimmedHeight);
+  canvas.width = trimmedWidth;
+  canvas.height = trimmedHeight;
+  ctx.putImageData(trimmedData, 0, 0);
+}
