@@ -7509,22 +7509,9 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
 
     function showTab(tabId) {
   // 1. Handle tab content visibility
-  document.querySelectorAll('.tab-content').forEach(c => {
-    c.classList.remove('active');
-    c.style.display = 'none'; // Hide all tabs initially
-  });
-
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   const targetTab = document.getElementById(tabId);
-  if (targetTab) {
-    targetTab.classList.add('active');
-    
-    // Set display to flex for svgTools, block for others
-    if (tabId === 'svgTools') {
-      targetTab.style.display = 'flex';
-    } else {
-      targetTab.style.display = 'block';
-    }
-  }
+  if (targetTab) targetTab.classList.add('active');
 
   // 2. Handle active state on tab buttons
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -7538,9 +7525,9 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
   const canvas = document.getElementById('canvas');
   if (canvas) {
     if (tabId === 'textEditing' || tabId === 'imageProcessing') {
-      canvas.style.display = 'block';
+      canvas.style.display = 'block'; // Show canvas
     } else {
-      canvas.style.display = 'none';
+      canvas.style.display = 'none';  // Hide canvas on other tabs
     }
   }
 }
