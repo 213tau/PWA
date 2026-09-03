@@ -9600,4 +9600,5 @@ function TrimWhite(canvas = document.querySelector("canvas"), marginInches = 0.5
   canvas.width = trimmedWidth;
   canvas.height = trimmedHeight;
   ctx.putImageData(trimmedData, 0, 0);
+    savecanvas();
 }
