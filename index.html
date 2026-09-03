@@ -844,10 +844,7 @@ background: brown;
       <button id="bringcoat">Bring Coat Upfront</button>      
     </div>
 
-    <div class="tab-content" id="svgTools">
-      <button onclick="editablesvg()">Editable SVG</button>
-      <button id="printBtn" onclick="printSVGElement()">Print / Save PDF</button>
-      <button id="downloadPdfBtn" onclick="exportEditableSvgToPdf()">Download PDF</button>
+    <div class="tab-content" id="svgTools" style="display:flex;">                  
       <div id="main-layout">
     <div id="controls">
         <h2>PPTX Pro Suite Editor</h2>
@@ -863,6 +860,7 @@ background: brown;
         <div id="status" class="status-msg"></div>
         <button id="saveSVG" class="btn">Save & Download SVG</button>
         <button id="printBtn" class="btn" style="background: green">Print</button>
+      <button id="downloadPdfBtn" onclick="exportEditableSvgToPdf()">Download PDF</button>
     </div>
     <div id="fileoutput"></div>
 </div>
