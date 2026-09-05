@@ -55,40 +55,46 @@ document.getElementById('processBtn').addEventListener('click', async () => {
             };
 
             const findFuzzyElement = (key) => {
-              const normalizedKey = normalize(key);
-              const elements = document.querySelectorAll('input, textarea, select');
-              let bestMatch = null;
-              let highestScore = 0;
+  const normalizedKey = normalize(key);
+  if (!normalizedKey) return null; // Guard against empty keys
 
-              for (const el of elements) {
-                const type = el.getAttribute('type');
-                if (['submit', 'button', 'reset', 'hidden', 'image'].includes(type)) continue;
+  const elements = document.querySelectorAll('input, textarea, select');
+  let bestMatch = null;
+  let highestScore = 0;
 
-                let score = 0;
-                const id = normalize(el.id);
-                const name = normalize(el.name);
+  for (const el of elements) {
+    const type = el.getAttribute('type');
+    if (['submit', 'button', 'reset', 'hidden', 'image'].includes(type)) continue;
 
-                if (id === normalizedKey || name === normalizedKey) score += 20;
-                
-                const label = document.querySelector(`label[for="${el.id}"]`) || el.closest('label');
-                if (label && normalize(label.textContent).includes(normalizedKey)) score += 15;
+    let score = 0;
+    const id = normalize(el.id);
+    const name = normalize(el.name);
+    const placeholder = normalize(el.getAttribute('placeholder'));
+    const autocomplete = normalize(el.getAttribute('autocomplete'));
 
-                if (id.includes(normalizedKey) || normalizedKey.includes(id)) score += 5;
-                if (name.includes(normalizedKey) || normalizedKey.includes(name)) score += 5;
+    // Exact ID or Name matches
+    if ((id && id === normalizedKey) || (name && name === normalizedKey)) score += 20;
+    
+    // Label matches
+    const label = document.querySelector(`label[for="${el.id}"]`) || el.closest('label');
+    if (label && normalize(label.textContent).includes(normalizedKey)) score += 15;
 
-                if (el.tagName === 'SELECT') {
-                  Array.from(el.options).forEach(opt => {
-                    if (normalize(opt.text) === normalizedKey) score += 20;
-                  });
-                }
+    // Placeholder or Autocomplete matches
+    if (placeholder && placeholder.includes(normalizedKey)) score += 10;
+    if (autocomplete && autocomplete.includes(normalizedKey)) score += 10;
 
-                if (score > highestScore) {
-                  highestScore = score;
-                  bestMatch = el;
-                }
-              }
-              return highestScore >= 5 ? bestMatch : null;
-            };
+    // Substring matches (ONLY if id or name is NOT empty)
+    if (id && (id.includes(normalizedKey) || normalizedKey.includes(id))) score += 5;
+    if (name && (name.includes(normalizedKey) || normalizedKey.includes(name))) score += 5;
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = el;
+    }
+  }
+  // Require at least 10 points to consider it a valid match
+  return highestScore >= 10 ? bestMatch : null;
+};
 
             // --- Execution Loop with "Do Not Overwrite" guard ---
             for (const [key, value] of Object.entries(data)) {
