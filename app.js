@@ -1201,33 +1201,28 @@ const renderUnifiedBox = (className, rawContent, isSvg = false) => {
             }
 
             // 4. Plain Text Fallback
-            // 4. Plain Text Handling (With SVG detection)
-if (item.kind === 'string' && item.type === 'text/plain') {
-    const text = await getAsStringAsync(item);
-    const trimmed = text.trim();
-
-    // Check if the plain text is actually an SVG code block
+            if (item.kind === 'string' && item.type === 'text/plain') {
+                const text = await getAsStringAsync(item);
+                if (output) {
+                  // Check if the plain text is actually an SVG code block
     if (trimmed.startsWith('<svg') || (trimmed.includes('<svg') && trimmed.endsWith('</svg>'))) {
         renderUnifiedBox("pasted-svg-container", trimmed, true);
         return await processSvgFile(new File([new Blob([trimmed], { type: 'image/svg+xml' })], "pasted-shape.svg", { type: 'image/svg+xml' }));
-    }
-
-    // Check if the plain text contains other generic HTML elements
-    if (trimmed.startsWith('<')) {
-        renderUnifiedBox("pasted-html-container", trimmed, false);
-        return { type: 'html', content: trimmed };
-    }
-
-    // Default: Raw multi-line plain text
-    if (output) {
-        trimmed.split(/\r?\n/).forEach(line => {
-            const d = document.createElement("div");
-            d.textContent = line;
-            output.appendChild(d);
-        });
-    }
-    return { type: 'text', content: text };
-} catch (err) {
+    } else if (text.trim().startsWith('<')) {
+                        const div = document.createElement("div");
+                        div.innerHTML = text;
+                        output.appendChild(div);
+                        return { type: 'html', content: text };
+                    }
+                    text.split(/\r?\n/).forEach(line => {
+                        const d = document.createElement("div");
+                        d.textContent = line;
+                        output.appendChild(d);
+                    });
+                }
+                return { type: 'text', content: text };
+            }
+        } catch (err) {
             console.error(`Error processing item (${item.type}):`, err);
             return { type: 'error', error: err };
         }
