@@ -1201,9 +1201,7 @@ const renderUnifiedBox = (className, rawContent, isSvg = false) => {
             }
 
             // 4. Plain Text Fallback
-            // Replace section #4 (Plain Text Fallback) inside your paste listener with this updated logic:
-
-// 4. Plain Text Handling (With SVG detection)
+            // 4. Plain Text Handling (With SVG detection)
 if (item.kind === 'string' && item.type === 'text/plain') {
     const text = await getAsStringAsync(item);
     const trimmed = text.trim();
