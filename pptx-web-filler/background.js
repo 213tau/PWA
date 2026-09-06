@@ -160,13 +160,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let inputIds = [];
   try {
     const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId: tab.id, allFrames: true },
       func: () => Array.from(document.querySelectorAll("input[id]")).map(el => ({
         id: el.id,
         label: el.name || el.placeholder || el.id
       }))
     });
-    if (results && results[0]) inputIds = results[0].result;
+    if (results && results.length > 0) {
+      inputIds = results.flatMap(r => r.result || []);
+    }
   } catch (error) {
     console.error("Failed to fetch input IDs:", error);
   }
@@ -174,7 +176,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // Inject Storage Listener into SOURCE TAB to receive updates
   try {
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId: tab.id, allFrames: true },
       func: () => {
         if (window.hasAtauxelSync) return;
         window.hasAtauxelSync = true;
@@ -203,10 +205,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error("Failed to inject storage listener on source page:", err);
   }
 
-  // Determine payload
-  if (info.selectionText) payload = info.selectionText;
-  else if (info.linkUrl) payload = info.linkUrl;
+  // Determine payload (Prioritize image sources before link URLs)
+  if (info.mediaType === "image" && info.srcUrl) payload = info.srcUrl;
+  else if (info.selectionText) payload = info.selectionText;
   else if (info.srcUrl) payload = info.srcUrl;
+  else if (info.linkUrl) payload = info.linkUrl;
   else if (info.pageUrl) payload = info.pageUrl;
 
   if (!payload) return;
@@ -266,8 +269,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               document.body.appendChild(outputDiv);
             }
 
-            //outputDiv.innerHTML = "";
-
             // Render URL Payload
             const urlBlock = document.createElement("div");
             urlBlock.style.fontWeight = "bold";
@@ -285,7 +286,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               childDiv.style.margin = "4px 0";
 
               childDiv.addEventListener("input", () => {
-                // Post message to window context (picked up by atauxel-bridge.js)
+                // Post message to window context
                 window.postMessage({
                   type: "ATAUXEL_TYPE_SYNC",
                   inputId: item.id,
