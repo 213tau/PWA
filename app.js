@@ -1118,7 +1118,7 @@ const renderUnifiedBox = (className, rawContent, isSvg = false) => {
         toggleBtn.onclick = () => { isRaw = !isRaw; updateView(); };
         toolbar.appendChild(toggleBtn);
         wrapper.append(toolbar, contentBox);        
-        document.querySelector("htmlEditing").appendChild("wrapper");
+        document.querySelector("#htmlEditing").appendChild("wrapper");
     } else {
         contentBox = wrapper.querySelector(".content-box");
         toggleBtn = wrapper.querySelector("button");
