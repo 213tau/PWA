@@ -1204,11 +1204,7 @@ const renderUnifiedBox = (className, rawContent, isSvg = false) => {
             if (item.kind === 'string' && item.type === 'text/plain') {
                 const text = await getAsStringAsync(item);
                 if (output) {
-                  // Check if the plain text is actually an SVG code block
-    if (trimmed.startsWith('<svg') || (trimmed.includes('<svg') && trimmed.endsWith('</svg>'))) {
-        renderUnifiedBox("pasted-svg-container", trimmed, true);
-        return await processSvgFile(new File([new Blob([trimmed], { type: 'image/svg+xml' })], "pasted-shape.svg", { type: 'image/svg+xml' }));
-    } else if (text.trim().startsWith('<')) {
+                    if (text.trim().startsWith('<')) {
                         const div = document.createElement("div");
                         div.innerHTML = text;
                         output.appendChild(div);
