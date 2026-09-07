@@ -167,6 +167,15 @@ async function urlToBase64(imageUrl) {
   }
 }
 
+// Background Listener for direct cross-tab messaging fallback
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "ATAUXEL_DIRECT_SYNC" && message.targetTabId) {
+    chrome.tabs.sendMessage(message.targetTabId, message).catch(() => {
+      // Ignore errors if tab isn't listening directly
+    });
+  }
+});
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "openWithAtauxel" || !tab?.id) return;
 
@@ -179,7 +188,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: sourceTabId, allFrames: true },
-      func: () => Array.from(document.querySelectorAll("input[id]")).map(el => ({
+      func: () => Array.from(document.querySelectorAll("input[id], textarea[id]")).map(el => ({
         id: el.id,
         label: el.name || el.placeholder || el.id
       }))
@@ -191,7 +200,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error("Failed to fetch input IDs:", error);
   }
 
-  // 2. Inject Storage Listener into SOURCE TAB to receive sync updates
+  // 2. Inject double-layer sync listener into SOURCE TAB
   try {
     await chrome.scripting.executeScript({
       target: { tabId: sourceTabId, allFrames: true },
@@ -199,28 +208,39 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         if (window.hasAtauxelSync) return;
         window.hasAtauxelSync = true;
 
+        const applyValueToInput = (inputId, value) => {
+          if (!inputId) return;
+          const targetInput = document.getElementById(inputId);
+          if (targetInput) {
+            targetInput.value = value;
+            
+            // Support React/Vue internal state trackers
+            const tracker = targetInput._valueTracker;
+            if (tracker) tracker.setValue(value);
+
+            targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+            targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        };
+
+        // Storage Listener
         chrome.storage.onChanged.addListener((changes, area) => {
           if (area === "local" && changes.atauxelSync) {
-            const { inputId, value, targetTabId } = changes.atauxelSync.newValue || {};
-            if (!inputId) return;
+            const { inputId, value } = changes.atauxelSync.newValue || {};
+            applyValueToInput(inputId, value);
+          }
+        });
 
-            const targetInput = document.getElementById(inputId);
-            if (targetInput) {
-              targetInput.value = value;
-              
-              // Support React/Vue internal state trackers
-              const tracker = targetInput._valueTracker;
-              if (tracker) tracker.setValue(value);
-
-              targetInput.dispatchEvent(new Event("input", { bubbles: true }));
-              targetInput.dispatchEvent(new Event("change", { bubbles: true }));
-            }
+        // Direct Runtime Message Listener
+        chrome.runtime.onMessage.addListener((msg) => {
+          if (msg.type === "ATAUXEL_DIRECT_SYNC") {
+            applyValueToInput(msg.inputId, msg.value);
           }
         });
       }
     });
   } catch (err) {
-    console.error("Failed to inject storage listener on source page:", err);
+    console.error("Failed to inject sync listener on source page:", err);
   }
 
   // 3. Process Payload
@@ -256,7 +276,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   let atauxelTabId = null;
 
-  // 4. Handle Window Split or Standard Tab Creation
+  // 4. Handle Split Window or Standard Tab
   if (isPageContext && tab.windowId) {
     const currentWin = await chrome.windows.get(tab.windowId);
     const screenLeft = currentWin.left || 0;
@@ -290,7 +310,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // 5. Populate and Wire Sync Bridge on Atauxel Tab Load
+  // 5. Inject Bridge into Atauxel Tab
   if (atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -299,18 +319,25 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
           func: async (extractedInputs, payloadData, isImage, storageKey, originTabId) => {
-            // Setup postMessage to chrome.storage Relay Bridge
+            // Setup cross-window postMessage handler
             if (!window.hasAtauxelRelay) {
               window.hasAtauxelRelay = true;
               window.addEventListener("message", (event) => {
                 if (event.data?.type === "ATAUXEL_TYPE_SYNC") {
-                  chrome.storage.local.set({
-                    atauxelSync: {
-                      inputId: event.data.inputId,
-                      value: event.data.value,
-                      sourceTabId: originTabId,
-                      timestamp: Date.now()
-                    }
+                  const syncData = {
+                    inputId: event.data.inputId,
+                    value: event.data.value,
+                    targetTabId: originTabId,
+                    ts: Date.now()
+                  };
+
+                  // 1. Storage update with unique timestamp
+                  chrome.storage.local.set({ atauxelSync: syncData });
+
+                  // 2. Direct extension message backup
+                  chrome.runtime.sendMessage({
+                    type: "ATAUXEL_DIRECT_SYNC",
+                    ...syncData
                   });
                 }
               });
@@ -346,7 +373,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
             outputDiv.appendChild(payloadBlock);
 
-            // Render Input IDs with dynamic sync triggers
+            // Render inputs
             extractedInputs.forEach(item => {
               const childDiv = document.createElement("div");
               childDiv.id = item.label || item.id;
