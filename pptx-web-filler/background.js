@@ -237,11 +237,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   if (!payload) return;
 
-  // Use URL query param for regular text, pass long Base64 strings directly via post-injection
   const isBase64 = payload.startsWith("data:image/");
+  let imageStorageKey = "";
+
+  // If payload is Base64, store it in storage to prevent URL overflow
+  if (isBase64) {
+    imageStorageKey = `atauxel_img_${Date.now()}`;
+    await chrome.storage.local.set({ [imageStorageKey]: payload });
+  }
+
   const encodedPayload = isBase64 ? "" : encodeURIComponent(payload);
   const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds.map(item => item.id)));
-  const targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}`;
+  
+  // Append imageKey query parameter if an image was stored
+  let targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}`;
+  if (isBase64) {
+    targetUrl += `&imageKey=${imageStorageKey}`;
+  }
 
   let atauxelTabId = null;
 
@@ -286,7 +298,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
-          func: (extractedInputs, payloadData, isImage) => {
+          func: async (extractedInputs, payloadData, isImage, storageKey) => {
             let outputDiv = document.querySelector("#output");
             if (!outputDiv) {
               outputDiv = document.createElement("div");
@@ -294,13 +306,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               document.body.appendChild(outputDiv);
             }
 
-            // Render Payload (Image preview if Base64, otherwise text/URL)
             const payloadBlock = document.createElement("div");
             payloadBlock.style.marginBottom = "8px";
 
+            let finalImageSrc = payloadData;
+
+            // If payload is stored in extension storage, fetch it
+            if (isImage && storageKey) {
+              const data = await chrome.storage.local.get(storageKey);
+              finalImageSrc = data[storageKey] || payloadData;
+              // Clean up storage after reading
+              chrome.storage.local.remove(storageKey);
+            }
+
             if (isImage) {
               const img = document.createElement("img");
-              img.src = payloadData;
+              img.src = finalImageSrc;
               img.style.maxWidth = "100%";
               img.style.borderRadius = "4px";
               payloadBlock.appendChild(img);
@@ -330,7 +351,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               outputDiv.appendChild(childDiv);
             });
           },
-          args: [inputIds, payload, isBase64]
+          args: [inputIds, payload, isBase64, imageStorageKey]
         });
       }
     });
