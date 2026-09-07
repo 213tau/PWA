@@ -167,44 +167,57 @@ async function urlToBase64(imageUrl) {
   }
 }
 
-// Background Listener for direct cross-tab messaging fallback
+// Global Message Relay to guarantee direct delivery to specific Tab ID
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ATAUXEL_DIRECT_SYNC" && message.targetTabId) {
-    chrome.tabs.sendMessage(message.targetTabId, message).catch(() => {
-      // Ignore errors if tab isn't listening directly
-    });
+    chrome.tabs.sendMessage(message.targetTabId, message).catch(() => {});
   }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "openWithAtauxel" || !tab?.id) return;
 
+  // 1. Capture and Lock the exact source tab ID before window operations
   const sourceTabId = tab.id;
+  const sourceWindowId = tab.windowId;
+
+  // Verify the source tab still exists
+  let sourceTabExists = false;
+  try {
+    const verifiedTab = await chrome.tabs.get(sourceTabId);
+    if (verifiedTab) sourceTabExists = true;
+  } catch (e) {
+    console.error("Source tab handle lost:", e);
+    return;
+  }
+
   let payload = "";
   const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
-  // 1. Extract input IDs from current source tab
+  // 2. Extract input IDs directly from top window frame first
   let inputIds = [];
   try {
     const results = await chrome.scripting.executeScript({
-      target: { tabId: sourceTabId, allFrames: true },
+      target: { tabId: sourceTabId },
       func: () => Array.from(document.querySelectorAll("input[id], textarea[id]")).map(el => ({
         id: el.id,
         label: el.name || el.placeholder || el.id
       }))
     });
-    if (results && results.length > 0) {
-      inputIds = results.flatMap(r => r.result || []);
+    if (results && results[0]?.result) {
+      inputIds = results[0].result;
     }
   } catch (error) {
     console.error("Failed to fetch input IDs:", error);
   }
 
-  // 2. Inject double-layer sync listener into SOURCE TAB
+  // 3. Inject Storage & Direct Message Listeners bound directly to sourceTabId
   try {
     await chrome.scripting.executeScript({
-      target: { tabId: sourceTabId, allFrames: true },
-      func: () => {
+      target: { tabId: sourceTabId },
+      func: (boundTabId) => {
+        window.atauxelSourceTabId = boundTabId;
+
         if (window.hasAtauxelSync) return;
         window.hasAtauxelSync = true;
 
@@ -214,7 +227,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           if (targetInput) {
             targetInput.value = value;
             
-            // Support React/Vue internal state trackers
+            // Support React/Vue state trackers
             const tracker = targetInput._valueTracker;
             if (tracker) tracker.setValue(value);
 
@@ -226,24 +239,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         // Storage Listener
         chrome.storage.onChanged.addListener((changes, area) => {
           if (area === "local" && changes.atauxelSync) {
-            const { inputId, value } = changes.atauxelSync.newValue || {};
-            applyValueToInput(inputId, value);
+            const data = changes.atauxelSync.newValue || {};
+            if (data.targetTabId === window.atauxelSourceTabId) {
+              applyValueToInput(data.inputId, data.value);
+            }
           }
         });
 
-        // Direct Runtime Message Listener
+        // Direct Runtime Message Fallback
         chrome.runtime.onMessage.addListener((msg) => {
-          if (msg.type === "ATAUXEL_DIRECT_SYNC") {
+          if (msg.type === "ATAUXEL_DIRECT_SYNC" && msg.targetTabId === window.atauxelSourceTabId) {
             applyValueToInput(msg.inputId, msg.value);
           }
         });
-      }
+      },
+      args: [sourceTabId]
     });
   } catch (err) {
-    console.error("Failed to inject sync listener on source page:", err);
+    console.error("Failed to inject listener on source page:", err);
   }
 
-  // 3. Process Payload
+  // 4. Determine payload
   if (info.mediaType === "image" && info.srcUrl) {
     payload = await urlToBase64(info.srcUrl);
   } else if (info.selectionText) {
@@ -276,16 +292,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   let atauxelTabId = null;
 
-  // 4. Handle Split Window or Standard Tab
-  if (isPageContext && tab.windowId) {
-    const currentWin = await chrome.windows.get(tab.windowId);
+  // 5. Handle Split Window vs New Tab creation
+  if (isPageContext && sourceWindowId) {
+    const currentWin = await chrome.windows.get(sourceWindowId);
     const screenLeft = currentWin.left || 0;
     const screenTop = currentWin.top || 0;
     const screenWidth = currentWin.width || 1920;
     const screenHeight = currentWin.height || 1080;
     const halfWidth = Math.floor(screenWidth / 2);
 
-    await chrome.windows.update(tab.windowId, {
+    // Resize existing window first
+    await chrome.windows.update(sourceWindowId, {
       state: "normal",
       left: screenLeft,
       top: screenTop,
@@ -294,6 +311,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       focused: true
     });
 
+    // Create the right window with Atauxel URL
     const rightWin = await chrome.windows.create({
       url: targetUrl,
       state: "normal",
@@ -310,7 +328,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // 5. Inject Bridge into Atauxel Tab
+  // 6. Inject communication bridge into newly opened Atauxel tab
   if (atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -319,25 +337,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
           func: async (extractedInputs, payloadData, isImage, storageKey, originTabId) => {
-            // Setup cross-window postMessage handler
             if (!window.hasAtauxelRelay) {
               window.hasAtauxelRelay = true;
               window.addEventListener("message", (event) => {
                 if (event.data?.type === "ATAUXEL_TYPE_SYNC") {
-                  const syncData = {
+                  const syncPayload = {
                     inputId: event.data.inputId,
                     value: event.data.value,
                     targetTabId: originTabId,
                     ts: Date.now()
                   };
 
-                  // 1. Storage update with unique timestamp
-                  chrome.storage.local.set({ atauxelSync: syncData });
+                  // Trigger via storage
+                  chrome.storage.local.set({ atauxelSync: syncPayload });
 
-                  // 2. Direct extension message backup
+                  // Direct runtime messaging fallback
                   chrome.runtime.sendMessage({
                     type: "ATAUXEL_DIRECT_SYNC",
-                    ...syncData
+                    ...syncPayload
                   });
                 }
               });
