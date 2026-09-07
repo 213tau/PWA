@@ -163,21 +163,22 @@ async function urlToBase64(imageUrl) {
     });
   } catch (error) {
     console.error("Failed to convert image to Base64:", error);
-    return imageUrl; // Fallback to raw URL on failure
+    return imageUrl;
   }
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "openWithAtauxel" || !tab?.id) return;
 
+  const sourceTabId = tab.id;
   let payload = "";
   const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
-  // Extract input IDs from current source tab
+  // 1. Extract input IDs from current source tab
   let inputIds = [];
   try {
     const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
+      target: { tabId: sourceTabId, allFrames: true },
       func: () => Array.from(document.querySelectorAll("input[id]")).map(el => ({
         id: el.id,
         label: el.name || el.placeholder || el.id
@@ -190,24 +191,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error("Failed to fetch input IDs:", error);
   }
 
-  // Inject Storage Listener into SOURCE TAB to receive updates
+  // 2. Inject Storage Listener into SOURCE TAB to receive sync updates
   try {
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
+      target: { tabId: sourceTabId, allFrames: true },
       func: () => {
         if (window.hasAtauxelSync) return;
         window.hasAtauxelSync = true;
 
         chrome.storage.onChanged.addListener((changes, area) => {
           if (area === "local" && changes.atauxelSync) {
-            const { inputId, value } = changes.atauxelSync.newValue || {};
+            const { inputId, value, targetTabId } = changes.atauxelSync.newValue || {};
             if (!inputId) return;
 
             const targetInput = document.getElementById(inputId);
             if (targetInput) {
               targetInput.value = value;
               
-              // Support React/Vue internal state updates
+              // Support React/Vue internal state trackers
               const tracker = targetInput._valueTracker;
               if (tracker) tracker.setValue(value);
 
@@ -222,7 +223,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error("Failed to inject storage listener on source page:", err);
   }
 
-  // Determine payload (Convert images to Base64)
+  // 3. Process Payload
   if (info.mediaType === "image" && info.srcUrl) {
     payload = await urlToBase64(info.srcUrl);
   } else if (info.selectionText) {
@@ -240,7 +241,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const isBase64 = payload.startsWith("data:image/");
   let imageStorageKey = "";
 
-  // If payload is Base64, store it in storage to prevent URL overflow
   if (isBase64) {
     imageStorageKey = `atauxel_img_${Date.now()}`;
     await chrome.storage.local.set({ [imageStorageKey]: payload });
@@ -249,14 +249,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const encodedPayload = isBase64 ? "" : encodeURIComponent(payload);
   const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds.map(item => item.id)));
   
-  // Append imageKey query parameter if an image was stored
-  let targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}`;
+  let targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}&sourceTabId=${sourceTabId}`;
   if (isBase64) {
     targetUrl += `&imageKey=${imageStorageKey}`;
   }
 
   let atauxelTabId = null;
 
+  // 4. Handle Window Split or Standard Tab Creation
   if (isPageContext && tab.windowId) {
     const currentWin = await chrome.windows.get(tab.windowId);
     const screenLeft = currentWin.left || 0;
@@ -290,7 +290,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // Populate #output once Atauxel tab loads
+  // 5. Populate and Wire Sync Bridge on Atauxel Tab Load
   if (atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -298,7 +298,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
-          func: async (extractedInputs, payloadData, isImage, storageKey) => {
+          func: async (extractedInputs, payloadData, isImage, storageKey, originTabId) => {
+            // Setup postMessage to chrome.storage Relay Bridge
+            if (!window.hasAtauxelRelay) {
+              window.hasAtauxelRelay = true;
+              window.addEventListener("message", (event) => {
+                if (event.data?.type === "ATAUXEL_TYPE_SYNC") {
+                  chrome.storage.local.set({
+                    atauxelSync: {
+                      inputId: event.data.inputId,
+                      value: event.data.value,
+                      sourceTabId: originTabId,
+                      timestamp: Date.now()
+                    }
+                  });
+                }
+              });
+            }
+
             let outputDiv = document.querySelector("#output");
             if (!outputDiv) {
               outputDiv = document.createElement("div");
@@ -311,11 +328,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
             let finalImageSrc = payloadData;
 
-            // If payload is stored in extension storage, fetch it
             if (isImage && storageKey) {
               const data = await chrome.storage.local.get(storageKey);
               finalImageSrc = data[storageKey] || payloadData;
-              // Clean up storage after reading
               chrome.storage.local.remove(storageKey);
             }
 
@@ -331,7 +346,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
             outputDiv.appendChild(payloadBlock);
 
-            // Render Input IDs
+            // Render Input IDs with dynamic sync triggers
             extractedInputs.forEach(item => {
               const childDiv = document.createElement("div");
               childDiv.id = item.label || item.id;
@@ -351,7 +366,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               outputDiv.appendChild(childDiv);
             });
           },
-          args: [inputIds, payload, isBase64, imageStorageKey]
+          args: [inputIds, payload, isBase64, imageStorageKey, sourceTabId]
         });
       }
     });
