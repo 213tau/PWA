@@ -150,6 +150,23 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Helper: Convert Image URL -> Blob -> Base64
+async function urlToBase64(imageUrl) {
+  try {
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error("Failed to convert image to Base64:", error);
+    return imageUrl; // Fallback to raw URL on failure
+  }
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "openWithAtauxel" || !tab?.id) return;
 
@@ -205,16 +222,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error("Failed to inject storage listener on source page:", err);
   }
 
-  // Determine payload (Prioritize image sources before link URLs)
-  if (info.mediaType === "image" && info.srcUrl) payload = info.srcUrl;
-  else if (info.selectionText) payload = info.selectionText;
-  else if (info.srcUrl) payload = info.srcUrl;
-  else if (info.linkUrl) payload = info.linkUrl;
-  else if (info.pageUrl) payload = info.pageUrl;
+  // Determine payload (Convert images to Base64)
+  if (info.mediaType === "image" && info.srcUrl) {
+    payload = await urlToBase64(info.srcUrl);
+  } else if (info.selectionText) {
+    payload = info.selectionText;
+  } else if (info.srcUrl) {
+    payload = await urlToBase64(info.srcUrl);
+  } else if (info.linkUrl) {
+    payload = info.linkUrl;
+  } else if (info.pageUrl) {
+    payload = info.pageUrl;
+  }
 
   if (!payload) return;
 
-  const encodedPayload = encodeURIComponent(payload);
+  // Use URL query param for regular text, pass long Base64 strings directly via post-injection
+  const isBase64 = payload.startsWith("data:image/");
+  const encodedPayload = isBase64 ? "" : encodeURIComponent(payload);
   const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds.map(item => item.id)));
   const targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}`;
 
@@ -254,14 +279,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   // Populate #output once Atauxel tab loads
-  if (isPageContext && atauxelTabId) {
+  if (atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
         chrome.tabs.onUpdated.removeListener(listener);
 
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
-          func: (extractedInputs, payloadUrl) => {
+          func: (extractedInputs, payloadData, isImage) => {
             let outputDiv = document.querySelector("#output");
             if (!outputDiv) {
               outputDiv = document.createElement("div");
@@ -269,12 +294,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               document.body.appendChild(outputDiv);
             }
 
-            // Render URL Payload
-            const urlBlock = document.createElement("div");
-            urlBlock.style.fontWeight = "bold";
-            urlBlock.style.marginBottom = "8px";
-            urlBlock.textContent = payloadUrl;
-            outputDiv.appendChild(urlBlock);
+            // Render Payload (Image preview if Base64, otherwise text/URL)
+            const payloadBlock = document.createElement("div");
+            payloadBlock.style.marginBottom = "8px";
+
+            if (isImage) {
+              const img = document.createElement("img");
+              img.src = payloadData;
+              img.style.maxWidth = "100%";
+              img.style.borderRadius = "4px";
+              payloadBlock.appendChild(img);
+            } else {
+              payloadBlock.style.fontWeight = "bold";
+              payloadBlock.textContent = payloadData;
+            }
+            outputDiv.appendChild(payloadBlock);
 
             // Render Input IDs
             extractedInputs.forEach(item => {
@@ -286,7 +320,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               childDiv.style.margin = "4px 0";
 
               childDiv.addEventListener("input", () => {
-                // Post message to window context
                 window.postMessage({
                   type: "ATAUXEL_TYPE_SYNC",
                   inputId: item.id,
@@ -297,7 +330,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               outputDiv.appendChild(childDiv);
             });
           },
-          args: [inputIds, payload]
+          args: [inputIds, payload, isBase64]
         });
       }
     });
