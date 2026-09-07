@@ -249,6 +249,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const encodedPayload = isBase64 ? "" : encodeURIComponent(payload);
   const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds.map(item => item.id)));
   
+  // Append imageKey query parameter if an image was stored
   let targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}`;
   if (isBase64) {
     targetUrl += `&imageKey=${imageStorageKey}`;
@@ -310,9 +311,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
             let finalImageSrc = payloadData;
 
+            // If payload is stored in extension storage, fetch it
             if (isImage && storageKey) {
               const data = await chrome.storage.local.get(storageKey);
               finalImageSrc = data[storageKey] || payloadData;
+              // Clean up storage after reading
               chrome.storage.local.remove(storageKey);
             }
 
@@ -328,36 +331,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
             outputDiv.appendChild(payloadBlock);
 
-            // Render Input IDs safely using exact item.id
-            extractedInputs.forEach((item, index) => {
-              const wrapperDiv = document.createElement("div");
-              wrapperDiv.style.margin = "8px 0";
-
-              const labelEl = document.createElement("label");
-              labelEl.textContent = item.label || item.id;
-              labelEl.style.display = "block";
-              labelEl.style.fontSize = "12px";
-              labelEl.style.color = "#666";
-              labelEl.style.marginBottom = "2px";
-
+            // Render Input IDs
+            extractedInputs.forEach(item => {
               const childDiv = document.createElement("div");
-              // Fix: Use exact element ID with fallback index to guarantee uniqueness on the DOM
-              childDiv.id = `atauxel_field_${item.id || index}`;
+              childDiv.id = item.label || item.id;
               childDiv.contentEditable = "true";
               childDiv.style.border = "1px solid #ccc";
-              childDiv.style.padding = "6px";
-              childDiv.style.borderRadius = "4px";
+              childDiv.style.padding = "4px";
+              childDiv.style.margin = "4px 0";
 
               childDiv.addEventListener("input", () => {
-                // Dispatch directly to extension storage sync
-                chrome.storage.local.set({
-                  atauxelSync: {
-                    inputId: item.id,
-                    value: childDiv.textContent,
-                    timestamp: Date.now()
-                  }
-                });
-
                 window.postMessage({
                   type: "ATAUXEL_TYPE_SYNC",
                   inputId: item.id,
@@ -365,9 +348,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 }, "*");
               });
 
-              wrapperDiv.appendChild(labelEl);
-              wrapperDiv.appendChild(childDiv);
-              outputDiv.appendChild(wrapperDiv);
+              outputDiv.appendChild(childDiv);
             });
           },
           args: [inputIds, payload, isBase64, imageStorageKey]
