@@ -167,99 +167,71 @@ async function urlToBase64(imageUrl) {
   }
 }
 
-// Global Message Relay to guarantee direct delivery to specific Tab ID
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "ATAUXEL_DIRECT_SYNC" && message.targetTabId) {
-    chrome.tabs.sendMessage(message.targetTabId, message).catch(() => {});
-  }
-});
-
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "openWithAtauxel" || !tab?.id) return;
 
-  // 1. Capture and Lock the exact source tab ID before window operations
-  const sourceTabId = tab.id;
-  const sourceWindowId = tab.windowId;
+  const rawTabId = tab.id;
+  const rawWindowId = tab.windowId;
 
-  // Verify the source tab still exists
-  let sourceTabExists = false;
-  try {
-    const verifiedTab = await chrome.tabs.get(sourceTabId);
-    if (verifiedTab) sourceTabExists = true;
-  } catch (e) {
-    console.error("Source tab handle lost:", e);
-    return;
-  }
+  // 1. Generate a persistent Session ID independent of Chrome Tab IDs
+  const sessionId = `atauxel_session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   let payload = "";
   const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
-  // 2. Extract input IDs directly from top window frame first
+  // 2. Extract input IDs & assign Session ID to the Source Tab BEFORE window split
   let inputIds = [];
   try {
     const results = await chrome.scripting.executeScript({
-      target: { tabId: sourceTabId },
-      func: () => Array.from(document.querySelectorAll("input[id], textarea[id]")).map(el => ({
-        id: el.id,
-        label: el.name || el.placeholder || el.id
-      }))
+      target: { tabId: rawTabId },
+      func: (sid) => {
+        // Persist session ID to browser's sessionStorage (survives window split/reload)
+        window.sessionStorage.setItem("ATAUXEL_SESSION_ID", sid);
+        window.ATAUXEL_SESSION_ID = sid;
+
+        // Set up local Storage sync listener
+        if (!window.hasAtauxelSync) {
+          window.hasAtauxelSync = true;
+
+          chrome.storage.onChanged.addListener((changes, area) => {
+            if (area === "local" && changes.atauxelSync) {
+              const data = changes.atauxelSync.newValue || {};
+              const currentSid = window.sessionStorage.getItem("ATAUXEL_SESSION_ID") || window.ATAUXEL_SESSION_ID;
+
+              if (data.sessionId === currentSid && data.inputId) {
+                const targetInput = document.getElementById(data.inputId);
+                if (targetInput) {
+                  targetInput.value = data.value;
+
+                  // Support React/Vue state trackers
+                  const tracker = targetInput._valueTracker;
+                  if (tracker) tracker.setValue(data.value);
+
+                  targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+                  targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+              }
+            }
+          });
+        }
+
+        // Return DOM inputs
+        return Array.from(document.querySelectorAll("input[id], textarea[id]")).map(el => ({
+          id: el.id,
+          label: el.name || el.placeholder || el.id
+        }));
+      },
+      args: [sessionId]
     });
+
     if (results && results[0]?.result) {
       inputIds = results[0].result;
     }
   } catch (error) {
-    console.error("Failed to fetch input IDs:", error);
+    console.error("Failed to initialize source page listener:", error);
   }
 
-  // 3. Inject Storage & Direct Message Listeners bound directly to sourceTabId
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: sourceTabId },
-      func: (boundTabId) => {
-        window.atauxelSourceTabId = boundTabId;
-
-        if (window.hasAtauxelSync) return;
-        window.hasAtauxelSync = true;
-
-        const applyValueToInput = (inputId, value) => {
-          if (!inputId) return;
-          const targetInput = document.getElementById(inputId);
-          if (targetInput) {
-            targetInput.value = value;
-            
-            // Support React/Vue state trackers
-            const tracker = targetInput._valueTracker;
-            if (tracker) tracker.setValue(value);
-
-            targetInput.dispatchEvent(new Event("input", { bubbles: true }));
-            targetInput.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        };
-
-        // Storage Listener
-        chrome.storage.onChanged.addListener((changes, area) => {
-          if (area === "local" && changes.atauxelSync) {
-            const data = changes.atauxelSync.newValue || {};
-            if (data.targetTabId === window.atauxelSourceTabId) {
-              applyValueToInput(data.inputId, data.value);
-            }
-          }
-        });
-
-        // Direct Runtime Message Fallback
-        chrome.runtime.onMessage.addListener((msg) => {
-          if (msg.type === "ATAUXEL_DIRECT_SYNC" && msg.targetTabId === window.atauxelSourceTabId) {
-            applyValueToInput(msg.inputId, msg.value);
-          }
-        });
-      },
-      args: [sourceTabId]
-    });
-  } catch (err) {
-    console.error("Failed to inject listener on source page:", err);
-  }
-
-  // 4. Determine payload
+  // 3. Process Payload
   if (info.mediaType === "image" && info.srcUrl) {
     payload = await urlToBase64(info.srcUrl);
   } else if (info.selectionText) {
@@ -284,25 +256,25 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const encodedPayload = isBase64 ? "" : encodeURIComponent(payload);
   const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds.map(item => item.id)));
-  
-  let targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}&sourceTabId=${sourceTabId}`;
+
+  // Target URL carries sessionId instead of tabId
+  let targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}&sessionId=${sessionId}`;
   if (isBase64) {
     targetUrl += `&imageKey=${imageStorageKey}`;
   }
 
   let atauxelTabId = null;
 
-  // 5. Handle Split Window vs New Tab creation
-  if (isPageContext && sourceWindowId) {
-    const currentWin = await chrome.windows.get(sourceWindowId);
+  // 4. Perform Window Split / Tab Creation
+  if (isPageContext && rawWindowId) {
+    const currentWin = await chrome.windows.get(rawWindowId);
     const screenLeft = currentWin.left || 0;
     const screenTop = currentWin.top || 0;
     const screenWidth = currentWin.width || 1920;
     const screenHeight = currentWin.height || 1080;
     const halfWidth = Math.floor(screenWidth / 2);
 
-    // Resize existing window first
-    await chrome.windows.update(sourceWindowId, {
+    await chrome.windows.update(rawWindowId, {
       state: "normal",
       left: screenLeft,
       top: screenTop,
@@ -311,7 +283,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       focused: true
     });
 
-    // Create the right window with Atauxel URL
     const rightWin = await chrome.windows.create({
       url: targetUrl,
       state: "normal",
@@ -328,7 +299,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // 6. Inject communication bridge into newly opened Atauxel tab
+  // 5. Inject Relay Bridge into the new Atauxel Tab
   if (atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -336,25 +307,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         chrome.scripting.executeScript({
           target: { tabId: atauxelTabId },
-          func: async (extractedInputs, payloadData, isImage, storageKey, originTabId) => {
+          func: async (extractedInputs, payloadData, isImage, storageKey, activeSessionId) => {
             if (!window.hasAtauxelRelay) {
               window.hasAtauxelRelay = true;
               window.addEventListener("message", (event) => {
                 if (event.data?.type === "ATAUXEL_TYPE_SYNC") {
-                  const syncPayload = {
-                    inputId: event.data.inputId,
-                    value: event.data.value,
-                    targetTabId: originTabId,
-                    ts: Date.now()
-                  };
-
-                  // Trigger via storage
-                  chrome.storage.local.set({ atauxelSync: syncPayload });
-
-                  // Direct runtime messaging fallback
-                  chrome.runtime.sendMessage({
-                    type: "ATAUXEL_DIRECT_SYNC",
-                    ...syncPayload
+                  chrome.storage.local.set({
+                    atauxelSync: {
+                      inputId: event.data.inputId,
+                      value: event.data.value,
+                      sessionId: activeSessionId,
+                      ts: Date.now()
+                    }
                   });
                 }
               });
@@ -390,7 +354,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
             outputDiv.appendChild(payloadBlock);
 
-            // Render inputs
+            // Render Inputs
             extractedInputs.forEach(item => {
               const childDiv = document.createElement("div");
               childDiv.id = item.label || item.id;
@@ -410,7 +374,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               outputDiv.appendChild(childDiv);
             });
           },
-          args: [inputIds, payload, isBase64, imageStorageKey, sourceTabId]
+          args: [inputIds, payload, isBase64, imageStorageKey, sessionId]
         });
       }
     });
