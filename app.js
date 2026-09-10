@@ -3570,10 +3570,10 @@ images.forEach(function (e, index) {
       };
     }
 
-    async function downscaleAllImages(maxWidth, maxHeight, maxBytes = 1024 * 1024) {
+    async function downscaleAllImages(maxWidth, maxHeight) {
     for (let i = 0; i < images.length; i++) {
         const currentItem = images[i];
-        const img = currentItem.img || currentItem;
+        const img = currentItem.img || currentItem; // supports ImageObject or Image
 
         // 1. Calculate target dimensions while preserving aspect ratio
         let width = img.naturalWidth || img.width;
@@ -3585,30 +3585,20 @@ images.forEach(function (e, index) {
             height = Math.round(height * ratio);
         }
 
-        // 2. Draw image to canvas
+        // 2. Create canvas with the target downscaled size
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
+
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
 
-        // 3. Iteratively compress quality until file size < maxBytes (1MB)
-        let quality = 0.9;
-        let blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-
-        while (blob.size > maxBytes && quality > 0.1) {
-            quality -= 0.1;
-            blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-        }
-
-        // 4. Create new Image object from the compressed Blob
+        // 3. Convert to new Image object asynchronously
         await new Promise((resolve) => {
             const newImg = new Image();
-            const objectUrl = URL.createObjectURL(blob);
 
             newImg.onload = () => {
-                URL.revokeObjectURL(objectUrl); // Clean up memory
-                if (typeof ImageObject !== "undefined" && currentItem instanceof ImageObject) {
+                if (currentItem instanceof ImageObject) {
                     images[i] = new ImageObject(newImg);
                 } else {
                     images[i] = newImg;
@@ -3616,7 +3606,7 @@ images.forEach(function (e, index) {
                 resolve();
             };
 
-            newImg.src = objectUrl;
+            newImg.src = canvas.toDataURL("image/png");
         });
     }
 
