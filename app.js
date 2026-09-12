@@ -10,16 +10,79 @@
     let draggingPoint = null;
 
     class ImageObject {
-  constructor(img, altText = "") {
-    this.img = img;
+  constructor({ imgElement, svgCode, width, height, altText = "" }) {
+    this.img = imgElement; // HTMLImageElement (renderable on Canvas/DOM)
+    this.svgCode = svgCode; // Raw SVG string (editable/reusable)
     this.points = [
       { x: 0, y: 0 },
-      { x: img.width, y: 0 },
-      { x: img.width, y: img.height },
-      { x: 0, y: img.height }
+      { x: width, y: 0 },
+      { x: width, y: height },
+      { x: 0, y: height }
     ];
     this.imageData = null;
-    this.altText = altText; // Stores the specific image text
+    this.altText = altText;
+  }
+
+  static async create(input, altText = "") {
+    let svgCode = "";
+    let imgElement = new Image();
+    let width = 0;
+    let height = 0;
+
+    if (typeof input === "string") {
+      // Input is raw SVG string code
+      svgCode = input;
+      const blob = new Blob([svgCode], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+
+      await new Promise((resolve, reject) => {
+        imgElement.onload = resolve;
+        imgElement.onerror = reject;
+        imgElement.src = url;
+      });
+
+      width = imgElement.naturalWidth || imgElement.width;
+      height = imgElement.naturalHeight || imgElement.height;
+
+    } else if (input instanceof SVGSVGElement) {
+      // Input is an inline <svg> DOM element
+      svgCode = new XMLSerializer().serializeToString(input);
+      const rect = input.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+
+      const blob = new Blob([svgCode], { type: "image/svg+xml;charset=utf-8" });
+      imgElement.src = URL.createObjectURL(blob);
+      
+      if (!imgElement.complete) {
+        await new Promise((resolve) => { imgElement.onload = resolve; });
+      }
+
+    } else if (input instanceof HTMLImageElement) {
+      // Standard image element (PNG, JPG, or SVG via src)
+      if (!input.complete) {
+        await new Promise((resolve, reject) => {
+          input.onload = resolve;
+          input.onerror = reject;
+        });
+      }
+
+      imgElement = input;
+      width = input.naturalWidth || input.width;
+      height = input.naturalHeight || input.height;
+
+      // Fetch the raw SVG markup if the src points to an SVG file
+      if (input.src.endsWith(".svg") || input.src.startsWith("data:image/svg+xml")) {
+        try {
+          const res = await fetch(input.src);
+          svgCode = await res.text();
+        } catch (e) {
+          console.warn("Could not retrieve raw SVG code from image URL.", e);
+        }
+      }
+    }
+
+    return new ImageObject({ imgElement, svgCode, width, height, altText });
   }
 }
 
