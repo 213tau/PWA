@@ -116,11 +116,67 @@ function makeSvgTextEditable(svgElement) {
 
     let fileListPdf = [];
 
-    upload.addEventListener("change", async (e) => {
-      const files = Array.from(e.target.files);
-      fileListPdf.push(...files.map(file => ({ file })));
+upload.addEventListener("change", async (e) => {
+    const rawFiles = Array.from(e.target.files);
+    
+    // 1. Helper function to unpack ZIP archives recursively
+    async function unpackFiles(files) {
+        let extractedFiles = [];
+        for (const file of files) {
+            if (file.type === "application/zip" || file.type === "application/x-zip-compressed" || file.name.toLowerCase().endsWith(".zip")) {
+                try {
+                    const zip = await JSZip.loadAsync(file);
+                    const subFiles = [];
+                    
+                    for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+                        // Skip directories and hidden system metadata files (e.g., __MACOSX)
+                        if (zipEntry.dir || relativePath.startsWith("__MACOSX/") || relativePath.includes("/.")) continue;
+                        
+                        const blob = await zipEntry.async("blob");
+                        const fileName = relativePath.split('/').pop();
+                        
+                        // Detect MIME types for extracted files
+                        let mimeType = blob.type;
+                        if (!mimeType) {
+                            const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+                            const mimeMap = {
+                                '.png': 'image/png',
+                                '.jpg': 'image/jpeg',
+                                '.jpeg': 'image/jpeg',
+                                '.svg': 'image/svg+xml',
+                                '.pdf': 'application/pdf',
+                                '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                                '.opus': 'audio/opus',
+                                '.ogg': 'audio/ogg',
+                                '.oga': 'audio/ogg',
+                                '.html': 'text/html',
+                                '.htm': 'text/html',
+                                '.zip': 'application/zip'
+                            };
+                            mimeType = mimeMap[ext] || '';
+                        }
 
-      const loadPromises = files.map(async (file) => {
+                        subFiles.push(new File([blob], fileName, { type: mimeType }));
+                    }
+                    // Handle nested zips recursively if any exist inside
+                    const nestedUnpacked = await unpackFiles(subFiles);
+                    extractedFiles.push(...nestedUnpacked);
+                } catch (zipErr) {
+                    console.error(`Failed to unpack zip ${file.name}:`, zipErr);
+                }
+            } else {
+                extractedFiles.push(file);
+            }
+        }
+        return extractedFiles;
+    }
+
+    // 2. Unpack all incoming ZIP files into concrete File objects
+    const files = await unpackFiles(rawFiles);
+
+    fileListPdf.push(...files.map(file => ({ file })));
+
+    const loadPromises = files.map(async (file) => {
         if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -184,348 +240,330 @@ function makeSvgTextEditable(svgElement) {
                 reader.readAsText(file);
             });
         } else if (file.type.startsWith("image/")) {
-          return new Promise((resolve) => {
-            const img = new Image();
-            img.src = URL.createObjectURL(file);
-            img.onload = () => resolve([new ImageObject(img, file)]);
-            document.querySelector("canvas").style.display = "block";            
-          });
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+                img.onload = () => resolve([new ImageObject(img, file)]);
+                document.querySelector("canvas").style.display = "block";            
+            });
         } else if (file.type === "application/pdf") {          
-const pdfBytes = await file.arrayBuffer();
-    const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+            const pdfBytes = await file.arrayBuffer();
+            const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
 
-    let fullText = "";
+            let fullText = "";
 
-    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-        const page = await pdfDoc.getPage(pageNum);
-        const textContent = await page.getTextContent();
+            for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+                const page = await pdfDoc.getPage(pageNum);
+                const textContent = await page.getTextContent();
 
-        // Sort items by vertical position (y), then horizontal (x)
-        const sortedItems = textContent.items.sort((a, b) => {
-            const yDiff = b.transform[5] - a.transform[5]; // y coordinates
-            if (Math.abs(yDiff) > 2) return yDiff; // threshold to detect new line
-            return a.transform[4] - b.transform[4]; // x coordinates
-        });
+                // Sort items by vertical position (y), then horizontal (x)
+                const sortedItems = textContent.items.sort((a, b) => {
+                    const yDiff = b.transform[5] - a.transform[5]; // y coordinates
+                    if (Math.abs(yDiff) > 2) return yDiff; // threshold to detect new line
+                    return a.transform[4] - b.transform[4]; // x coordinates
+                });
 
-        let lastY = null;
-        let pageText = "";
+                let lastY = null;
+                let pageText = "";
 
-        for (const item of sortedItems) {
-            const y = item.transform[5];
-            // Add <br> if y changes significantly (new line)
-            if (lastY !== null && Math.abs(y - lastY) > 2) {
-                pageText += "<br>";
+                for (const item of sortedItems) {
+                    const y = item.transform[5];
+                    // Add <br> if y changes significantly (new line)
+                    if (lastY !== null && Math.abs(y - lastY) > 2) {
+                        pageText += "<br>";
+                    }
+                    pageText += item.str;
+                    lastY = y;
+                }
+
+                if (pageText.trim()) {
+                    fullText += pageText + "<br><br>"; // separate pages
+                }
+                
+                // -------- SVG RENDERING --------
+                const viewport = page.getViewport({ scale: 1 });
+                const opList = await page.getOperatorList();
+
+                const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+                const svg = await svgGfx.getSVG(opList, viewport); // SVG exists only in memory
+
+                // -------- IMAGE EXTRACTION --------
+                const SELimages = svg.querySelectorAll("image");
+
+                for (const img of SELimages) {
+                    const href = img.getAttribute("href") || img.getAttribute("xlink:href");
+                    const width = parseFloat(img.getAttribute("width") || 0);
+
+                    // Skip images smaller than 300px width
+                    if (!href || width < 300) continue;
+
+                    try {
+                        const response = await fetch(href);
+                        const blob = await response.blob();
+                        const extractedFile = new File([blob], "embedded-image.png", { type: blob.type });
+
+                        if (typeof processFile === "function") {
+                            await processFile(extractedFile);
+                        }
+                    } catch (err) {
+                        console.error("Error processing image:", err);
+                    }
+                }
             }
-            pageText += item.str;
-            lastY = y;
-        }
-
-        if (pageText.trim()) {
-            fullText += pageText + "<br><br>"; // separate pages
-        }
-        // -------- SVG RENDERING --------
-const viewport = page.getViewport({ scale: 1 });
-const opList = await page.getOperatorList();
-
-const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
-//svgGfx.embedFonts = true;
-
-const svg = await svgGfx.getSVG(opList, viewport); // SVG exists only in memory
-
-// -------- IMAGE EXTRACTION --------
-const SELimages = svg.querySelectorAll("image");
-
-for (const img of SELimages) {
-    const href = img.getAttribute("href") || img.getAttribute("xlink:href");
-    const width = parseFloat(img.getAttribute("width") || 0);
-
-    // Skip images smaller than 300px width
-    if (!href || width < 300) continue;
-
-    try {
-        const response = await fetch(href);
-        const blob = await response.blob();
-
-        const file = new File([blob], "embedded-image.png", { type: blob.type });
-
-        await processFile(file);
-        //images.push(new ImageObject(img, blob));
-    } catch (err) {
-        console.error("Error processing image:", err);
-    }
-}
-    }
 
             document.querySelector("#output").innerHTML += fullText;
-    
-   return images; // <-- this is crucial
+            return []; 
 
         } else if (file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
-            await uploadAndForwardToEditor(file);
+            if (typeof uploadAndForwardToEditor === "function") {
+                await uploadAndForwardToEditor(file);
+            }
             
-  const zip = await JSZip.loadAsync(file);
-  const output = document.querySelector("#output");
-  output.innerHTML = "";
-  const images = [];
-  /* -------------------- IMAGE EXTRACTION -------------------- */
-  for (const entry of Object.values(zip.files)) {
-    if (entry.name.startsWith("ppt/media/") && !entry.dir) {
-      const blob = await entry.async("blob");
-      const img = new Image();
-      img.src = URL.createObjectURL(blob);
-      await new Promise(res => img.onload = res);
-      images.push(new ImageObject(img, file));
-    }
-  }
-  /* -------------------- SLIDE TEXT + TABLES -------------------- */
-  const slideFiles = Object.values(zip.files)
-    .filter(f => f.name.startsWith("ppt/slides/slide") && f.name.endsWith(".xml"));
-  for (const slideFile of slideFiles) {
-    const xmlText = await slideFile.async("text");
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "application/xml");
-    const slideDiv = document.createElement("div");
-    slideDiv.className = "slide";
-    /* ---------- TEXT SHAPES ---------- */
-    const paragraphs = xmlDoc.getElementsByTagName("a:p");
-    for (const p of paragraphs) {
-      const pElement = document.createElement("p");
-      /* ----- TEXT ALIGNMENT ----- */
-      const pPr = p.getElementsByTagName("a:pPr")[0];
-      if (pPr && pPr.getAttribute("algn")) {
-        const alignMap = {
-          l: "left",
-          ctr: "center",
-          r: "right",
-          just: "justify"
-        };
-        pElement.style.textAlign = alignMap[pPr.getAttribute("algn")] || "left";
-      }
-      const runs = p.getElementsByTagName("a:r");
-      for (const r of runs) {
-        const textNode = r.getElementsByTagName("a:t")[0];
-        if (!textNode) continue;
-        const span = document.createElement("span");
-        span.textContent = textNode.textContent;
-        const rPr = r.getElementsByTagName("a:rPr")[0];
-        if (rPr) {
-          if (rPr.getAttribute("b") === "1")
-            span.style.fontWeight = "bold";
-          if (rPr.getAttribute("i") === "1")
-            span.style.fontStyle = "italic";
-          if (rPr.getAttribute("u"))
-            span.style.textDecoration = "underline";
-          if (rPr.getAttribute("sz")) {
-            const size = parseInt(rPr.getAttribute("sz")) / 100;
-            span.style.fontSize = size + "pt";
-          }
-          const colorNode = rPr.getElementsByTagName("a:srgbClr")[0];
-          if (colorNode) {
-            span.style.color = "#" + colorNode.getAttribute("val");
-          }
-        }
-        pElement.appendChild(span);
-      }
-      if (pElement.textContent.trim() !== "")
-        slideDiv.appendChild(pElement);
-    }
-    /* ---------- TABLE EXTRACTION ---------- */
-    const tables = xmlDoc.getElementsByTagName("a:tbl");
-    for (const tbl of tables) {
-      const table = document.createElement("table");
-      table.style.borderCollapse = "collapse";
-      table.style.marginTop = "20px";
-      const rows = tbl.getElementsByTagName("a:tr");
-      for (const row of rows) {
-        const tr = document.createElement("tr");
-        const cells = row.getElementsByTagName("a:tc");
-        for (const cell of cells) {
-          const td = document.createElement("td");
-          td.style.border = "1px solid #333";
-          td.style.padding = "8px";
-          const cellParagraphs = cell.getElementsByTagName("a:p");
-          for (const cp of cellParagraphs) {
-            const cellP = document.createElement("p");
-            const cpPr = cp.getElementsByTagName("a:pPr")[0];
-            if (cpPr && cpPr.getAttribute("algn")) {
-              const alignMap = {
-                l: "left",
-                ctr: "center",
-                r: "right",
-                just: "justify"
-              };
-              cellP.style.textAlign = alignMap[cpPr.getAttribute("algn")] || "left";
-            }
-            const runs = cp.getElementsByTagName("a:r");
-            for (const r of runs) {
-              const textNode = r.getElementsByTagName("a:t")[0];
-              if (!textNode) continue;
-              const span = document.createElement("span");
-              span.textContent = textNode.textContent;
-              const rPr = r.getElementsByTagName("a:rPr")[0];
-              if (rPr) {
-                if (rPr.getAttribute("b") === "1")
-                  span.style.fontWeight = "bold";
-                if (rPr.getAttribute("i") === "1")
-                  span.style.fontStyle = "italic";
-                if (rPr.getAttribute("u"))
-                  span.style.textDecoration = "underline";
-              }
-              cellP.appendChild(span);
-            }
-            td.appendChild(cellP);
-          }
-          tr.appendChild(td);
-        }
-        table.appendChild(tr);
-      }
-      slideDiv.appendChild(table);
-    }
-    output.appendChild(slideDiv);
-  }
-  document.querySelector("canvas").style.display = "block";
-  return images;
-} else if (file.type === "audio/ogg" || file.type === "audio/opus" || file.name.toLowerCase().endsWith(".opus") || file.name.toLowerCase().endsWith(".ogg")) {
-    return new Promise((resolve, reject) => {
-        try {
-            // Create a local object URL for the audio file
-            const audioUrl = URL.createObjectURL(file);
-            
-            // Check for existing player or create one dynamically
-            let audioElement = document.querySelector("#audioPlayer");
-            if (!audioElement) {
-                audioElement = document.createElement("audio");
-                audioElement.id = "audioPlayer";
-                audioElement.controls = true;
-                
-                // Fallback container: append to a specific wrapper, or body if none exists
-                const container = document.querySelector("#audioTools") || document.body;
-                container.appendChild(audioElement);
-            }
+            const zip = await JSZip.loadAsync(file);
+            const output = document.querySelector("#output");
+            output.innerHTML = "";
+            const images = [];
 
-            audioElement.src = audioUrl;
-
-            // --- WEB AUDIO API SOUND BOOST SETUP ---
-            if (!window.__audioContextInitialized) {
-                window.__audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                window.__audioSource = window.__audioContext.createMediaElementSource(audioElement);
-                
-                window.__audioGainNode = window.__audioContext.createGain();
-                
-                // Adjust this value to boost sound (e.g., 2.0 = 200% volume, 3.0 = 300%)
-                window.__audioGainNode.gain.value = 2.0; 
-
-                // Connect graph: source -> gain node -> speakers
-                window.__audioSource.connect(window.__audioGainNode);
-                window.__audioGainNode.connect(window.__audioContext.destination);
-                
-                window.__audioContextInitialized = true;
-            } else {
-                // If context already exists, just resume it (needed for browser autoplay policies)
-                if (window.__audioContext.state === 'suspended') {
-                    window.__audioContext.resume();
+            /* -------------------- IMAGE EXTRACTION -------------------- */
+            for (const entry of Object.values(zip.files)) {
+                if (entry.name.startsWith("ppt/media/") && !entry.dir) {
+                    const blob = await entry.async("blob");
+                    const img = new Image();
+                    img.src = URL.createObjectURL(blob);
+                    await new Promise(res => img.onload = res);
+                    images.push(new ImageObject(img, file));
                 }
             }
-            // ----------------------------------------
 
-            audioElement.onloadedmetadata = () => {
-                resolve({
-                    element: audioElement,
-                    duration: audioElement.duration,
-                    url: audioUrl
-                });
-            };
+            /* -------------------- SLIDE TEXT + TABLES -------------------- */
+            const slideFiles = Object.values(zip.files)
+                .filter(f => f.name.startsWith("ppt/slides/slide") && f.name.endsWith(".xml"));
 
-            audioElement.onerror = (err) => {
-                reject(new Error("Failed to load Opus/Ogg audio stream."));
-            };
+            for (const slideFile of slideFiles) {
+                const xmlText = await slideFile.async("text");
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+                const slideDiv = document.createElement("div");
+                slideDiv.className = "slide";
 
-        } catch (err) {
-            reject(err);
-        }
-    });
-} else if (file.type === "html" || file.type === "text/html") {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
+                /* ---------- TEXT SHAPES ---------- */
+                const paragraphs = xmlDoc.getElementsByTagName("a:p");
+                for (const p of paragraphs) {
+                    const pElement = document.createElement("p");
+                    const pPr = p.getElementsByTagName("a:pPr")[0];
+                    if (pPr && pPr.getAttribute("algn")) {
+                        const alignMap = {
+                            l: "left",
+                            ctr: "center",
+                            r: "right",
+                            just: "justify"
+                        };
+                        pElement.style.textAlign = alignMap[pPr.getAttribute("algn")] || "left";
+                    }
+                    const runs = p.getElementsByTagName("a:r");
+                    for (const r of runs) {
+                        const textNode = r.getElementsByTagName("a:t")[0];
+                        if (!textNode) continue;
+                        const span = document.createElement("span");
+                        span.textContent = textNode.textContent;
+                        const rPr = r.getElementsByTagName("a:rPr")[0];
+                        if (rPr) {
+                            if (rPr.getAttribute("b") === "1") span.style.fontWeight = "bold";
+                            if (rPr.getAttribute("i") === "1") span.style.fontStyle = "italic";
+                            if (rPr.getAttribute("u")) span.style.textDecoration = "underline";
+                            if (rPr.getAttribute("sz")) {
+                                const size = parseInt(rPr.getAttribute("sz")) / 100;
+                                span.style.fontSize = size + "pt";
+                            }
+                            const colorNode = rPr.getElementsByTagName("a:srgbClr")[0];
+                            if (colorNode) {
+                                span.style.color = "#" + colorNode.getAttribute("val");
+                            }
+                        }
+                        pElement.appendChild(span);
+                    }
+                    if (pElement.textContent.trim() !== "")
+                        slideDiv.appendChild(pElement);
+                }
 
-        reader.onload = (event) => {
-            try {
-                const rawHtmlText = event.target.result;
+                /* ---------- TABLE EXTRACTION ---------- */
+                const tables = xmlDoc.getElementsByTagName("a:tbl");
+                for (const tbl of tables) {
+                    const table = document.createElement("table");
+                    table.style.borderCollapse = "collapse";
+                    table.style.marginTop = "20px";
+                    const rows = tbl.getElementsByTagName("a:tr");
+                    for (const row of rows) {
+                        const tr = document.createElement("tr");
+                        const cells = row.getElementsByTagName("a:tc");
+                        for (const cell of cells) {
+                            const td = document.createElement("td");
+                            td.style.border = "1px solid #333";
+                            td.style.padding = "8px";
+                            const cellParagraphs = cell.getElementsByTagName("a:p");
+                            for (const cp of cellParagraphs) {
+                                const cellP = document.createElement("p");
+                                const cpPr = cp.getElementsByTagName("a:pPr")[0];
+                                if (cpPr && cpPr.getAttribute("algn")) {
+                                    const alignMap = {
+                                        l: "left",
+                                        ctr: "center",
+                                        r: "right",
+                                        just: "justify"
+                                    };
+                                    cellP.style.textAlign = alignMap[cpPr.getAttribute("algn")] || "left";
+                                }
+                                const runs = cp.getElementsByTagName("a:r");
+                                for (const r of runs) {
+                                    const textNode = r.getElementsByTagName("a:t")[0];
+                                    if (!textNode) continue;
+                                    const span = document.createElement("span");
+                                    span.textContent = textNode.textContent;
+                                    const rPr = r.getElementsByTagName("a:rPr")[0];
+                                    if (rPr) {
+                                        if (rPr.getAttribute("b") === "1") span.style.fontWeight = "bold";
+                                        if (rPr.getAttribute("i") === "1") span.style.fontStyle = "italic";
+                                        if (rPr.getAttribute("u")) span.style.textDecoration = "underline";
+                                    }
+                                    cellP.appendChild(span);
+                                }
+                                td.appendChild(cellP);
+                            }
+                            tr.appendChild(td);
+                        }
+                        table.appendChild(tr);
+                    }
+                    slideDiv.appendChild(table);
+                }
+                output.appendChild(slideDiv);
+            }
+            document.querySelector("canvas").style.display = "block";
+            return images;
 
-                // 1. Find #output and create/inject a preview container next to it dynamically
-                const codeElement = document.querySelector("#output");
-                if (codeElement) {
-                    let previewContainer = codeElement.parentElement.querySelector("#previewContainer");
+        } else if (file.type === "audio/ogg" || file.type === "audio/opus" || file.name.toLowerCase().endsWith(".opus") || file.name.toLowerCase().endsWith(".ogg")) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const audioUrl = URL.createObjectURL(file);
                     
-                    if (!previewContainer) {
-                        previewContainer = document.createElement("div");
-                        previewContainer.id = "previewContainer";
-                        // Insert the preview container right after the #output element
-                        codeElement.parentNode.insertBefore(previewContainer, codeElement.nextSibling);
+                    let audioElement = document.querySelector("#audioPlayer");
+                    if (!audioElement) {
+                        audioElement = document.createElement("audio");
+                        audioElement.id = "audioPlayer";
+                        audioElement.controls = true;
+                        
+                        const container = document.querySelector("#audioTools") || document.body;
+                        container.appendChild(audioElement);
                     }
 
-                    previewContainer.innerHTML = ""; // Clear old preview
-                    
-                    const iframe = document.createElement("iframe");
-                    // 'allow-scripts' lets internal JS run; omit 'allow-same-origin' 
-                    // to completely isolate it from your app's domain and cookies.
-                    iframe.setAttribute("sandbox", "allow-scripts");
-                    iframe.style.width = "100%";
-                    iframe.style.height = "100%";
-                    iframe.style.border = "none";
-                    
-                    // Assign HTML content securely via srcdoc
-                    iframe.srcdoc = rawHtmlText;
-                    previewContainer.appendChild(iframe);
+                    audioElement.src = audioUrl;
 
-                    // 2. Format code with line structures for #output view
-                    codeElement.innerHTML = ""; // Clear old output
-                    
-                    // Escape HTML entities safely to prevent rendering tags inside code view
-                    const escapedText = rawHtmlText
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;");
-                    
-                    const lines = escapedText.split("\n");
-                    lines.forEach(lineContent => {
-                        const lineSpan = document.createElement("span");
-                        lineSpan.className = "code-line";
-                        lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
-                        codeElement.appendChild(lineSpan);
-                    });
+                    // Web Audio API Sound Boost
+                    if (!window.__audioContextInitialized) {
+                        window.__audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        window.__audioSource = window.__audioContext.createMediaElementSource(audioElement);
+                        window.__audioGainNode = window.__audioContext.createGain();
+                        
+                        window.__audioGainNode.gain.value = 2.0; 
+
+                        window.__audioSource.connect(window.__audioGainNode);
+                        window.__audioGainNode.connect(window.__audioContext.destination);
+                        
+                        window.__audioContextInitialized = true;
+                    } else {
+                        if (window.__audioContext.state === 'suspended') {
+                            window.__audioContext.resume();
+                        }
+                    }
+
+                    audioElement.onloadedmetadata = () => {
+                        resolve({
+                            element: audioElement,
+                            duration: audioElement.duration,
+                            url: audioUrl
+                        });
+                    };
+
+                    audioElement.onerror = () => {
+                        reject(new Error("Failed to load Opus/Ogg audio stream."));
+                    };
+
+                } catch (err) {
+                    reject(err);
                 }
+            });
+        } else if (file.type === "text/html" || file.name.toLowerCase().endsWith(".html") || file.name.toLowerCase().endsWith(".htm")) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
 
-                resolve(rawHtmlText);
-            } catch (err) {
-                reject(err);
-            }
-        };
+                reader.onload = (event) => {
+                    try {
+                        const rawHtmlText = event.target.result;
 
-        reader.onerror = (error) => reject(error);
-        reader.readAsText(file);
-    });
-} else {
-          return []; // to avoid undefined entries in results
+                        const codeElement = document.querySelector("#output");
+                        if (codeElement) {
+                            let previewContainer = codeElement.parentElement.querySelector("#previewContainer");
+                            
+                            if (!previewContainer) {
+                                previewContainer = document.createElement("div");
+                                previewContainer.id = "previewContainer";
+                                codeElement.parentNode.insertBefore(previewContainer, codeElement.nextSibling);
+                            }
+
+                            previewContainer.innerHTML = "";
+                            
+                            const iframe = document.createElement("iframe");
+                            iframe.setAttribute("sandbox", "allow-scripts");
+                            iframe.style.width = "100%";
+                            iframe.style.height = "100%";
+                            iframe.style.border = "none";
+                            
+                            iframe.srcdoc = rawHtmlText;
+                            previewContainer.appendChild(iframe);
+
+                            codeElement.innerHTML = "";
+                            
+                            const escapedText = rawHtmlText
+                                .replace(/&/g, "&amp;")
+                                .replace(/</g, "&lt;")
+                                .replace(/>/g, "&gt;");
+                            
+                            const lines = escapedText.split("\n");
+                            lines.forEach(lineContent => {
+                                const lineSpan = document.createElement("span");
+                                lineSpan.className = "code-line";
+                                lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
+                                codeElement.appendChild(lineSpan);
+                            });
+                        }
+
+                        resolve(rawHtmlText);
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+
+                reader.onerror = (error) => reject(error);
+                reader.readAsText(file);
+            });
+        } else {
+            return []; // Avoid undefined entries
         }
-      });
+    });
 
-      // Flatten the array of arrays (because PDFs return arrays)
-      const nestedImages = await Promise.all(loadPromises);
-      images = nestedImages.flat();
+    // Flatten and resolve image arrays
+    const nestedImages = await Promise.all(loadPromises);
+    images = nestedImages.flat().filter(Boolean);
 
-      currentImageIndex = 0;
-      pointsDrawn = false;  // Enable drawing points/lines after switching images
+    currentImageIndex = 0;
+    pointsDrawn = false;
 
-      updateImageSelector();
-      loadCurrentImage();
+    if (typeof updateImageSelector === "function") updateImageSelector();
+    if (typeof loadCurrentImage === "function") loadCurrentImage();
 
-      console.log(fileListPdf);
-      if (document.querySelector('#svg-container')) {
+    if (document.querySelector('#svg-container')) {
         document.querySelector('#svg-container').style.display = "none";
-      }
-
-    });    
+    }
+});
 
 
     function draw() {
