@@ -551,8 +551,17 @@ upload.addEventListener("change", async (e) => {
     });
 
     // Flatten and resolve image arrays
-    const nestedImages = await Promise.all(loadPromises);
-    images = nestedImages.flat().filter(Boolean);
+    // Map extracted images directly to their parent file object inside fileListPdf
+const nestedImages = await Promise.all(loadPromises);
+
+nestedImages.forEach((fileImages, index) => {
+    if (Array.isArray(fileImages) && fileImages.length > 0) {
+        fileListPdf[fileListPdf.length - files.length + index].extractedImages = fileImages;
+    }
+});
+
+// Append to global images array
+images = [...images, ...nestedImages.flat().filter(Boolean)];
 
     currentImageIndex = 0;
     pointsDrawn = false;
