@@ -10,25 +10,18 @@
     let draggingPoint = null;
 
     class ImageObject {
-      constructor(img) {
-        this.img = img;
-        /*
-        this.points = [
-          { x: 10, y: 10 },
-          { x: img.width - 10, y: 10 },
-          { x: img.width - 10, y: img.height - 10 },
-          { x: 10, y: img.height - 10 }
-        ];
-        */
-        this.points = [
-          { x: 0, y: 0 },
-          { x: img.width, y: 0 },
-          { x: img.width, y: img.height },
-          { x: 0, y: img.height }
-        ];
-        this.imageData = null;
-      }
-    }
+  constructor(img, altText = "") {
+    this.img = img;
+    this.points = [
+      { x: 0, y: 0 },
+      { x: img.width, y: 0 },
+      { x: img.width, y: img.height },
+      { x: 0, y: img.height }
+    ];
+    this.imageData = null;
+    this.altText = altText; // Stores the specific image text
+  }
+}
 
 function uploadAndForwardToEditor(file) {
     if (!file) return;
@@ -9647,3 +9640,41 @@ function TrimWhite(canvas = document.querySelector("canvas"), marginInches = 0.5
   ctx.putImageData(trimmedData, 0, 0);
     savecanvas();
 }
+
+// State variables
+let imagesArray = []; // List of ImageObject instances
+let activeIndex = 0;  // Currently selected image index
+let showAll = false;  // Toggle state flag
+
+const outputContainer = document.querySelector("#output");
+const toggleButton = document.querySelector("#toggle-btn");
+
+// 1. Function to update output text depending on toggle mode
+function updateOutput() {
+  if (showAll) {
+    // Show alt text for all images separated by line breaks
+    outputContainer.value = imagesArray
+      .map((item, index) => `[Image ${index + 1}]: ${item.altText}`)
+      .join("\n");
+    outputContainer.readOnly = true; // Prevent editing in "All" view to avoid ambiguity
+  } else {
+    // Show alt text for the currently active image
+    const activeImage = imagesArray[activeIndex];
+    outputContainer.value = activeImage ? activeImage.altText : "";
+    outputContainer.readOnly = false;
+  }
+}
+
+// 2. Event listener: Save input changes back to the active image object
+outputContainer.addEventListener("input", (e) => {
+  if (!showAll && imagesArray[activeIndex]) {
+    imagesArray[activeIndex].altText = e.target.value;
+  }
+});
+
+// 3. Event listener: Toggle view mode button
+toggleButton.addEventListener("click", () => {
+  showAll = !showAll;
+  toggleButton.textContent = showAll ? "Show Active Text" : "Show All Texts";
+  updateOutput();
+});
