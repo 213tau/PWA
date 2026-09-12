@@ -47,7 +47,9 @@
         ],
         "audio/opus": [
           ".opus"
-        ]
+        ],
+        "application/zip": [".zip"],
+        "application/x-zip-compressed": [".zip"]
       }
     }
   ],
@@ -73,7 +75,10 @@
             "audio/*",
             ".oga",
             ".ogg",
-            ".opus"
+            ".opus",
+            "application/zip",
+            "application/x-zip-compressed",
+            ".zip"
           ]
         }
       ]
