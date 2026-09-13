@@ -8261,7 +8261,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
     // Format ID (e.g. "First Name" -> "first_name")
     const idName = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || "field";
 
-    // --- 1. CREATE EDITABLE DIV INSIDE #output WITH LIVE EDIT SYNCING ---
+    // --- 1. EDITABLE DIV INSIDE #output WITH LIVE EDIT SYNCING ---
     const newDiv = document.createElement('div');
     newDiv.id = idName;
     newDiv.dataset.label = label;
@@ -8275,7 +8275,6 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       const currentText = this.textContent;
 
       if (isToggled) {
-        // Formatted as "Label: Value" -> split on first colon
         const colonIndex = currentText.indexOf(':');
         if (colonIndex !== -1) {
           this.dataset.label = currentText.substring(0, colonIndex).trim();
@@ -8284,49 +8283,62 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
           this.dataset.value = currentText.trim();
         }
       } else {
-        // Formatted as plain value
         this.dataset.value = currentText.trim();
       }
     });
 
     document.querySelector('#output').appendChild(newDiv);
 
-    // --- 2. DYNAMIC SVG CREATION APPENDED TO #svgTools ---
-    let svgTextElements = '';
-
-    lines.forEach((line, index) => {
-      const lineText = line.text.trim();
-      if (!lineText) return;
-
-      const { x0, y0, y1 } = line.bbox;
-      const fontSize = Math.max(12, Math.floor(y1 - y0));
-      const baselineY = y1;
-
-      const textId = index === 0 ? `svg_${idName}` : `svg_${idName}_line_${index}`;
-
-      svgTextElements += `
-        <text 
-          id="${textId}" 
-          x="${x0}" 
-          y="${baselineY}" 
-          font-size="${fontSize}px" 
-          font-family="sans-serif" 
-          fill="#000000"
-          data-label="${label}"
-          data-value="${lineText}"
-          data-toggled="false"
-        >${lineText}</text>`;
-    });
-
-    const svgString = `
-      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="border: 1px dashed #ccc; margin: 5px 0;">
-        ${svgTextElements}
-      </svg>
-    `;
-
+    // --- 2. APPEND TO SHARED SINGLE SVG INSIDE #svgTools ---
     const svgToolsContainer = document.querySelector('#svgTools');
+
     if (svgToolsContainer) {
-      svgToolsContainer.insertAdjacentHTML('beforeend', svgString);
+      let mainSvg = svgToolsContainer.querySelector('svg#documentSvg');
+
+      // Create main document SVG layer if it does not exist yet
+      if (!mainSvg) {
+        mainSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        mainSvg.setAttribute("id", "documentSvg");
+        mainSvg.setAttribute("width", srcW);
+        mainSvg.setAttribute("height", srcH);
+        mainSvg.setAttribute("viewBox", `0 0 ${srcW} ${srcH}`);
+        mainSvg.style.border = "1px solid #ccc";
+        mainSvg.style.background = "#ffffff";
+        svgToolsContainer.appendChild(mainSvg);
+      }
+
+      // Group elements for this region using its mapped corner coordinates
+      const regionGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      regionGroup.setAttribute("id", `group_${idName}`);
+      regionGroup.setAttribute("class", "ocr-region-group");
+
+      lines.forEach((line, index) => {
+        const lineText = line.text.trim();
+        if (!lineText) return;
+
+        const { x0, y0, y1 } = line.bbox;
+        const fontSize = Math.max(12, Math.floor(y1 - y0));
+
+        // Absolute mapping back to main document coordinate space
+        const absX = tl.x + x0;
+        const absY = tl.y + y1;
+
+        const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        textEl.setAttribute("id", index === 0 ? `svg_${idName}` : `svg_${idName}_line_${index}`);
+        textEl.setAttribute("x", absX);
+        textEl.setAttribute("y", absY);
+        textEl.setAttribute("font-size", `${fontSize}px`);
+        textEl.setAttribute("font-family", "sans-serif");
+        textEl.setAttribute("fill", "#000000");
+        textEl.setAttribute("data-label", label);
+        textEl.setAttribute("data-value", lineText);
+        textEl.setAttribute("data-toggled", "false");
+        textEl.textContent = lineText;
+
+        regionGroup.appendChild(textEl);
+      });
+
+      mainSvg.appendChild(regionGroup);
     }
   }
 
@@ -9762,56 +9774,53 @@ toggleButton.addEventListener("click", () => {
 });
 
 function toggleAllOCRFields() {
-  // 1. Toggle HTML divs inside #output
+  const btn = document.querySelector('#ocrToggleBtn');
+  // Determine target state for ALL fields based on button's current global state
+  const isGlobalToggled = btn ? btn.dataset.globalToggled === "true" : false;
+  const nextState = !isGlobalToggled;
+
+  // 1. Toggle all HTML divs inside #output simultaneously
   const htmlElements = document.querySelectorAll('#output div[id][data-label][data-value]');
   htmlElements.forEach(el => {
-    const isToggled = el.dataset.toggled === "true";
     const currentText = el.textContent;
 
-    if (isToggled) {
-      // Currently showing "Label: Value" -> Parse any edits before switching to "Value"
+    if (nextState) {
+      // Force ALL to "Label: Value" format
+      if (!isGlobalToggled) {
+        // Capture any pending live edits before toggling
+        const colonIndex = currentText.indexOf(':');
+        if (colonIndex === -1) {
+          el.dataset.value = currentText.trim();
+        }
+      }
+      el.textContent = `${el.dataset.label}: ${el.dataset.value}`;
+      el.dataset.toggled = "true";
+    } else {
+      // Force ALL to plain "Value" format
       const colonIndex = currentText.indexOf(':');
       if (colonIndex !== -1) {
         el.dataset.label = currentText.substring(0, colonIndex).trim();
         el.dataset.value = currentText.substring(colonIndex + 1).trim();
-      } else {
-        el.dataset.value = currentText.trim();
       }
-
-      // Switch to plain value
       el.textContent = el.dataset.value;
       el.dataset.toggled = "false";
-    } else {
-      // Currently showing "Value" -> Save edits as dataset.value before switching to "Label: Value"
-      el.dataset.value = currentText.trim();
-
-      // Switch to "Label: Value"
-      el.textContent = `${el.dataset.label}: ${el.dataset.value}`;
-      el.dataset.toggled = "true";
     }
   });
 
-  // 2. Toggle SVG <text> tags inside #svgTools
+  // 2. Toggle all SVG <text> tags inside #svgTools simultaneously
   const svgTextElements = document.querySelectorAll('#svgTools text[data-label][data-value]');
   svgTextElements.forEach(el => {
-    const isToggled = el.dataset.toggled === "true";
-    const currentText = el.textContent;
-
-    if (isToggled) {
-      const colonIndex = currentText.indexOf(':');
-      if (colonIndex !== -1) {
-        el.dataset.label = currentText.substring(0, colonIndex).trim();
-        el.dataset.value = currentText.substring(colonIndex + 1).trim();
-      } else {
-        el.dataset.value = currentText.trim();
-      }
-
-      el.textContent = el.dataset.value;
-      el.dataset.toggled = "false";
-    } else {
-      el.dataset.value = currentText.trim();
+    if (nextState) {
       el.textContent = `${el.dataset.label}: ${el.dataset.value}`;
       el.dataset.toggled = "true";
+    } else {
+      el.textContent = el.dataset.value;
+      el.dataset.toggled = "false";
     }
   });
+
+  // Update button global state tracker
+  if (btn) {
+    btn.dataset.globalToggled = nextState ? "true" : "false";
+  }
 }
