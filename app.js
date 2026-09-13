@@ -8245,7 +8245,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
 // Replace the OCR result processing section in ocrwarp with this:
 const lines = result.data.text.split('\n').map(l => l.trim()).filter(l => l !== '');
 
-if (lines.length >= 2) {
+if (lines.length = 2) {
   const label = lines[0]; // e.g., "Name"
   const value = lines.slice(1).join(' '); // e.g., "Abdul Sami"
   
@@ -8256,9 +8256,9 @@ if (lines.length >= 2) {
   const html = `<div id="${idName}" data-label="${label}" data-value="${value}">${value}</div>`;
   
   document.querySelector('#output').innerHTML += html;
-}
+} else {
 
-//const html = lines.map(line => `<div>${line}</div>`).join('');
+const html = lines.map(line => `<div>${line}</div>`).join('');
 /* let html = '';
 
  result.data.lines.forEach(line => {
@@ -8271,7 +8271,8 @@ if (lines.length >= 2) {
    `;
  });*/
  
-//document.querySelector('#output').innerHTML += html;
+document.querySelector('#output').innerHTML += html;
+}
       
         current.hiddenPoints = current.points; // Temporarily store current points
         current.points = []; // Clear points
