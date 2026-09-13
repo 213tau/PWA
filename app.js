@@ -8233,7 +8233,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
 
   destCtx.putImageData(destImageData, 0, 0);
 
-  // Run Tesseract OCR in AUTO mode to capture exact line bounding boxes
+  // Run Tesseract OCR in AUTO mode
   const result = await Tesseract.recognize(
     destCanvas.toDataURL(),
     'eng',
@@ -8258,7 +8258,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       value = textLines[0];
     }
 
-    // Format ID (e.g. "First Name" -> "first_name")
+    // Format ID (e.g., "Name" -> "name")
     const idName = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || "field";
 
     // --- 1. EDITABLE DIV INSIDE #output WITH LIVE EDIT SYNCING ---
@@ -8269,7 +8269,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
     newDiv.dataset.toggled = "false";
     newDiv.textContent = value; // Default output: <div id="name">Abdul Sami</div>
 
-    // Real-time listener: Syncs contenteditable typed edits back to data attributes
+    // Sync contenteditable edits directly back to dataset attributes
     newDiv.addEventListener('input', function() {
       const isToggled = this.dataset.toggled === "true";
       const currentText = this.textContent;
@@ -8289,13 +8289,12 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
 
     document.querySelector('#output').appendChild(newDiv);
 
-    // --- 2. APPEND TO SHARED SINGLE SVG INSIDE #svgTools ---
+    // --- 2. APPEND TO SHARED MAIN SVG INSIDE #svgTools ---
     const svgToolsContainer = document.querySelector('#svgTools');
 
     if (svgToolsContainer) {
       let mainSvg = svgToolsContainer.querySelector('svg#documentSvg');
 
-      // Create main document SVG layer if it does not exist yet
       if (!mainSvg) {
         mainSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         mainSvg.setAttribute("id", "documentSvg");
@@ -8307,38 +8306,39 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
         svgToolsContainer.appendChild(mainSvg);
       }
 
-      // Group elements for this region using its mapped corner coordinates
-      const regionGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      regionGroup.setAttribute("id", `group_${idName}`);
-      regionGroup.setAttribute("class", "ocr-region-group");
+      // Calculate base document absolute coordinates
+      const refBox = lines[1]?.bbox || lines[0].bbox;
+      const fontSize = Math.max(12, Math.floor(refBox.y1 - refBox.y0));
+      const absX = tl.x + refBox.x0;
+      const absY = tl.y + refBox.y1;
 
-      lines.forEach((line, index) => {
-        const lineText = line.text.trim();
-        if (!lineText) return;
+      // Label text element (Positioned ABOVE)
+      const labelTextEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      labelTextEl.setAttribute("id", `label_${idName}`);
+      labelTextEl.setAttribute("x", absX);
+      labelTextEl.setAttribute("y", absY - fontSize - 2); // Placed directly above value line
+      labelTextEl.setAttribute("font-size", `${Math.max(10, Math.floor(fontSize * 0.85))}px`);
+      labelTextEl.setAttribute("font-family", "sans-serif");
+      labelTextEl.setAttribute("font-weight", "bold");
+      labelTextEl.setAttribute("fill", "#666666");
+      labelTextEl.setAttribute("data-is-label", "true");
+      labelTextEl.textContent = label;
 
-        const { x0, y0, y1 } = line.bbox;
-        const fontSize = Math.max(12, Math.floor(y1 - y0));
+      // Value text element (Positioned BELOW with value ID)
+      const valueTextEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      valueTextEl.setAttribute("id", idName); // Value holds the field ID (e.g. id="name")
+      valueTextEl.setAttribute("x", absX);
+      valueTextEl.setAttribute("y", absY);
+      valueTextEl.setAttribute("font-size", `${fontSize}px`);
+      valueTextEl.setAttribute("font-family", "sans-serif");
+      valueTextEl.setAttribute("fill", "#000000");
+      valueTextEl.setAttribute("data-label", label);
+      valueTextEl.setAttribute("data-value", value);
+      valueTextEl.setAttribute("data-toggled", "false");
+      valueTextEl.textContent = value;
 
-        // Absolute mapping back to main document coordinate space
-        const absX = tl.x + x0;
-        const absY = tl.y + y1;
-
-        const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        textEl.setAttribute("id", index === 0 ? `svg_${idName}` : `svg_${idName}_line_${index}`);
-        textEl.setAttribute("x", absX);
-        textEl.setAttribute("y", absY);
-        textEl.setAttribute("font-size", `${fontSize}px`);
-        textEl.setAttribute("font-family", "sans-serif");
-        textEl.setAttribute("fill", "#000000");
-        textEl.setAttribute("data-label", label);
-        textEl.setAttribute("data-value", lineText);
-        textEl.setAttribute("data-toggled", "false");
-        textEl.textContent = lineText;
-
-        regionGroup.appendChild(textEl);
-      });
-
-      mainSvg.appendChild(regionGroup);
+      mainSvg.appendChild(labelTextEl);
+      mainSvg.appendChild(valueTextEl);
     }
   }
 
