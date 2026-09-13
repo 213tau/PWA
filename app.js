@@ -8183,87 +8183,138 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
     })
 
     async function ocrwarp() {
-      const current = images[currentImageIndex];
-      const [tl, tr, br, bl] = current.points;
+  const current = images[currentImageIndex];
+  const [tl, tr, br, bl] = current.points;
 
-      const width = Math.floor(Math.max(distance(tl, tr), distance(bl, br)));
-      const height = Math.floor(Math.max(distance(tl, bl), distance(tr, br)));
+  const width = Math.floor(Math.max(distance(tl, tr), distance(bl, br)));
+  const height = Math.floor(Math.max(distance(tl, bl), distance(tr, br)));
 
-      const destCanvas = document.createElement("canvas");
-      destCanvas.width = width;
-      destCanvas.height = height;
-      const destCtx = destCanvas.getContext("2d");
-      const destImageData = destCtx.createImageData(width, height);
+  const destCanvas = document.createElement("canvas");
+  destCanvas.width = width;
+  destCanvas.height = height;
+  const destCtx = destCanvas.getContext("2d");
+  const destImageData = destCtx.createImageData(width, height);
 
-      // Compute homography from dest → src
-      const H = computeHomography(
-        [
-          { x: 0, y: 0 },
-          { x: width, y: 0 },
-          { x: width, y: height },
-          { x: 0, y: height },
-        ],
-        [tl, tr, br, bl]
-      );
+  // Compute homography from dest → src
+  const H = computeHomography(
+    [
+      { x: 0, y: 0 },
+      { x: width, y: 0 },
+      { x: width, y: height },
+      { x: 0, y: height },
+    ],
+    [tl, tr, br, bl]
+  );
 
-      const src = current.imageData.data;
-      const srcW = canvas.width;
-      const srcH = canvas.height;
+  const src = current.imageData.data;
+  const srcW = canvas.width;
+  const srcH = canvas.height;
 
-      // Warp each pixel
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const denom = H[6] * x + H[7] * y + H[8];
-          const sx = (H[0] * x + H[1] * y + H[2]) / denom;
-          const sy = (H[3] * x + H[4] * y + H[5]) / denom;
+  // Warp each pixel
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const denom = H[6] * x + H[7] * y + H[8];
+      const sx = (H[0] * x + H[1] * y + H[2]) / denom;
+      const sy = (H[3] * x + H[4] * y + H[5]) / denom;
 
-          const sxi = Math.floor(sx);
-          const syi = Math.floor(sy);
+      const sxi = Math.floor(sx);
+      const syi = Math.floor(sy);
 
-          if (sxi < 0 || syi < 0 || sxi >= srcW || syi >= srcH) continue;
+      if (sxi < 0 || syi < 0 || sxi >= srcW || syi >= srcH) continue;
 
-          const srcIdx = (syi * srcW + sxi) * 4;
-          const destIdx = (y * width + x) * 4;
+      const srcIdx = (syi * srcW + sxi) * 4;
+      const destIdx = (y * width + x) * 4;
 
-          for (let i = 0; i < 4; i++) {
-            destImageData.data[destIdx + i] = src[srcIdx + i];
-          }
-        }
+      for (let i = 0; i < 4; i++) {
+        destImageData.data[destIdx + i] = src[srcIdx + i];
       }
-
-      destCtx.putImageData(destImageData, 0, 0);
-
-      const result = await Tesseract.recognize(
-  destCanvas.toDataURL(),
-  'eng',
-  {
-    logger: m => console.log(m),
-    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
-  }
-);
-
-const lines = result.data.text.split('\n').filter(l => l.trim() !== '');
-
-const html = lines.map(line => `<div>${line}</div>`).join('');
-/* let html = '';
-
- result.data.lines.forEach(line => {
-   const { x0, y0, x1, y1 } = line.bbox;
-
-   html += `
-     <div style="position:absolute; left:${x0}px; top:${y0}px;">
-       ${line.text}
-     </div>
-   `;
- });*/
-document.querySelector('#output').innerHTML += html;
-      
-        current.hiddenPoints = current.points; // Temporarily store current points
-        current.points = []; // Clear points
-        pointsDrawn = false;
-draw(); // Redraw the canvas
-await navigator.clipboard.writeText(result.data.text);
     }
+  }
+
+  destCtx.putImageData(destImageData, 0, 0);
+
+  // Use AUTO to capture precise line bounding boxes
+  const result = await Tesseract.recognize(
+    destCanvas.toDataURL(),
+    'eng',
+    {
+      logger: m => console.log(m),
+      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+    }
+  );
+
+  const lines = result.data.lines || [];
+  const textLines = lines.map(l => l.text.trim()).filter(l => l.length > 0);
+
+  if (textLines.length > 0) {
+    let label = "";
+    let value = "";
+
+    if (textLines.length >= 2) {
+      label = textLines[0];
+      value = textLines.slice(1).join(' ');
+    } else {
+      label = "field";
+      value = textLines[0];
+    }
+
+    // Format ID name (e.g., "Name" -> "name")
+    const idName = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || "field";
+
+    // --- 1. ORIGINAL WORKING HTML DIV CREATION (INTACT) ---
+    const newDiv = document.createElement('div');
+    newDiv.id = idName;
+    newDiv.dataset.label = label;
+    newDiv.dataset.value = value;
+    newDiv.textContent = value; // Default text: <div id="name">Abdul Sami</div>
+
+    document.querySelector('#output').appendChild(newDiv);
+
+    // --- 2. DYNAMIC SVG CREATION (APPENDED TO #svgTools) ---
+    let svgTextElements = '';
+
+    lines.forEach((line, index) => {
+      const lineText = line.text.trim();
+      if (!lineText) return;
+
+      const { x0, y0, y1 } = line.bbox;
+      const fontSize = Math.max(12, Math.floor(y1 - y0));
+      const baselineY = y1; // SVG text anchor uses bottom baseline
+
+      const textId = index === 0 ? `svg_${idName}` : `svg_${idName}_line_${index}`;
+
+      svgTextElements += `
+        <text 
+          id="${textId}" 
+          x="${x0}" 
+          y="${baselineY}" 
+          font-size="${fontSize}px" 
+          font-family="sans-serif" 
+          fill="#000000"
+          data-label="${label}"
+          data-value="${lineText}"
+        >${lineText}</text>`;
+    });
+
+    const svgString = `
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="border: 1px dashed #ccc; margin: 5px 0;">
+        ${svgTextElements}
+      </svg>
+    `;
+
+    const svgToolsContainer = document.querySelector('#svgTools');
+    if (svgToolsContainer) {
+      svgToolsContainer.insertAdjacentHTML('beforeend', svgString);
+    }
+  }
+
+  current.hiddenPoints = current.points;
+  current.points = [];
+  pointsDrawn = false;
+  draw();
+
+  await navigator.clipboard.writeText(result.data.text);
+}
 
     document.querySelector("#ocrrequired").addEventListener("click", async function () {
       const outputDiv = document.querySelector('#output');
