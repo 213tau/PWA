@@ -8233,7 +8233,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
 
   destCtx.putImageData(destImageData, 0, 0);
 
-  // Use AUTO to capture precise line bounding boxes
+  // Run Tesseract OCR in AUTO mode to capture exact line bounding boxes
   const result = await Tesseract.recognize(
     destCanvas.toDataURL(),
     'eng',
@@ -8258,19 +8258,40 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       value = textLines[0];
     }
 
-    // Format ID name (e.g., "Name" -> "name")
+    // Format ID (e.g. "First Name" -> "first_name")
     const idName = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || "field";
 
-    // --- 1. ORIGINAL WORKING HTML DIV CREATION (INTACT) ---
+    // --- 1. CREATE EDITABLE DIV INSIDE #output WITH LIVE EDIT SYNCING ---
     const newDiv = document.createElement('div');
     newDiv.id = idName;
     newDiv.dataset.label = label;
     newDiv.dataset.value = value;
-    newDiv.textContent = value; // Default text: <div id="name">Abdul Sami</div>
+    newDiv.dataset.toggled = "false";
+    newDiv.textContent = value; // Default output: <div id="name">Abdul Sami</div>
+
+    // Real-time listener: Syncs contenteditable typed edits back to data attributes
+    newDiv.addEventListener('input', function() {
+      const isToggled = this.dataset.toggled === "true";
+      const currentText = this.textContent;
+
+      if (isToggled) {
+        // Formatted as "Label: Value" -> split on first colon
+        const colonIndex = currentText.indexOf(':');
+        if (colonIndex !== -1) {
+          this.dataset.label = currentText.substring(0, colonIndex).trim();
+          this.dataset.value = currentText.substring(colonIndex + 1).trim();
+        } else {
+          this.dataset.value = currentText.trim();
+        }
+      } else {
+        // Formatted as plain value
+        this.dataset.value = currentText.trim();
+      }
+    });
 
     document.querySelector('#output').appendChild(newDiv);
 
-    // --- 2. DYNAMIC SVG CREATION (APPENDED TO #svgTools) ---
+    // --- 2. DYNAMIC SVG CREATION APPENDED TO #svgTools ---
     let svgTextElements = '';
 
     lines.forEach((line, index) => {
@@ -8279,7 +8300,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
 
       const { x0, y0, y1 } = line.bbox;
       const fontSize = Math.max(12, Math.floor(y1 - y0));
-      const baselineY = y1; // SVG text anchor uses bottom baseline
+      const baselineY = y1;
 
       const textId = index === 0 ? `svg_${idName}` : `svg_${idName}_line_${index}`;
 
@@ -8293,6 +8314,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
           fill="#000000"
           data-label="${label}"
           data-value="${lineText}"
+          data-toggled="false"
         >${lineText}</text>`;
     });
 
@@ -8308,6 +8330,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
     }
   }
 
+  // Cleanup canvas state
   current.hiddenPoints = current.points;
   current.points = [];
   pointsDrawn = false;
@@ -9739,22 +9762,55 @@ toggleButton.addEventListener("click", () => {
 });
 
 function toggleAllOCRFields() {
-  const output = document.querySelector('#output');
-  // Target all divs inside #output that have an ID and data attributes set
-  const elements = output.querySelectorAll('div[id][data-label][data-value]');
-
-  elements.forEach(el => {
-    const label = el.dataset.label;
-    const value = el.dataset.value;
+  // 1. Toggle HTML divs inside #output
+  const htmlElements = document.querySelectorAll('#output div[id][data-label][data-value]');
+  htmlElements.forEach(el => {
     const isToggled = el.dataset.toggled === "true";
+    const currentText = el.textContent;
 
     if (isToggled) {
-      // Revert back to: <div id="name">Abdul Sami</div>
-      el.textContent = value;
+      // Currently showing "Label: Value" -> Parse any edits before switching to "Value"
+      const colonIndex = currentText.indexOf(':');
+      if (colonIndex !== -1) {
+        el.dataset.label = currentText.substring(0, colonIndex).trim();
+        el.dataset.value = currentText.substring(colonIndex + 1).trim();
+      } else {
+        el.dataset.value = currentText.trim();
+      }
+
+      // Switch to plain value
+      el.textContent = el.dataset.value;
       el.dataset.toggled = "false";
     } else {
-      // Switch to: <div id="name">Name: Abdul Sami</div>
-      el.textContent = `${label}: ${value}`;
+      // Currently showing "Value" -> Save edits as dataset.value before switching to "Label: Value"
+      el.dataset.value = currentText.trim();
+
+      // Switch to "Label: Value"
+      el.textContent = `${el.dataset.label}: ${el.dataset.value}`;
+      el.dataset.toggled = "true";
+    }
+  });
+
+  // 2. Toggle SVG <text> tags inside #svgTools
+  const svgTextElements = document.querySelectorAll('#svgTools text[data-label][data-value]');
+  svgTextElements.forEach(el => {
+    const isToggled = el.dataset.toggled === "true";
+    const currentText = el.textContent;
+
+    if (isToggled) {
+      const colonIndex = currentText.indexOf(':');
+      if (colonIndex !== -1) {
+        el.dataset.label = currentText.substring(0, colonIndex).trim();
+        el.dataset.value = currentText.substring(colonIndex + 1).trim();
+      } else {
+        el.dataset.value = currentText.trim();
+      }
+
+      el.textContent = el.dataset.value;
+      el.dataset.toggled = "false";
+    } else {
+      el.dataset.value = currentText.trim();
+      el.textContent = `${el.dataset.label}: ${el.dataset.value}`;
       el.dataset.toggled = "true";
     }
   });
