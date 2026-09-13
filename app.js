@@ -8303,7 +8303,8 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
         mainSvg.setAttribute("viewBox", `0 0 ${srcW} ${srcH}`);
         mainSvg.style.border = "1px solid #ccc";
         mainSvg.style.background = "#ffffff";
-        svgToolsContainer.prepend(mainSvg);
+        // Prepend master SVG as the first child of #svgTools
+        svgToolsContainer.insertAdjacentElement('afterbegin', mainSvg);
       }
 
       // Calculate base document absolute coordinates
