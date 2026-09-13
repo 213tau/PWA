@@ -8242,9 +8242,23 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
   }
 );
 
-const lines = result.data.text.split('\n').filter(l => l.trim() !== '');
+// Replace the OCR result processing section in ocrwarp with this:
+const lines = result.data.text.split('\n').map(l => l.trim()).filter(l => l !== '');
 
-const html = lines.map(line => `<div>${line}</div>`).join('');
+if (lines.length >= 2) {
+  const label = lines[0]; // e.g., "Name"
+  const value = lines.slice(1).join(' '); // e.g., "Abdul Sami"
+  
+  // Format ID: replaces spaces with '_' and removes special characters
+  const idName = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+  // Store original label and value in data attributes for seamless toggling
+  const html = `<div id="${idName}" data-label="${label}" data-value="${value}">${value}</div>`;
+  
+  document.querySelector('#output').innerHTML += html;
+}
+
+//const html = lines.map(line => `<div>${line}</div>`).join('');
 /* let html = '';
 
  result.data.lines.forEach(line => {
@@ -8256,7 +8270,8 @@ const html = lines.map(line => `<div>${line}</div>`).join('');
      </div>
    `;
  });*/
-document.querySelector('#output').innerHTML += html;
+ 
+//document.querySelector('#output').innerHTML += html;
       
         current.hiddenPoints = current.points; // Temporarily store current points
         current.points = []; // Clear points
@@ -9686,3 +9701,25 @@ toggleButton.addEventListener("click", () => {
   toggleButton.textContent = showAll ? "Show Active Text" : "Show All Texts";
   updateOutput();
 });
+
+function toggleAllOCRFields() {
+  const output = document.querySelector('#output');
+  // Target all divs inside #output that have an ID and data attributes set
+  const elements = output.querySelectorAll('div[id][data-label][data-value]');
+
+  elements.forEach(el => {
+    const label = el.dataset.label;
+    const value = el.dataset.value;
+    const isToggled = el.dataset.toggled === "true";
+
+    if (isToggled) {
+      // Revert back to: <div id="name">Abdul Sami</div>
+      el.textContent = value;
+      el.dataset.toggled = "false";
+    } else {
+      // Switch to: <div id="name">Name: Abdul Sami</div>
+      el.textContent = `${label}: ${value}`;
+      el.dataset.toggled = "true";
+    }
+  });
+}
