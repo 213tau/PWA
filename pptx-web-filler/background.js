@@ -1,12 +1,86 @@
 // ==========================================
 // BACKGROUND SCRIPT / SERVICE WORKER
 // ==========================================
+
+// ------------------------------------------
+// Global Script Injection for Multi-Line Paste Support
+// ------------------------------------------
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Only inject script into normal, complete webpages
+  if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('edge://')) {
+    chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: setupGlobalSequentialPaste
+    }).catch(err => console.log("Script injection skipped/failed for tab:", tabId, err));
+  }
+});
+
+/**
+ * Injected into every tab page to handle multi-line sequential pasting
+ */
+function setupGlobalSequentialPaste() {
+  if (window.hasAtauxelSequentialPaste) return;
+  window.hasAtauxelSequentialPaste = true;
+
+  document.addEventListener('paste', function (e) {
+    const activeEl = document.activeElement;
+
+    // Ensure focus is inside a fillable element
+    const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable;
+    if (!isInput) return;
+
+    // Get pasted clipboard text
+    const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+    const lines = pasteData
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    // If single line, allow standard paste behavior
+    if (lines.length <= 1) return;
+
+    // Prevent default multi-line block dump into 1 element
+    e.preventDefault();
+
+    // Collect all visible form fields on the page
+    const fields = Array.from(
+      document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, [contenteditable="true"]')
+    ).filter(el => {
+      const style = window.getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled;
+    });
+
+    const startIndex = fields.indexOf(activeEl);
+    if (startIndex === -1) return;
+
+    // Sequentially populate inputs line-by-line
+    lines.forEach((lineText, offset) => {
+      const targetField = fields[startIndex + offset];
+      if (targetField) {
+        if (targetField.isContentEditable) {
+          targetField.innerText = lineText;
+        } else {
+          targetField.value = lineText;
+        }
+
+        // Trigger input events to keep React/Vue states updated
+        const tracker = targetField._valueTracker;
+        if (tracker) tracker.setValue(lineText);
+
+        targetField.dispatchEvent(new Event('input', { bubbles: true }));
+        targetField.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  });
+}
+
+// ------------------------------------------
+// Existing Chrome Runtime Message Listeners
+// ------------------------------------------
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const originTabId = sender.tab ? sender.tab.id : null;
 
-  // ------------------------------------------
   // 1. Handle DLIMS Request
-  // ------------------------------------------
   if (request.action === "open_dlims_background") {
     chrome.tabs.create({
       url: "https://dlims.punjab.gov.pk/elicense",
@@ -17,17 +91,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         pendingDob: request.dob,
         targetTabId: tab.id,
         originTabId: originTabId,
-        isSubmitted: false // Initialize submission lock
+        isSubmitted: false
       });
     });
   }
   
-  // ------------------------------------------
   // 2. Handle IRIS Request
-  // ------------------------------------------
   if (request.action === "open_iris_background") {
     chrome.tabs.create({
-      url: "https://iris.fbr.gov.pk/", // Replace with the actual IRIS URL if different
+      url: "https://iris.fbr.gov.pk/",
       active: false 
     }, (tab) => {
       chrome.storage.local.set({
@@ -39,9 +111,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
   }
 
-  // ------------------------------------------
   // 3. Handle DLIMS Data Response & Cleanup
-  // ------------------------------------------
   if (request.action === "dlims_data_fetched") {
     chrome.storage.local.get(["originTabId", "targetTabId"], (data) => {
       if (data.originTabId) {
@@ -59,9 +129,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
   }
 
-  // ------------------------------------------
   // 4. Handle IRIS Data Response & Cleanup
-  // ------------------------------------------
   if (request.action === "iris_data_fetched") {
     chrome.storage.local.get(["originTabId", "targetTabId"], (data) => {
       if (data.originTabId) {
@@ -79,7 +147,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
   }
 
-  // Add this block inside your chrome.runtime.onMessage listener in background.js:
+  // 5. Handle Domicile Fetch Request
   if (request.action === "fetch_domicile_background" && request.id) {
     const targetUrl = `https://domicile.punjab.gov.pk/AjaxCall.aspx?ID=${request.id}`;
 
@@ -91,25 +159,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .then(htmlText => sendResponse({ success: true, data: htmlText }))
       .catch(error => sendResponse({ success: false, error: error.message }));
 
-    return true; // Keep message channel open for async response
+    return true; // Keep channel open for async response
   }
-  // ------------------------------------------
-  // 6. NEW: Handle WhatsApp Tab Management
-  // ------------------------------------------
+
+  // 6. Handle WhatsApp Tab Management
   if (request.action === "open_whatsapp_background" && request.targetUrl) {
     const targetUrl = request.targetUrl;
 
-    // Search for an already open web.whatsapp.com tab
     chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, (tabs) => {
       if (tabs && tabs.length > 0) {
         const existingTab = tabs[0];
-        
-        // Update the existing tab and bring it/its window into focus
         chrome.tabs.update(existingTab.id, { url: targetUrl, active: true }, () => {
           chrome.windows.update(existingTab.windowId, { focused: true });
         });
       } else {
-        // If no WhatsApp tab is open, create a new one
         chrome.tabs.create({ url: targetUrl });
       }
     });
@@ -142,6 +205,7 @@ function cleanupWorker(targetTabId) {
     "isSubmitted"
   ]);
 }
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openWithAtauxel",
@@ -173,23 +237,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const rawTabId = tab.id;
   const rawWindowId = tab.windowId;
 
-  // 1. Generate a persistent Session ID independent of Chrome Tab IDs
   const sessionId = `atauxel_session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   let payload = "";
   const isPageContext = info.mediaType === undefined && !info.selectionText && !info.linkUrl && info.pageUrl;
 
-  // 2. Extract input IDs & assign Session ID to the Source Tab BEFORE window split
   let inputIds = [];
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: rawTabId },
       func: (sid) => {
-        // Persist session ID to browser's sessionStorage (survives window split/reload)
         window.sessionStorage.setItem("ATAUXEL_SESSION_ID", sid);
         window.ATAUXEL_SESSION_ID = sid;
 
-        // Set up local Storage sync listener
         if (!window.hasAtauxelSync) {
           window.hasAtauxelSync = true;
 
@@ -203,7 +263,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 if (targetInput) {
                   targetInput.value = data.value;
 
-                  // Support React/Vue state trackers
                   const tracker = targetInput._valueTracker;
                   if (tracker) tracker.setValue(data.value);
 
@@ -215,7 +274,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           });
         }
 
-        // Return DOM inputs
         return Array.from(document.querySelectorAll("input[id], textarea[id]")).map(el => ({
           id: el.id,
           label: el.name || el.placeholder || el.id
@@ -231,7 +289,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error("Failed to initialize source page listener:", error);
   }
 
-  // 3. Process Payload
   if (info.mediaType === "image" && info.srcUrl) {
     payload = await urlToBase64(info.srcUrl);
   } else if (info.selectionText) {
@@ -257,7 +314,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const encodedPayload = isBase64 ? "" : encodeURIComponent(payload);
   const encodedInputIds = encodeURIComponent(JSON.stringify(inputIds.map(item => item.id)));
 
-  // Target URL carries sessionId instead of tabId
   let targetUrl = `https://atauxel.vercel.app/?data=${encodedPayload}&inputIds=${encodedInputIds}&sessionId=${sessionId}`;
   if (isBase64) {
     targetUrl += `&imageKey=${imageStorageKey}`;
@@ -265,7 +321,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   let atauxelTabId = null;
 
-  // 4. Perform Window Split / Tab Creation
   if (isPageContext && rawWindowId) {
     const currentWin = await chrome.windows.get(rawWindowId);
     const screenLeft = currentWin.left || 0;
@@ -299,7 +354,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     atauxelTabId = newTab.id;
   }
 
-  // 5. Inject Relay Bridge into the new Atauxel Tab
   if (atauxelTabId) {
     chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
       if (tabId === atauxelTabId && changeInfo.status === "complete") {
@@ -354,7 +408,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
             outputDiv.appendChild(payloadBlock);
 
-            // Render Inputs
             extractedInputs.forEach(item => {
               const childDiv = document.createElement("div");
               childDiv.id = item.label || item.id;
