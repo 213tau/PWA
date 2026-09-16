@@ -396,37 +396,69 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
               chrome.storage.local.remove(storageKey);
             }
 
-            if (isImage) {
-  const canvas = document.getElementById("canvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-
+            if (isImage && finalImageSrc) {
+  // 1. Create an Image element from the string URL
   const img = new Image();
-
-  // 1. Enable CORS if loading from an external URL or base64 data URL
   img.crossOrigin = "anonymous";
 
-  // 2. Set the load handler
+  // 2. Main render logic attached to load event
   img.onload = () => {
-    // 3. Use naturalWidth and naturalHeight for true image dimensions
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
+    // Normalize to 300 DPI
+    const targetDPI = 300;
+    const imageDPI = (typeof current !== "undefined" && current?.dpi) || 300;
+    const scaleFactor = (imageDPI > 0 ? imageDPI : targetDPI) / targetDPI;
 
-    // 4. Clear existing canvas pixels before drawing
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Use natural dimensions once fully loaded
+    const displayWidth = img.naturalWidth / scaleFactor;
+    const displayHeight = img.naturalHeight / scaleFactor;
 
-    // 5. Render the image at full size
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const canvas = document.getElementById("canvas");
+    if (!canvas) return;
+
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear before redraw
+    ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+
+    if (typeof draw === "function") draw(); // Redraw overlays if any
+    canvas.style.display = "block";
+
+    // Setup rotation slider only if images are ready
+    if (typeof setupRotationSlider === "function") setupRotationSlider();
+
+    // Setup right-click handler
+    if (typeof handleMagicWandClick === "function") {
+      canvas.oncontextmenu = handleMagicWandClick;
+    }
+
+    // Manage image in printTools container
+    const container = document.querySelector("#printTools");
+    if (container) {
+      const index = typeof currentImageIndex !== "undefined" ? currentImageIndex : 0;
+      const imgId = `img-${index}`;
+      img.id = imgId;
+
+      const existingImg = container.querySelector(`#${imgId}`);
+      if (existingImg) {
+        if (existingImg !== img) container.replaceChild(img, existingImg);
+      } else {
+        container.appendChild(img);
+      }
+    }
   };
 
-  // 6. Add error handling to catch invalid paths or broken links
-  img.onerror = (err) => {
-    console.error("Failed to load image at source:", finalImageSrc, err);
+  // 3. Error handling for broken paths
+  img.onerror = () => {
+    console.error("Failed to load image source:", finalImageSrc);
   };
 
-  // 7. Handle cached images (if img.complete is true before setting src)
+  // 4. Assign the URL string to start download
   img.src = finalImageSrc;
-  if (img.complete && img.naturalWidth !== 0) {
+
+  // Handle cached images instantly
+  if (img.complete && img.naturalWidth > 0) {
     img.onload();
   }
 } else {
