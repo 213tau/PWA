@@ -391,27 +391,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             let finalImageSrc = payloadData;
 
             if (isImage && storageKey) {
-              const data = await chrome.storage.local.get(storageKey);
-              finalImageSrc = data[storageKey] || payloadData;
-              chrome.storage.local.remove(storageKey);
-            }
+  const data = await chrome.storage.local.get(storageKey);
+  finalImageSrc = data[storageKey] || payloadData;
+  chrome.storage.local.remove(storageKey);
+}
 
-            if (isImage && finalImageSrc) {
-  // 1. Create an Image element from the string URL
+if (isImage && finalImageSrc) {
   const img = new Image();
   img.crossOrigin = "anonymous";
 
-  // 2. Main render logic attached to load event
   img.onload = () => {
-    // Normalize to 300 DPI
-    const targetDPI = 300;
+    // 1. Calculate Canvas Dimensions (Default 300 DPI)
     const imageDPI = (typeof current !== "undefined" && current?.dpi) || 300;
-    const scaleFactor = (imageDPI > 0 ? imageDPI : targetDPI) / targetDPI;
+    const scaleFactor = (imageDPI > 0 ? imageDPI : 300) / 300;
 
-    // Use natural dimensions once fully loaded
     const displayWidth = img.naturalWidth / scaleFactor;
     const displayHeight = img.naturalHeight / scaleFactor;
 
+    // 2. Prepare Canvas
     const canvas = document.getElementById("canvas");
     if (!canvas) return;
 
@@ -419,47 +416,89 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     canvas.height = displayHeight;
 
     const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear before redraw
+    ctx.clearRect(0, 0, displayWidth, displayHeight);
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-    if (typeof draw === "function") draw(); // Redraw overlays if any
+    if (typeof draw === "function") draw();
     canvas.style.display = "block";
 
-    // Setup rotation slider only if images are ready
+    // 3. Attach Event Handlers
     if (typeof setupRotationSlider === "function") setupRotationSlider();
-
-    // Setup right-click handler
     if (typeof handleMagicWandClick === "function") {
       canvas.oncontextmenu = handleMagicWandClick;
     }
 
-    // Manage image in printTools container
+    // 4. Update Print Tools Container
     const container = document.querySelector("#printTools");
     if (container) {
       const index = typeof currentImageIndex !== "undefined" ? currentImageIndex : 0;
-      const imgId = `img-${index}`;
-      img.id = imgId;
+      img.id = `img-${index}`;
 
-      const existingImg = container.querySelector(`#${imgId}`);
-      if (existingImg) {
-        if (existingImg !== img) container.replaceChild(img, existingImg);
-      } else {
+      const existingImg = container.querySelector(`#${img.id}`);
+      if (existingImg && existingImg !== img) {
+        container.replaceChild(img, existingImg);
+      } else if (!existingImg) {
         container.appendChild(img);
       }
     }
   };
 
-  // 3. Error handling for broken paths
-  img.onerror = () => {
-    console.error("Failed to load image source:", finalImageSrc);
-  };
-
-  // 4. Assign the URL string to start download
+  img.onerror = () => console.error("Failed to load image source:", finalImageSrc);
   img.src = finalImageSrc;
 
-  // Handle cached images instantly
-  if (img.complete && img.naturalWidth > 0) {
-    img.onload();
+  if (img.complete && img.naturalWidth > 0) img.onload();
+
+  // Draw overlay canvas elements
+  function draw() {
+    const current = images[currentImageIndex];
+    if (!current) return;
+
+    const { img, points } = current;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+    current.imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    if (!pointsDrawn) return;
+
+    const fontSize = Math.floor(img.width * 0.025);
+    const circleRadius = Math.floor(img.width * 0.018);
+
+    // Draw connecting dashed lines
+    ctx.strokeStyle = "blue";
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    points.forEach((start, i) => {
+      const end = points[(i + 1) % points.length];
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw point markers
+    points.forEach((pt, i) => {
+      // Background red marker
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Foreground white circle for text
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, circleRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Centered label text
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = "black";
+      ctx.font = `${fontSize}px Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(i + 1, pt.x, pt.y);
+    });
   }
 } else {
               payloadBlock.style.fontWeight = "bold";
