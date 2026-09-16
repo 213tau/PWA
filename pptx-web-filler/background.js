@@ -397,17 +397,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
 
             if (isImage) {
-              const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = finalImageSrc;
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
 
-    img.onload = () => {
-      images.push({ img: img, dpi: 300 });
-      currentImageIndex = images.length - 1;
-      if (typeof updateImageSelector === "function") updateImageSelector();
-      if (typeof loadCurrentImage === "function") loadCurrentImage();
-    };
-            } else {
+  const img = document.createElement("img");
+  
+  // 1. Set the load handler before setting the source
+  img.onload = () => {
+    // Optional: Match canvas size to image dimensions
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    // 2. Draw the loaded image onto the canvas
+    ctx.drawImage(img, 0, 0);
+  };
+
+  // 3. Set the image source (triggers loading)
+  img.src = finalImageSrc; 
+} else {
               payloadBlock.style.fontWeight = "bold";
               payloadBlock.textContent = payloadData;
             }
