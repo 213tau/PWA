@@ -397,6 +397,25 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 }
 
 if (isImage && finalImageSrc) {
+
+  let images = [];
+    let currentImageIndex = 0;
+    let draggingPoint = null;
+
+    class ImageObject {
+  constructor(img, altText = "") {
+    this.img = img;
+    this.points = [
+      { x: 0, y: 0 },
+      { x: img.width, y: 0 },
+      { x: img.width, y: img.height },
+      { x: 0, y: img.height }
+    ];
+    this.imageData = null;
+    this.altText = altText; // Stores the specific image text
+  }
+}
+
   const img = new Image();
   img.crossOrigin = "anonymous";
 
