@@ -408,7 +408,7 @@ if (isImage && finalImageSrc) {
     const displayWidth = img.naturalWidth / scaleFactor;
     const displayHeight = img.naturalHeight / scaleFactor;
 
-    // 2. Prepare Canvas
+    // 2. Setup Canvas
     const canvas = document.getElementById("canvas");
     if (!canvas) return;
 
@@ -419,16 +419,60 @@ if (isImage && finalImageSrc) {
     ctx.clearRect(0, 0, displayWidth, displayHeight);
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-    if (typeof draw === "function") draw();
+    // Save initial image state directly on current if present
+    if (typeof current !== "undefined" && current) {
+      current.imageData = ctx.getImageData(0, 0, displayWidth, displayHeight);
+    }
+
+    // 3. Render Points & Lines directly (if points are defined on current)
+    const points = typeof current !== "undefined" ? current?.points : null;
+    if (typeof pointsDrawn !== "undefined" && pointsDrawn && points?.length) {
+      const fontSize = Math.floor(displayWidth * 0.025);
+      const circleRadius = Math.floor(displayWidth * 0.018);
+
+      // Connecting dashed lines
+      ctx.strokeStyle = "blue";
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      points.forEach((start, i) => {
+        const end = points[(i + 1) % points.length];
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Corner handles
+      points.forEach((pt, i) => {
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = "red";
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, circleRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = "black";
+        ctx.font = `${fontSize}px Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(i + 1, pt.x, pt.y);
+      });
+    }
+
     canvas.style.display = "block";
 
-    // 3. Attach Event Handlers
+    // 4. Setup Handlers & Controls
     if (typeof setupRotationSlider === "function") setupRotationSlider();
     if (typeof handleMagicWandClick === "function") {
       canvas.oncontextmenu = handleMagicWandClick;
     }
 
-    // 4. Update Print Tools Container
+    // 5. Update DOM Container
     const container = document.querySelector("#printTools");
     if (container) {
       const index = typeof currentImageIndex !== "undefined" ? currentImageIndex : 0;
@@ -447,59 +491,6 @@ if (isImage && finalImageSrc) {
   img.src = finalImageSrc;
 
   if (img.complete && img.naturalWidth > 0) img.onload();
-
-  // Draw overlay canvas elements
-  function draw() {
-    const current = images[currentImageIndex];
-    if (!current) return;
-
-    const { img, points } = current;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
-    current.imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-    if (!pointsDrawn) return;
-
-    const fontSize = Math.floor(img.width * 0.025);
-    const circleRadius = Math.floor(img.width * 0.018);
-
-    // Draw connecting dashed lines
-    ctx.strokeStyle = "blue";
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    points.forEach((start, i) => {
-      const end = points[(i + 1) % points.length];
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-    });
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Draw point markers
-    points.forEach((pt, i) => {
-      // Background red marker
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = "red";
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Foreground white circle for text
-      ctx.fillStyle = "white";
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, circleRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Centered label text
-      ctx.globalAlpha = 1.0;
-      ctx.fillStyle = "black";
-      ctx.font = `${fontSize}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(i + 1, pt.x, pt.y);
-    });
-  }
 } else {
               payloadBlock.style.fontWeight = "bold";
               payloadBlock.textContent = payloadData;
