@@ -391,137 +391,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             let finalImageSrc = payloadData;
 
             if (isImage && storageKey) {
-  const data = await chrome.storage.local.get(storageKey);
-  finalImageSrc = data[storageKey] || payloadData;
-  chrome.storage.local.remove(storageKey);
-}
+              const data = await chrome.storage.local.get(storageKey);
+              finalImageSrc = data[storageKey] || payloadData;
+              chrome.storage.local.remove(storageKey);
+            }
 
-if (isImage && finalImageSrc) {
-  let images = [];
-  let currentImageIndex = 0;
-  let draggingPoint = null;
-  let current = null; // Declare in scope to prevent undefined errors elsewhere
-
-  class ImageObject {
-    constructor(img, altText = "") {
-      this.img = img;
-      // Default corner points based on natural dimensions
-      this.points = [
-        { x: 0, y: 0 },
-        { x: img.naturalWidth || img.width, y: 0 },
-        { x: img.naturalWidth || img.width, y: img.naturalHeight || img.height },
-        { x: 0, y: img.naturalHeight || img.height }
-      ];
-      this.imageData = null;
-      this.altText = altText;
-    }
-  }
-
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-
-  img.onload = () => {
-    // 1. Instantiation
-    current = new ImageObject(img);
-    images[currentImageIndex] = current;
-
-    // 2. DPI & Dimension Scaling
-    const imageDPI = current?.dpi || 300;
-    const scaleFactor = (imageDPI > 0 ? imageDPI : 300) / 300;
-
-    const displayWidth = img.naturalWidth / scaleFactor;
-    const displayHeight = img.naturalHeight / scaleFactor;
-
-    // Scale points to display canvas dimensions
-    current.points = [
-      { x: 0, y: 0 },
-      { x: displayWidth, y: 0 },
-      { x: displayWidth, y: displayHeight },
-      { x: 0, y: displayHeight }
-    ];
-
-    // 3. Canvas Setup
-    const canvas = document.getElementById("canvas");
-    if (!canvas) return;
-
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
-
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, displayWidth, displayHeight);
-    ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
-
-    current.imageData = ctx.getImageData(0, 0, displayWidth, displayHeight);
-
-    // 4. Safe Point Rendering (Guarded with Optional Chaining)
-    const points = current?.points;
-    if (typeof pointsDrawn !== "undefined" && pointsDrawn && Array.isArray(points)) {
-      const fontSize = Math.floor(displayWidth * 0.025);
-      const circleRadius = Math.floor(displayWidth * 0.018);
-
-      // Lines
-      ctx.strokeStyle = "blue";
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      points.forEach((start, i) => {
-        const end = points[(i + 1) % points.length];
-        if (start && end) {
-          ctx.moveTo(start.x, start.y);
-          ctx.lineTo(end.x, end.y);
-        }
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Point Handles
-      points.forEach((pt, i) => {
-        if (!pt) return;
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = "red";
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = "white";
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, circleRadius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalAlpha = 1.0;
-        ctx.fillStyle = "black";
-        ctx.font = `${fontSize}px Arial`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(i + 1, pt.x, pt.y);
-      });
-    }
-
-    canvas.style.display = "block";
-
-    // 5. Controls & Handlers
-    if (typeof setupRotationSlider === "function") setupRotationSlider();
-    if (typeof handleMagicWandClick === "function") {
-      canvas.oncontextmenu = handleMagicWandClick;
-    }
-
-    // 6. DOM Updates
-    const container = document.querySelector("#printTools");
-    if (container) {
-      img.id = `img-${currentImageIndex}`;
-      const existingImg = container.querySelector(`#${img.id}`);
-      if (existingImg && existingImg !== img) {
-        container.replaceChild(img, existingImg);
-      } else if (!existingImg) {
-        container.appendChild(img);
-      }
-    }
-  };
-
-  img.onerror = () => console.error("Failed to load image source:", finalImageSrc);
-  img.src = finalImageSrc;
-
-  if (img.complete && img.naturalWidth > 0) img.onload();
-} else {
+            if (isImage) {
+              const img = document.createElement("img");
+              img.src = finalImageSrc;
+              img.style.maxWidth = "100%";
+              img.style.borderRadius = "4px";
+              payloadBlock.appendChild(img);              
+            } else {
               payloadBlock.style.fontWeight = "bold";
               payloadBlock.textContent = payloadData;
             }
