@@ -397,37 +397,47 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 }
 
 if (isImage && finalImageSrc) {
-
   let images = [];
-    let currentImageIndex = 0;
-    let draggingPoint = null;
+  let currentImageIndex = 0;
+  let draggingPoint = null;
 
-    class ImageObject {
-  constructor(img, altText = "") {
-    this.img = img;
-    this.points = [
-      { x: 0, y: 0 },
-      { x: img.width, y: 0 },
-      { x: img.width, y: img.height },
-      { x: 0, y: img.height }
-    ];
-    this.imageData = null;
-    this.altText = altText; // Stores the specific image text
+  class ImageObject {
+    constructor(img, altText = "") {
+      this.img = img;
+      this.points = [
+        { x: 0, y: 0 },
+        { x: img.width, y: 0 },
+        { x: img.width, y: img.height },
+        { x: 0, y: img.height }
+      ];
+      this.imageData = null;
+      this.altText = altText;
+    }
   }
-}
 
   const img = new Image();
   img.crossOrigin = "anonymous";
 
   img.onload = () => {
-    // 1. Calculate Canvas Dimensions (Default 300 DPI)
-    const imageDPI = (typeof current !== "undefined" && current?.dpi) || 300;
+    // 1. Instantiate ImageObject so points and metadata exist
+    const current = new ImageObject(img);
+
+    // 2. Calculate Canvas Dimensions (Default 300 DPI)
+    const imageDPI = current?.dpi || 300;
     const scaleFactor = (imageDPI > 0 ? imageDPI : 300) / 300;
 
     const displayWidth = img.naturalWidth / scaleFactor;
     const displayHeight = img.naturalHeight / scaleFactor;
 
-    // 2. Setup Canvas
+    // Recalculate points to fit the scaled display dimensions
+    current.points = [
+      { x: 0, y: 0 },
+      { x: displayWidth, y: 0 },
+      { x: displayWidth, y: displayHeight },
+      { x: 0, y: displayHeight }
+    ];
+
+    // 3. Setup Canvas
     const canvas = document.getElementById("canvas");
     if (!canvas) return;
 
@@ -438,14 +448,12 @@ if (isImage && finalImageSrc) {
     ctx.clearRect(0, 0, displayWidth, displayHeight);
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-    // Save initial image state directly on current if present
-    if (typeof current !== "undefined" && current) {
-      current.imageData = ctx.getImageData(0, 0, displayWidth, displayHeight);
-    }
+    // Save initial image pixel data onto object
+    current.imageData = ctx.getImageData(0, 0, displayWidth, displayHeight);
 
-    // 3. Render Points & Lines directly (if points are defined on current)
-    const points = typeof current !== "undefined" ? current?.points : null;
-    if (typeof pointsDrawn !== "undefined" && pointsDrawn && points?.length) {
+    // 4. Render Points & Lines directly
+    const points = current.points;
+    if (typeof pointsDrawn !== "undefined" && pointsDrawn && points.length) {
       const fontSize = Math.floor(displayWidth * 0.025);
       const circleRadius = Math.floor(displayWidth * 0.018);
 
@@ -485,13 +493,13 @@ if (isImage && finalImageSrc) {
 
     canvas.style.display = "block";
 
-    // 4. Setup Handlers & Controls
+    // 5. Setup Handlers & Controls
     if (typeof setupRotationSlider === "function") setupRotationSlider();
     if (typeof handleMagicWandClick === "function") {
       canvas.oncontextmenu = handleMagicWandClick;
     }
 
-    // 5. Update DOM Container
+    // 6. Update DOM Container
     const container = document.querySelector("#printTools");
     if (container) {
       const index = typeof currentImageIndex !== "undefined" ? currentImageIndex : 0;
