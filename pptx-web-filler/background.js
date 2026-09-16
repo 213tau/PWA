@@ -397,11 +397,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
 
             if (isImage) {
-              const img = document.createElement("img");
-              img.src = finalImageSrc;
-              img.style.maxWidth = "100%";
-              img.style.borderRadius = "4px";
-              payloadBlock.appendChild(img);
+              const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = finalImageSrc;
+
+    img.onload = () => {
+      images.push({ img: img, dpi: 300 });
+      currentImageIndex = images.length - 1;
+      if (typeof updateImageSelector === "function") updateImageSelector();
+      if (typeof loadCurrentImage === "function") loadCurrentImage();
+    };
             } else {
               payloadBlock.style.fontWeight = "bold";
               payloadBlock.textContent = payloadData;
