@@ -398,22 +398,37 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
             if (isImage) {
   const canvas = document.getElementById("canvas");
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
 
-  const img = document.createElement("img");
-  
-  // 1. Set the load handler before setting the source
-  img.onload = () => {
-    // Optional: Match canvas size to image dimensions
-    canvas.width = img.width;
-    canvas.height = img.height;
+  const img = new Image();
 
-    // 2. Draw the loaded image onto the canvas
-    ctx.drawImage(img, 0, 0);
+  // 1. Enable CORS if loading from an external URL or base64 data URL
+  img.crossOrigin = "anonymous";
+
+  // 2. Set the load handler
+  img.onload = () => {
+    // 3. Use naturalWidth and naturalHeight for true image dimensions
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+
+    // 4. Clear existing canvas pixels before drawing
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 5. Render the image at full size
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   };
 
-  // 3. Set the image source (triggers loading)
-  img.src = finalImageSrc; 
+  // 6. Add error handling to catch invalid paths or broken links
+  img.onerror = (err) => {
+    console.error("Failed to load image at source:", finalImageSrc, err);
+  };
+
+  // 7. Handle cached images (if img.complete is true before setting src)
+  img.src = finalImageSrc;
+  if (img.complete && img.naturalWidth !== 0) {
+    img.onload();
+  }
 } else {
               payloadBlock.style.fontWeight = "bold";
               payloadBlock.textContent = payloadData;
