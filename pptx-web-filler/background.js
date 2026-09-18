@@ -408,24 +408,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             }
             outputDiv.appendChild(payloadBlock);
 
-            extractedInputs.forEach(item => {
-              const childDiv = document.createElement("div");
-              childDiv.id = item.label || item.id;
-              childDiv.contentEditable = "true";
-              childDiv.style.border = "1px solid #ccc";
-              childDiv.style.padding = "4px";
-              childDiv.style.margin = "4px 0";
-
-              childDiv.addEventListener("input", () => {
-                window.postMessage({
-                  type: "ATAUXEL_TYPE_SYNC",
-                  inputId: item.id,
-                  value: childDiv.textContent
-                }, "*");
-              });
-
-              outputDiv.appendChild(childDiv);
-            });
           },
           args: [inputIds, payload, isBase64, imageStorageKey, sessionId]
         });
