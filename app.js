@@ -9776,31 +9776,44 @@ toggleButton.addEventListener("click", () => {
 
 function toggleAllOCRFields() {
   const btn = document.querySelector('#ocrToggleBtn');
-  // Determine target state for ALL fields based on button's current global state
   const isGlobalToggled = btn ? btn.dataset.globalToggled === "true" : false;
   const nextState = !isGlobalToggled;
 
-  // 1. Toggle all HTML divs inside #output simultaneously
-  const htmlElements = document.querySelectorAll('#output div[id][data-label][data-value]');
+  // Helper to ensure data-value and data-label are populated
+  const ensureDataset = (el) => {
+    if (!el.dataset.label) {
+      el.dataset.label = el.id || "Field";
+    }
+    // If data-value is missing, capture from current text content
+    if (el.dataset.value === undefined) {
+      el.dataset.value = el.textContent.trim();
+    }
+  };
+
+  // 1. Target all HTML divs inside #output that have an ID
+  const htmlElements = document.querySelectorAll('#output div[id]');
   htmlElements.forEach(el => {
+    ensureDataset(el);
     const currentText = el.textContent;
+    const label = el.dataset.label;
 
     if (nextState) {
-      // Force ALL to "Label: Value" format
+      // Force "Label: Value" format
       if (!isGlobalToggled) {
-        // Capture any pending live edits before toggling
+        // Save live user edits if untoggled
         const colonIndex = currentText.indexOf(':');
         if (colonIndex === -1) {
           el.dataset.value = currentText.trim();
+        } else {
+          el.dataset.value = currentText.substring(colonIndex + 1).trim();
         }
       }
-      el.textContent = `${el.dataset.label}: ${el.dataset.value}`;
+      el.textContent = el.dataset.value ? `${label}: ${el.dataset.value}` : `${label}: `;
       el.dataset.toggled = "true";
     } else {
-      // Force ALL to plain "Value" format
+      // Force plain "Value" format
       const colonIndex = currentText.indexOf(':');
       if (colonIndex !== -1) {
-        el.dataset.label = currentText.substring(0, colonIndex).trim();
         el.dataset.value = currentText.substring(colonIndex + 1).trim();
       }
       el.textContent = el.dataset.value;
@@ -9808,11 +9821,14 @@ function toggleAllOCRFields() {
     }
   });
 
-  // 2. Toggle all SVG <text> tags inside #svgTools simultaneously
-  const svgTextElements = document.querySelectorAll('#svgTools text[data-label][data-value]');
+  // 2. Target SVG <text> tags inside #svgTools
+  const svgTextElements = document.querySelectorAll('#svgTools text[id]');
   svgTextElements.forEach(el => {
+    ensureDataset(el);
+    const label = el.dataset.label;
+
     if (nextState) {
-      el.textContent = `${el.dataset.label}: ${el.dataset.value}`;
+      el.textContent = el.dataset.value ? `${label}: ${el.dataset.value}` : `${label}: `;
       el.dataset.toggled = "true";
     } else {
       el.textContent = el.dataset.value;
@@ -9820,7 +9836,7 @@ function toggleAllOCRFields() {
     }
   });
 
-  // Update button global state tracker
+  // Update button global state
   if (btn) {
     btn.dataset.globalToggled = nextState ? "true" : "false";
   }
