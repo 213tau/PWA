@@ -17,7 +17,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (
     changeInfo.status === 'complete' && 
     tab.url && 
-    tab.url.includes('wafid.com/book-appointment')
+    tab.url.includes('wafid.com/en/book-appointment')
   ) {
     chrome.scripting.executeScript({
       target: { tabId: tabId },
