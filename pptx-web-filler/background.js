@@ -13,7 +13,22 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       func: setupGlobalSequentialPaste
     }).catch(err => console.log("Script injection skipped/failed for tab:", tabId, err));
   }
+  // Only inject script when the page is complete and the URL matches Wafid's book-appointment page
+  if (
+    changeInfo.status === 'complete' && 
+    tab.url && 
+    tab.url.includes('wafid.com/book-appointment')
+  ) {
+    chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: wafid
+    }).catch(err => console.log("Script injection skipped/failed for tab:", tabId, err));
+  }
 });
+
+function wafid(){
+  console.log("tauseef");
+}
 
 /**
  * Injected into every tab page to handle multi-line sequential pasting
