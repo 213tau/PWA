@@ -41,7 +41,11 @@ function setupGlobalSequentialPaste() {
     const activeEl = document.activeElement;
 
     // Ensure focus is inside a fillable element
-    const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable;
+    const isInput =
+      activeEl.tagName === 'INPUT' ||
+      activeEl.tagName === 'TEXTAREA' ||
+      activeEl.tagName === 'SELECT' ||
+      activeEl.isContentEditable;
     if (!isInput) return;
 
     // Get pasted clipboard text
@@ -57,12 +61,18 @@ function setupGlobalSequentialPaste() {
     // Prevent default multi-line block dump into 1 element
     e.preventDefault();
 
+    // Selectable selector including SELECT and excluding non-text INPUT types
+    const selector = [
+      'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="radio"])',
+      'textarea',
+      'select',
+      '[contenteditable="true"]'
+    ].join(',');
+
     // Collect all visible form fields on the page
-    const fields = Array.from(
-      document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, [contenteditable="true"]')
-    ).filter(el => {
+    const fields = Array.from(document.querySelectorAll(selector)).filter(el => {
       const style = window.getComputedStyle(el);
-      return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled;
+      return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled && !el.readOnly;
     });
 
     const startIndex = fields.indexOf(activeEl);
@@ -71,20 +81,44 @@ function setupGlobalSequentialPaste() {
     // Sequentially populate inputs line-by-line
     lines.forEach((lineText, offset) => {
       const targetField = fields[startIndex + offset];
-      if (targetField) {
-        if (targetField.isContentEditable) {
-          targetField.innerText = lineText;
-        } else {
-          targetField.value = lineText;
+      if (!targetField) return;
+
+      if (targetField.tagName === 'SELECT') {
+        // Match option by value, exact text, or starting character
+        const lowerLine = lineText.toLowerCase();
+        let matchedOption = Array.from(targetField.options).find(
+          opt => opt.value.toLowerCase() === lowerLine || opt.text.trim().toLowerCase() === lowerLine
+        );
+
+        if (!matchedOption) {
+          matchedOption = Array.from(targetField.options).find(
+            opt => opt.text.trim().toLowerCase().startsWith(lowerLine)
+          );
         }
 
-        // Trigger input events to keep React/Vue states updated
-        const tracker = targetField._valueTracker;
-        if (tracker) tracker.setValue(lineText);
+        if (matchedOption) {
+          targetField.value = matchedOption.value;
+        }
+      } else if (targetField.tagName === 'INPUT' && targetField.type === 'checkbox') {
+        // Parse lineText into a boolean state
+        const truthyValues = ['true', '1', 'yes', 'on', 'checked', 'x'];
+        const isChecked = truthyValues.includes(lineText.toLowerCase());
 
-        targetField.dispatchEvent(new Event('input', { bubbles: true }));
-        targetField.dispatchEvent(new Event('change', { bubbles: true }));
+        // Value tracker for React inputs
+        const tracker = targetField._valueTracker;
+        targetField.checked = isChecked;
+        if (tracker) tracker.setValue(!isChecked);
+      } else if (targetField.isContentEditable) {
+        targetField.innerText = lineText;
+      } else {
+        const tracker = targetField._valueTracker;
+        targetField.value = lineText;
+        if (tracker) tracker.setValue('');
       }
+
+      // Dispatch change and input events
+      targetField.dispatchEvent(new Event('input', { bubbles: true }));
+      targetField.dispatchEvent(new Event('change', { bubbles: true }));
     });
   });
 }
