@@ -37,6 +37,26 @@ function setupGlobalSequentialPaste() {
   if (window.hasAtauxelSequentialPaste) return;
   window.hasAtauxelSequentialPaste = true;
 
+  // Helper to verify an element and all its ancestors are visible and interactive
+  function isElementVisible(el) {
+    let current = el;
+    while (current && current !== document.body) {
+      if (current.hidden || current.getAttribute('aria-hidden') === 'true') {
+        return false;
+      }
+      const style = window.getComputedStyle(current);
+      if (
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.opacity === '0'
+      ) {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    return true;
+  }
+
   document.addEventListener('paste', function (e) {
     const activeEl = document.activeElement;
 
@@ -69,10 +89,9 @@ function setupGlobalSequentialPaste() {
       '[contenteditable="true"]'
     ].join(',');
 
-    // Collect all visible form fields on the page
+    // Collect all strictly visible form fields on the page
     const fields = Array.from(document.querySelectorAll(selector)).filter(el => {
-      const style = window.getComputedStyle(el);
-      return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled && !el.readOnly;
+      return !el.disabled && !el.readOnly && isElementVisible(el);
     });
 
     const startIndex = fields.indexOf(activeEl);
@@ -84,7 +103,6 @@ function setupGlobalSequentialPaste() {
       if (!targetField) return;
 
       if (targetField.tagName === 'SELECT') {
-        // Match option by value, exact text, or starting character
         const lowerLine = lineText.toLowerCase();
         let matchedOption = Array.from(targetField.options).find(
           opt => opt.value.toLowerCase() === lowerLine || opt.text.trim().toLowerCase() === lowerLine
@@ -100,11 +118,9 @@ function setupGlobalSequentialPaste() {
           targetField.value = matchedOption.value;
         }
       } else if (targetField.tagName === 'INPUT' && targetField.type === 'checkbox') {
-        // Parse lineText into a boolean state
         const truthyValues = ['true', '1', 'yes', 'on', 'checked', 'x'];
         const isChecked = truthyValues.includes(lineText.toLowerCase());
 
-        // Value tracker for React inputs
         const tracker = targetField._valueTracker;
         targetField.checked = isChecked;
         if (tracker) tracker.setValue(!isChecked);
