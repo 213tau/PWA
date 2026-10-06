@@ -129,45 +129,68 @@ document.getElementById('processBtn').addEventListener('click', async () => {
             };
 
             const findFuzzyElement = (key) => {
-              const normalizedKey = normalize(key);
-              if (!normalizedKey) return null;
+  const normalizedKey = normalize(key);
+  if (!normalizedKey) return null;
 
-              const elements = document.querySelectorAll('input, textarea, select');
-              let bestMatch = null;
-              let highestScore = 0;
+  const elements = document.querySelectorAll('input, textarea, select');
+  let bestMatch = null;
+  let highestScore = 0;
 
-              for (const el of elements) {
-                const type = el.getAttribute('type');
-                if (['submit', 'button', 'reset', 'hidden', 'image'].includes(type)) continue;
+  for (const el of elements) {
+    const type = el.getAttribute('type');
+    if (['submit', 'button', 'reset', 'hidden', 'image'].includes(type)) continue;
 
-                let score = 0;
-                const id = normalize(el.id);
-                const name = normalize(el.name);
-                const placeholder = normalize(el.getAttribute('placeholder'));
-                const autocomplete = normalize(el.getAttribute('autocomplete'));
+    let score = 0;
+    const rawId = el.id || '';
+    const rawName = el.name || '';
+    
+    // 1. Ignore dynamic generated React/MUI IDs (e.g., ":r5:", "mui-1234")
+    const isDynamicId = /^:[a-z0-9]+:$/i.test(rawId) || /^mui-\d+/i.test(rawId);
+    const id = isDynamicId ? '' : normalize(rawId);
+    const name = normalize(rawName);
 
-                // Exact ID or Name matches
-                if ((id && id === normalizedKey) || (name && name === normalizedKey)) score += 20;
-                
-                // Label matches
-                const label = document.querySelector(`label[for="${el.id}"]`) || el.closest('label');
-                if (label && normalize(label.textContent).includes(normalizedKey)) score += 15;
+    const placeholder = normalize(el.getAttribute('placeholder'));
+    const autocomplete = normalize(el.getAttribute('autocomplete'));
+    const ariaLabel = normalize(el.getAttribute('aria-label'));
 
-                // Placeholder or Autocomplete matches
-                if (placeholder && placeholder.includes(normalizedKey)) score += 10;
-                if (autocomplete && autocomplete.includes(normalizedKey)) score += 10;
+    // Exact Stable ID or Name matches
+    if ((id && id === normalizedKey) || (name && name === normalizedKey)) score += 20;
 
-                // Substring matches
-                if (id && (id.includes(normalizedKey) || normalizedKey.includes(id))) score += 5;
-                if (name && (name.includes(normalizedKey) || normalizedKey.includes(name))) score += 5;
+    // 2. Enhanced MUI Label Detection
+    // Checks for <label for="..."> or parent wrapper (.MuiFormControl-root)
+    let labelText = '';
+    
+    // Safe lookup for ID selectors containing colons (escapes colons for querySelector)
+    if (rawId) {
+      const safeId = CSS.escape ? CSS.escape(rawId) : rawId.replace(/:/g, '\\:');
+      const labelEl = document.querySelector(`label[for="${safeId}"]`);
+      if (labelEl) labelText += ' ' + labelEl.textContent;
+    }
 
-                if (score > highestScore) {
-                  highestScore = score;
-                  bestMatch = el;
-                }
-              }
-              return highestScore >= 10 ? bestMatch : null;
-            };
+    // Direct parent/ancestor label search (common in MUI and React wrappers)
+    const parentLabel = el.closest('label') || el.closest('.MuiFormControl-root')?.querySelector('label');
+    if (parentLabel) labelText += ' ' + parentLabel.textContent;
+
+    const normalizedLabel = normalize(labelText);
+    if (normalizedLabel && normalizedLabel.includes(normalizedKey)) score += 18;
+
+    // 3. Placeholder, Aria-Label & Autocomplete
+    if (ariaLabel && ariaLabel.includes(normalizedKey)) score += 15;
+    if (placeholder && placeholder.includes(normalizedKey)) score += 10;
+    if (autocomplete && autocomplete.includes(normalizedKey)) score += 10;
+
+    // Substring matches for stable IDs/Names
+    if (id && (id.includes(normalizedKey) || normalizedKey.includes(id))) score += 5;
+    if (name && (name.includes(normalizedKey) || normalizedKey.includes(name))) score += 5;
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = el;
+    }
+  }
+
+  return highestScore >= 10 ? bestMatch : null;
+};
 
             // --- EXECUTION LOOP ---
 
