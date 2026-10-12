@@ -9345,31 +9345,24 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // Two-Pass CCL with Strict Size Limits (Ignored on Passports/Barcodes)
-    function computeCCL(dilationX = 2) {
+    // Two-Pass CCL Bounding Box Extraction
+    function computeCCL(dilationX = 4) {
         const imgData = ctx.getImageData(0, 0, w, h);
         const data = imgData.data;
         const binaryMap = new Uint8Array(w * h);
 
-        // Stricter threshold for security backgrounds (darker text only)
-        for (let i = 0, len = data.length; i < len; i += 4) {
-            const r = data[i], g = data[i + 1], b = data[i + 2];
-            // Emphasize contrast against green/colored security backgrounds
-            const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            // Ensure it's dark text and not part of green background tint
-            const isDark = lum < 120 && (g - r < 30); 
-            binaryMap[i >> 2] = isDark ? 1 : 0;
+        for (let i = 0; i < data.length; i += 4) {
+            const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+            binaryMap[i / 4] = lum < 140 ? 1 : 0;
         }
 
         const dilatedMap = new Uint8Array(w * h);
         for (let y = 0; y < h; y++) {
-            const rowOffset = y * w;
             for (let x = 0; x < w; x++) {
-                if (binaryMap[rowOffset + x] === 1) {
-                    const startX = Math.max(0, x - dilationX);
-                    const endX = Math.min(w - 1, x + dilationX);
-                    for (let nx = startX; nx <= endX; nx++) {
-                        dilatedMap[rowOffset + nx] = 1;
+                if (binaryMap[y * w + x] === 1) {
+                    for (let dx = -dilationX; dx <= dilationX; dx++) {
+                        const nx = x + dx;
+                        if (nx >= 0 && nx < w) dilatedMap[y * w + nx] = 1;
                     }
                 }
             }
@@ -9398,9 +9391,8 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         };
 
         for (let y = 0; y < h; y++) {
-            const rowOffset = y * w;
             for (let x = 0; x < w; x++) {
-                const idx = rowOffset + x;
+                const idx = y * w + x;
                 if (!dilatedMap[idx]) continue;
 
                 const west = x > 0 ? labels[idx - 1] : 0;
@@ -9423,12 +9415,10 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 
         const boxMap = {};
         for (let y = 0; y < h; y++) {
-            const rowOffset = y * w;
             for (let x = 0; x < w; x++) {
-                const idx = rowOffset + x;
-                const label = labels[idx];
-                if (!label) continue;
-                const root = find(label);
+                const idx = y * w + x;
+                if (!labels[idx]) continue;
+                const root = find(labels[idx]);
                 if (!boxMap[root]) boxMap[root] = { x0: x, y0: y, x1: x, y1: y, count: 0 };
                 const b = boxMap[root];
                 if (x < b.x0) b.x0 = x;
@@ -9438,16 +9428,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 b.count++;
             }
         }
-
-        // Filter out tiny noise AND massive blobs (like barcodes or background patterns)
-        const maxBoxWidth = w * 0.4;
-        const maxBoxHeight = h * 0.15;
-        
-        return Object.values(boxMap).filter(b => {
-            const bw = b.x1 - b.x0;
-            const bh = b.y1 - b.y0;
-            return b.count > 3 && bw < maxBoxWidth && bh < maxBoxHeight;
-        });
+        return Object.values(boxMap).filter(b => b.count > 12);
     }
 
     // Color Sampler
@@ -9460,9 +9441,9 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         const imgData = ctx.getImageData(bx, by, bw, bh).data;
         let rSum = 0, gSum = 0, bSum = 0, count = 0;
 
-        for (let i = 0, len = imgData.length; i < len; i += 4) {
+        for (let i = 0; i < imgData.length; i += 4) {
             const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
-            if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 150) {
+            if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 180) {
                 rSum += r; gSum += g; bSum += b;
                 count++;
             }
@@ -9470,10 +9451,8 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Bounding Box Matcher with Safe Fallback
+    // Bounding Box Matcher
     function getMatchedBox(wordBbox, cclBoxes) {
-        if (!cclBoxes || cclBoxes.length === 0) return wordBbox;
-        
         let bestMatch = null, maxOverlap = 0;
         const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
 
@@ -9491,21 +9470,18 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 }
             }
         }
-        // If overlap ratio is decent, use CCL box; otherwise fallback safely to Tesseract's box
-        return (bestMatch && (maxOverlap / wArea > 0.2)) ? { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 } : wordBbox;
+        return (maxOverlap / wArea > 0.3) ? { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 } : wordBbox;
     }
 
-    // Prepare Binarized Canvas for OCR
+    // Binarize Canvas
     const binarizedCanvas = document.createElement('canvas');
     binarizedCanvas.width = w;
     binarizedCanvas.height = h;
     const bCtx = binarizedCanvas.getContext('2d');
     const bData = ctx.getImageData(0, 0, w, h);
-    const dData = bData.data;
-    for (let i = 0, len = dData.length; i < len; i += 4) {
-        const r = dData[i], g = dData[i + 1], b = dData[i + 2];
-        const v = (0.2126 * r + 0.7152 * g + 0.0722 * b) < 130 ? 0 : 255;
-        dData[i] = dData[i + 1] = dData[i + 2] = v;
+    for (let i = 0; i < bData.data.length; i += 4) {
+        const v = (0.2126 * bData.data[i] + 0.7152 * bData.data[i + 1] + 0.0722 * bData.data[i + 2]) < 140 ? 0 : 255;
+        bData.data[i] = bData.data[i + 1] = bData.data[i + 2] = v;
     }
     bCtx.putImageData(bData, 0, 0);
 
@@ -9515,7 +9491,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     const worker = await OCRPool.getWorker();
     const ocrResult = await worker.recognize(binarizedCanvas);
 
-    // Build SVG Node using a DocumentFragment
+    // Build SVG Node
     const svgEl = document.createElementNS(SVG_NS, "svg");
     svgEl.setAttribute("xmlns", SVG_NS);
     svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
@@ -9528,9 +9504,8 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     bgRect.setAttribute("fill", "#ffffff");
     svgEl.appendChild(bgRect);
 
-    const fragment = document.createDocumentFragment();
     const items = mode === 'line' ? ocrResult.data.lines : ocrResult.data.words;
-    const minConfidence = mode === 'line' ? 35 : 30;
+    const minConfidence = mode === 'line' ? 40 : 35;
 
     items.forEach(item => {
         const cleanText = fixText(item.text);
@@ -9548,13 +9523,11 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
         svgText.setAttribute("textLength", boxW);
-        svgText.setAttribute("lengthAdjust", "spacing");
+        svgText.setAttribute("lengthAdjust", "spacingAndGlyphs");
         svgText.textContent = cleanText;
 
-        fragment.appendChild(svgText);
+        svgEl.appendChild(svgText);
     });
-
-    svgEl.appendChild(fragment);
 
     // Determine/Create Container dynamically
     let container = null;
@@ -9562,12 +9535,14 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
     }
 
+    // If no target container exists or is provided, create one and append it to document.body
     if (!container) {
         container = document.createElement('div');
         container.className = 'generated-svg-container';
         document.body.appendChild(container);
     }
 
+    // Append the SVG into the container
     container.appendChild(svgEl);
 
     return svgEl;
