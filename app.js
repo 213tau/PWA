@@ -9345,16 +9345,20 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // Two-Pass CCL Bounding Box Extraction (Fixed Thresholds & Count Filter)
-    function computeCCL(dilationX = 3) {
+    // Two-Pass CCL with Strict Size Limits (Ignored on Passports/Barcodes)
+    function computeCCL(dilationX = 2) {
         const imgData = ctx.getImageData(0, 0, w, h);
         const data = imgData.data;
         const binaryMap = new Uint8Array(w * h);
 
-        // FIX: Increased threshold to 180 to catch lighter/anti-aliased text
+        // Stricter threshold for security backgrounds (darker text only)
         for (let i = 0, len = data.length; i < len; i += 4) {
-            const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-            binaryMap[i >> 2] = lum < 180 ? 1 : 0;
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            // Emphasize contrast against green/colored security backgrounds
+            const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            // Ensure it's dark text and not part of green background tint
+            const isDark = lum < 120 && (g - r < 30); 
+            binaryMap[i >> 2] = isDark ? 1 : 0;
         }
 
         const dilatedMap = new Uint8Array(w * h);
@@ -9434,9 +9438,16 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 b.count++;
             }
         }
+
+        // Filter out tiny noise AND massive blobs (like barcodes or background patterns)
+        const maxBoxWidth = w * 0.4;
+        const maxBoxHeight = h * 0.15;
         
-        // FIX: Lowered count filter from 12 to 3 to prevent dropping short words / digits
-        return Object.values(boxMap).filter(b => b.count > 3);
+        return Object.values(boxMap).filter(b => {
+            const bw = b.x1 - b.x0;
+            const bh = b.y1 - b.y0;
+            return b.count > 3 && bw < maxBoxWidth && bh < maxBoxHeight;
+        });
     }
 
     // Color Sampler
@@ -9451,7 +9462,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 
         for (let i = 0, len = imgData.length; i < len; i += 4) {
             const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
-            if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 180) {
+            if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 150) {
                 rSum += r; gSum += g; bSum += b;
                 count++;
             }
@@ -9459,8 +9470,10 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Bounding Box Matcher
+    // Bounding Box Matcher with Safe Fallback
     function getMatchedBox(wordBbox, cclBoxes) {
+        if (!cclBoxes || cclBoxes.length === 0) return wordBbox;
+        
         let bestMatch = null, maxOverlap = 0;
         const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
 
@@ -9478,10 +9491,11 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 }
             }
         }
+        // If overlap ratio is decent, use CCL box; otherwise fallback safely to Tesseract's box
         return (bestMatch && (maxOverlap / wArea > 0.2)) ? { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 } : wordBbox;
     }
 
-    // Binarize Canvas efficiently
+    // Prepare Binarized Canvas for OCR
     const binarizedCanvas = document.createElement('canvas');
     binarizedCanvas.width = w;
     binarizedCanvas.height = h;
@@ -9489,7 +9503,8 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     const bData = ctx.getImageData(0, 0, w, h);
     const dData = bData.data;
     for (let i = 0, len = dData.length; i < len; i += 4) {
-        const v = (0.2126 * dData[i] + 0.7152 * dData[i + 1] + 0.0722 * dData[i + 2]) < 180 ? 0 : 255;
+        const r = dData[i], g = dData[i + 1], b = dData[i + 2];
+        const v = (0.2126 * r + 0.7152 * g + 0.0722 * b) < 130 ? 0 : 255;
         dData[i] = dData[i + 1] = dData[i + 2] = v;
     }
     bCtx.putImageData(bData, 0, 0);
@@ -9515,7 +9530,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 
     const fragment = document.createDocumentFragment();
     const items = mode === 'line' ? ocrResult.data.lines : ocrResult.data.words;
-    const minConfidence = mode === 'line' ? 40 : 35;
+    const minConfidence = mode === 'line' ? 35 : 30;
 
     items.forEach(item => {
         const cleanText = fixText(item.text);
