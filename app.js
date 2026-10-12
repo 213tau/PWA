@@ -9345,15 +9345,16 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // Two-Pass CCL Bounding Box Extraction (Optimized loop bounds)
-    function computeCCL(dilationX = 4) {
+    // Two-Pass CCL Bounding Box Extraction (Fixed Thresholds & Count Filter)
+    function computeCCL(dilationX = 3) {
         const imgData = ctx.getImageData(0, 0, w, h);
         const data = imgData.data;
         const binaryMap = new Uint8Array(w * h);
 
+        // FIX: Increased threshold to 180 to catch lighter/anti-aliased text
         for (let i = 0, len = data.length; i < len; i += 4) {
             const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-            binaryMap[i >> 2] = lum < 140 ? 1 : 0;
+            binaryMap[i >> 2] = lum < 180 ? 1 : 0;
         }
 
         const dilatedMap = new Uint8Array(w * h);
@@ -9394,7 +9395,6 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 
         for (let y = 0; y < h; y++) {
             const rowOffset = y * w;
-            const prevRowOffset = (y - 1) * w;
             for (let x = 0; x < w; x++) {
                 const idx = rowOffset + x;
                 if (!dilatedMap[idx]) continue;
@@ -9434,7 +9434,9 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 b.count++;
             }
         }
-        return Object.values(boxMap).filter(b => b.count > 12);
+        
+        // FIX: Lowered count filter from 12 to 3 to prevent dropping short words / digits
+        return Object.values(boxMap).filter(b => b.count > 3);
     }
 
     // Color Sampler
@@ -9476,7 +9478,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 }
             }
         }
-        return (bestMatch && (maxOverlap / wArea > 0.3)) ? { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 } : wordBbox;
+        return (bestMatch && (maxOverlap / wArea > 0.2)) ? { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 } : wordBbox;
     }
 
     // Binarize Canvas efficiently
@@ -9487,7 +9489,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     const bData = ctx.getImageData(0, 0, w, h);
     const dData = bData.data;
     for (let i = 0, len = dData.length; i < len; i += 4) {
-        const v = (0.2126 * dData[i] + 0.7152 * dData[i + 1] + 0.0722 * dData[i + 2]) < 140 ? 0 : 255;
+        const v = (0.2126 * dData[i] + 0.7152 * dData[i + 1] + 0.0722 * dData[i + 2]) < 180 ? 0 : 255;
         dData[i] = dData[i + 1] = dData[i + 2] = v;
     }
     bCtx.putImageData(bData, 0, 0);
@@ -9498,7 +9500,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     const worker = await OCRPool.getWorker();
     const ocrResult = await worker.recognize(binarizedCanvas);
 
-    // Build SVG Node using a DocumentFragment to minimize mobile layout reflows
+    // Build SVG Node using a DocumentFragment
     const svgEl = document.createElementNS(SVG_NS, "svg");
     svgEl.setAttribute("xmlns", SVG_NS);
     svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
@@ -9530,9 +9532,6 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         svgText.setAttribute("font-size", `${boxH * 0.85}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
-        
-        // FIX: Prevent text stretching/becoming oversized by using 'spacing' 
-        // instead of 'spacingAndGlyphs', or safely falling back if text is very short
         svgText.setAttribute("textLength", boxW);
         svgText.setAttribute("lengthAdjust", "spacing");
         svgText.textContent = cleanText;
