@@ -84,13 +84,14 @@ svg#logo {
   border-radius: 15px;
 }
 
-/* --- Main Layout Grid (Sidebar Ribbon + Content) --- */
+/* --- Main Layout Grid (Tab-Container Left Flank, Main Right) --- */
 .app-layout {
   display: flex;
   flex: 1;
   max-width: 1600px;
   width: 100%;
   margin: 0 auto;
+  flex-direction: row; /* tab-container on left, main on right */
 }
 
 /* --- Left Ribbon Tab Container --- */
@@ -142,7 +143,7 @@ svg#logo {
   box-shadow: 0 2px 6px rgba(14, 165, 164, 0.3);
 }
 
-/* --- Main Content Area --- */
+/* --- Main Content Area (Right Flank) --- */
 main {
   flex: 1;
   padding: 24px;
