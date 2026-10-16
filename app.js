@@ -9136,7 +9136,11 @@ const organizeDataDiv = document.getElementById('organizeData');
 organize.addEventListener('click', async function() {
   organizeDataDiv.innerHTML = '';
 
+  let index = 1; // Counter for serial numbers
+
   for (const item of images) {
+    const currentIndex = index++; // Get current number and increment
+    
     const container = document.createElement('div');
     container.style.display = 'inline-block';
     container.style.textAlign = 'center';
@@ -9146,12 +9150,21 @@ organize.addEventListener('click', async function() {
     container.style.padding = '8px';
     container.style.borderRadius = '4px';
 
+    // 0. Serial Number Label
+    const serialLabel = document.createElement('div');
+    serialLabel.textContent = `image-${currentIndex}`;
+    serialLabel.style.fontSize = '11px';
+    serialLabel.style.fontWeight = 'bold';
+    serialLabel.style.color = '#666';
+    serialLabel.style.marginBottom = '4px';
+    container.appendChild(serialLabel);
+
     let sizeInKB = 0;
     let currentCanvasOrImage = null;
     let currentBlob = null;
     let currentBase64 = '';
     
-    let currentFileName = item.name || item.file?.name || 'image.jpg';
+    let currentFileName = item.name || item.file?.name || `image-${currentIndex}.jpg`;
 
     // 1. File Name Input Field
     const nameInput = document.createElement('input');
@@ -9280,7 +9293,7 @@ organize.addEventListener('click', async function() {
     // Helper to attach drag event using the pre-cached Base64 string
     function attachDragEvent(element) {
       element.addEventListener('dragstart', function(e) {
-        const finalFileName = nameInput.value.trim() || 'image.jpg';
+        const finalFileName = nameInput.value.trim() || `image-${currentIndex}.jpg`;
         const downloadUrl = `image/jpeg:${finalFileName}:${currentBase64}`;
         
         e.dataTransfer.setData('DownloadURL', downloadUrl);
