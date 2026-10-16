@@ -197,7 +197,7 @@ upload.addEventListener("change", async (e) => {
                         }
 
                         // Insert visual SVG into DOM
-                        document.querySelector("#svgTools").appendChild(svgElement);
+                        //document.querySelector("#svgTools").appendChild(svgElement);
 
                         // Format code with line structures for #output
                         const codeElement = document.querySelector("#output");
@@ -223,7 +223,31 @@ upload.addEventListener("change", async (e) => {
                             makeSvgTextEditable(svgElement);
                         }
 
-                        resolve(svgElement);
+                        // --- Treat the SVG as an Image after output ---
+                        const blob = new Blob([rawSvgText], { type: "image/svg+xml;charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        
+                        const img = new Image();
+                        img.onload = () => {
+                            // If you want to return an ImageObject or handle canvas display similar to raster images:
+                            const imageObject = typeof ImageObject === "function" ? new ImageObject(img, file) : img;
+                            
+                            // Optional: display canvas if needed
+                            const canvas = document.querySelector("canvas");
+                            if (canvas) {
+                                canvas.style.display = "block";
+                            }
+
+                            // Resolve with both the DOM svgElement and the processed image representation if needed, 
+                            // or resolve with the ImageObject array to match your raster branch.
+                            resolve({ svgElement, imageObject });
+                            
+                            // Clean up object URL once loaded
+                            URL.revokeObjectURL(url);
+                        };
+                        img.onerror = (err) => reject(err);
+                        img.src = url;
+
                     } catch (err) {
                         reject(err);
                     }
