@@ -171,99 +171,94 @@ upload.addEventListener("change", async (e) => {
 
     const loadPromises = files.map(async (file) => {
         if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
 
-                reader.onload = (event) => {
-                    try {
-                        const rawSvgText = event.target.result;
-                        const parser = new DOMParser();
-                        const svgDoc = parser.parseFromString(rawSvgText, "image/svg+xml");
-                        
-                        const parserError = svgDoc.querySelector("parsererror");
-                        if (parserError) {
-                            return reject(new Error("Invalid SVG format"));
-                        }
+        reader.onload = (event) => {
+            try {
+                const rawSvgText = event.target.result;
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(rawSvgText, "image/svg+xml");
+                
+                const parserError = svgDoc.querySelector("parsererror");
+                if (parserError) {
+                    return reject(new Error("Invalid SVG format"));
+                }
 
-                        const svgElement = svgDoc.querySelector("svg");
-                        if (!svgElement) {
-                            return reject(new Error("No <svg> root element found"));
-                        }
+                const svgElement = svgDoc.querySelector("svg");
+                if (!svgElement) {
+                    return reject(new Error("No <svg> root element found"));
+                }
 
-                        // Responsive setup
-                        svgElement.classList.add("editable-svg-canvas");
-                        if (!svgElement.getAttribute("viewBox") && svgElement.getAttribute("width") && svgElement.getAttribute("height")) {
-                            svgElement.setAttribute("viewBox", `0 0 ${parseFloat(svgElement.getAttribute("width"))} ${parseFloat(svgElement.getAttribute("height"))}`);
-                        }
+                // Responsive setup
+                svgElement.classList.add("editable-svg-canvas");
+                if (!svgElement.getAttribute("viewBox") && svgElement.getAttribute("width") && svgElement.getAttribute("height")) {
+                    svgElement.setAttribute("viewBox", `0 0 ${parseFloat(svgElement.getAttribute("width"))} ${parseFloat(svgElement.getAttribute("height"))}`);
+                }
 
-                        // Insert visual SVG into DOM
-                        //document.querySelector("#svgTools").appendChild(svgElement);
+                // Format code with line structures for #output (Untouched)
+                const codeElement = document.querySelector("#output");
+                if (codeElement) {
+                    codeElement.innerHTML = ""; // Clear old output
+                    
+                    const escapedText = rawSvgText
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;");
+                    
+                    const lines = escapedText.split("\n");
+                    lines.forEach(lineContent => {
+                        const lineSpan = document.createElement("span");
+                        lineSpan.className = "code-line";
+                        lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
+                        codeElement.appendChild(lineSpan);
+                    });
+                }
 
-                        // Format code with line structures for #output
-                        const codeElement = document.querySelector("#output");
-                        if (codeElement) {
-                            codeElement.innerHTML = ""; // Clear old output
-                            
-                            // Escape HTML entities safely to prevent rendering tags
-                            const escapedText = rawSvgText
-                                .replace(/&/g, "&amp;")
-                                .replace(/</g, "&lt;")
-                                .replace(/>/g, "&gt;");
-                            
-                            const lines = escapedText.split("\n");
-                            lines.forEach(lineContent => {
-                                const lineSpan = document.createElement("span");
-                                lineSpan.className = "code-line";
-                                lineSpan.innerHTML = lineContent === "" ? "&nbsp;" : lineContent;
-                                codeElement.appendChild(lineSpan);
-                            });
-                        }
+                if (typeof makeSvgTextEditable === "function") {
+                    makeSvgTextEditable(svgElement);
+                }
 
-                        if (typeof makeSvgTextEditable === "function") {
-                            makeSvgTextEditable(svgElement);
-                        }
+                // --- Added: Load SVG as an image object & show canvas ---
+                const img = new Image();
+                const svgUrl = URL.createObjectURL(file);
 
-                        // --- Treat the SVG as an Image after output ---
-                        const blob = new Blob([rawSvgText], { type: "image/svg+xml;charset=utf-8" });
-                        const url = URL.createObjectURL(blob);
-                        
-                        const img = new Image();
-                        img.onload = () => {
-                            // If you want to return an ImageObject or handle canvas display similar to raster images:
-                            const imageObject = typeof ImageObject === "function" ? new ImageObject(img, file) : img;
-                            
-                            // Optional: display canvas if needed
-                            const canvas = document.querySelector("canvas");
-                            if (canvas) {
-                                canvas.style.display = "block";
-                            }
-
-                            // Resolve with both the DOM svgElement and the processed image representation if needed, 
-                            // or resolve with the ImageObject array to match your raster branch.
-                            resolve({ svgElement, imageObject });
-                            
-                            // Clean up object URL once loaded
-                            URL.revokeObjectURL(url);
-                        };
-                        img.onerror = (err) => reject(err);
-                        img.src = url;
-
-                    } catch (err) {
-                        reject(err);
+                img.onload = () => {
+                    URL.revokeObjectURL(svgUrl);
+                    
+                    const canvas = document.querySelector("canvas");
+                    if (canvas) {
+                        canvas.style.display = "block";            
                     }
+
+                    // Resolves as an ImageObject array like other raster images, 
+                    // while keeping your code/editor features above fully active.
+                    resolve([new ImageObject(img, file)]);
                 };
 
-                reader.onerror = (error) => reject(error);
-                reader.readAsText(file);
-            });
-        } else if (file.type.startsWith("image/")) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.src = URL.createObjectURL(file);
-                img.onload = () => resolve([new ImageObject(img, file)]);
-                document.querySelector("canvas").style.display = "block";            
-            });
-        } else if (file.type === "application/pdf") {          
+                img.onerror = (error) => {
+                    URL.revokeObjectURL(svgUrl);
+                    reject(error);
+                };
+
+                img.src = svgUrl;
+
+            } catch (err) {
+                reject(err);
+            }
+        };
+
+        reader.onerror = (error) => reject(error);
+        reader.readAsText(file);
+    });
+} else if (file.type.startsWith("image/")) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => resolve([new ImageObject(img, file)]);
+        document.querySelector("canvas").style.display = "block";            
+    });
+} else if (file.type === "application/pdf") {          
             const pdfBytes = await file.arrayBuffer();
             const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
 
