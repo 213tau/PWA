@@ -295,6 +295,10 @@ pre {
 }
 #output > div:nth-child(odd) { background-color: #f8fafc; }
 
+#main{
+    display:flex;
+  }
+
 /* --- Responsive Adjustments --- */
 @media (max-width: 900px) {
   .app-layout {
@@ -313,16 +317,14 @@ pre {
   .tab {
     white-space: nowrap;
     text-align: center;
-  }
-  #main{
-    display:flex;
-  }
+  }  
 }
 
 @media (max-width: 768px) {
   .app-controls { padding: 10px; gap: 6px; }
   button, select, input { width: 100%; font-size: 15px; }
   .zoom-controls { top: 5px; right: 5px; }
+  main{display:block};
 }
 
 /* --- Print Styling --- */
