@@ -1828,6 +1828,30 @@ async function rotateCurrentImage() {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       sharpen(ctx, canvas.width, canvas.height, 1.0);  // Full sharpening (mix = 1.0)
     });
+    
+    document.querySelector('#copyImage').addEventListener("click", async function () {
+    const canvas = document.querySelector("canvas");
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // Convert the canvas to a Blob and copy it to the clipboard
+    canvas.toBlob(async function(blob) {
+        if (!blob) {
+            console.error("Failed to create blob from canvas.");
+            return;
+        }
+
+        try {
+            const item = new ClipboardItem({ "image/png": blob });
+            await navigator.clipboard.write([item]);
+            console.log("Image copied to clipboard successfully!");
+            
+            // Optional: Give visual feedback to the user
+            // e.g., this.textContent = "Copied!";
+        } catch (err) {
+            console.error("Failed to copy image to clipboard: ", err);
+        }
+    }, "image/png");
+});
 
     document.querySelector('#print').addEventListener("click", function () {
       zoomLevel = 1;
