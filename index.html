@@ -471,61 +471,6 @@ pre {
       </div>      
     </div>
 
-    <div class="tab-content" id="organizeData">  
-    </div>
-    <div class="tab-content" id="htmlEditing">  
-    </div>
-    <div class="tab-content" id="dataManipulator">  
-      <div class="card">
-    <h2>Smart Office Search + Data Extractor</h2>
-    <p style="font-size: 0.85em; color: #666;">Indexes PPTX Slides, <b>Speaker Notes</b>, DOCX Paragraphs, Links, and Phone Numbers.</p>
-    
-    <div class="controls">
-        <!-- Hidden file input capable of handling folders from servers/network shares reliably -->
-        <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;" onchange="handleFolderSelect(event)">
-        <button onclick="document.getElementById('folderInput').click()">📂 Select Folder</button>
-        <button id="btnIndex" onclick="startIndexing()" disabled>⚡ Sync Changes</button>
-        <span id="status">Select folder to begin.</span>
-    </div>
-
-    <div class="progress-bg" id="progressContainer">
-        <div class="progress-bar" id="progressBar"></div>
-    </div>
-
-    <div class="controls">
-        <input type="text" id="searchBox" placeholder="Search documents or notes..." onkeyup="if(event.key==='Enter') searchText()">
-        <button onclick="searchText()">🔍 Search</button>
-    </div>
-
-    <div id="results"></div>
-</div>
-    </div>
-
-    <div class="tab-content" id="idCardTools">
-      <button id="idcardcapture">Capture 3.4x2.2in</button>
-      <button id="idcardsgenerate">Generate ID Card</button>
-      <button onclick="idcard()">Resize to ID Card</button>
-      <button id="oneidcard">1 Copy of Each</button>
-      <button id="idcardstacked">Resize Stacked</button>
-    </div>
-
-    <div class="tab-content" id="picturetools">
-      <button id="fourpic">Four Pictures</button>
-      <button id="centrefour">Centre Four</button>
-      <button id="blue">Blue Background</button>
-      <button id="rotate">Rotate 180Deg</button>
-      <button id="border">Black Border</button>
-      <button id="fourpics">4 Photos (100)</button>
-      <button id="fivepics">5 Photos (100)</button>
-      <button onclick="sixpics()">6 Photos (120)</button>
-      <button id="eightpics">8 Photos (150)</button>
-      <button id="coatapply">Coat</button>
-      <button id="circletoggle">Toggle Circle SVG</button>
-      <button id="svg">SVG Path Manipulation</button>
-      <button id="svgpathedit">SVG Path Edit</button>
-      <button id="bringcoat">Bring Coat Upfront</button>      
-    </div>
-
     <div class="tab-content" id="svgTools">                  
       <div id="main-layout">
     <div id="controls">
@@ -592,6 +537,61 @@ pre {
         <kbd>Esc</kbd> Deselect
     </div>
 </div>
+    </div>
+
+    <div class="tab-content" id="organizeData">  
+    </div>
+    <div class="tab-content" id="htmlEditing">  
+    </div>
+    <div class="tab-content" id="dataManipulator">  
+      <div class="card">
+    <h2>Smart Office Search + Data Extractor</h2>
+    <p style="font-size: 0.85em; color: #666;">Indexes PPTX Slides, <b>Speaker Notes</b>, DOCX Paragraphs, Links, and Phone Numbers.</p>
+    
+    <div class="controls">
+        <!-- Hidden file input capable of handling folders from servers/network shares reliably -->
+        <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;" onchange="handleFolderSelect(event)">
+        <button onclick="document.getElementById('folderInput').click()">📂 Select Folder</button>
+        <button id="btnIndex" onclick="startIndexing()" disabled>⚡ Sync Changes</button>
+        <span id="status">Select folder to begin.</span>
+    </div>
+
+    <div class="progress-bg" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="searchBox" placeholder="Search documents or notes..." onkeyup="if(event.key==='Enter') searchText()">
+        <button onclick="searchText()">🔍 Search</button>
+    </div>
+
+    <div id="results"></div>
+</div>
+    </div>
+
+    <div class="tab-content" id="idCardTools">
+      <button id="idcardcapture">Capture 3.4x2.2in</button>
+      <button id="idcardsgenerate">Generate ID Card</button>
+      <button onclick="idcard()">Resize to ID Card</button>
+      <button id="oneidcard">1 Copy of Each</button>
+      <button id="idcardstacked">Resize Stacked</button>
+    </div>
+
+    <div class="tab-content" id="picturetools">
+      <button id="fourpic">Four Pictures</button>
+      <button id="centrefour">Centre Four</button>
+      <button id="blue">Blue Background</button>
+      <button id="rotate">Rotate 180Deg</button>
+      <button id="border">Black Border</button>
+      <button id="fourpics">4 Photos (100)</button>
+      <button id="fivepics">5 Photos (100)</button>
+      <button onclick="sixpics()">6 Photos (120)</button>
+      <button id="eightpics">8 Photos (150)</button>
+      <button id="coatapply">Coat</button>
+      <button id="circletoggle">Toggle Circle SVG</button>
+      <button id="svg">SVG Path Manipulation</button>
+      <button id="svgpathedit">SVG Path Edit</button>
+      <button id="bringcoat">Bring Coat Upfront</button>      
     </div>
 
     <div class="tab-content" id="pdfTools">
