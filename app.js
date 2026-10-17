@@ -192,8 +192,29 @@ upload.addEventListener("change", async (e) => {
 
                 // Responsive setup
                 svgElement.classList.add("editable-svg-canvas");
-                if (!svgElement.getAttribute("viewBox") && svgElement.getAttribute("width") && svgElement.getAttribute("height")) {
-                    svgElement.setAttribute("viewBox", `0 0 ${parseFloat(svgElement.getAttribute("width"))} ${parseFloat(svgElement.getAttribute("height"))}`);
+                
+                // Get or parse dimensions
+                let width = parseFloat(svgElement.getAttribute("width"));
+                let height = parseFloat(svgElement.getAttribute("height"));
+
+                if (!svgElement.getAttribute("viewBox") && width && height) {
+                    svgElement.setAttribute("viewBox", `0 0 ${width} ${height}`);
+                } else if (svgElement.getAttribute("viewBox")) {
+                    const viewBoxValues = svgElement.getAttribute("viewBox").trim().split(/[\s,]+/);
+                    if (viewBoxValues.length === 4) {
+                        const vbWidth = parseFloat(viewBoxValues[2]);
+                        const vbHeight = parseFloat(viewBoxValues[3]);
+
+                        // If width or height are missing or percentages, set them explicitly from viewBox
+                        if (!width || isNaN(width)) {
+                            width = vbWidth;
+                            svgElement.setAttribute("width", width);
+                        }
+                        if (!height || isNaN(height)) {
+                            height = vbHeight;
+                            svgElement.setAttribute("height", height);
+                        }
+                    }
                 }
 
                 // Format code with line structures for #output (Untouched)
@@ -204,7 +225,7 @@ upload.addEventListener("change", async (e) => {
                     const escapedText = rawSvgText
                         .replace(/&/g, "&amp;")
                         .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;");
+                        .replace(//>/g, "&gt;");
                     
                     const lines = escapedText.split("\n");
                     lines.forEach(lineContent => {
@@ -219,20 +240,29 @@ upload.addEventListener("change", async (e) => {
                     makeSvgTextEditable(svgElement);
                 }
 
-                // --- Added: Load SVG as an image object & show canvas ---
+                // --- Load SVG as an image object with fixed pixel dimensions ---
+                // Serialize modified SVG document back to a Blob to preserve explicit width/height
+                const serializedSvg = new XMLSerializer().serializeToString(svgDoc);
+                const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
+                const svgUrl = URL.createObjectURL(svgBlob);
+
                 const img = new Image();
-                const svgUrl = URL.createObjectURL(file);
 
                 img.onload = () => {
                     URL.revokeObjectURL(svgUrl);
                     
                     const canvas = document.querySelector("canvas");
                     if (canvas) {
-                        canvas.style.display = "block";            
+                        canvas.style.display = "block";
+                        
+                        // If canvas requires matching the actual image resolution:
+                        if (width && height) {
+                            canvas.width = width;
+                            canvas.height = height;
+                        }
                     }
 
-                    // Resolves as an ImageObject array like other raster images, 
-                    // while keeping your code/editor features above fully active.
+                    // Resolves as an ImageObject array
                     resolve([new ImageObject(img, file)]);
                 };
 
