@@ -67,10 +67,30 @@
     const trimmedText = droppedText.trim();
 
     // NEW WORKING: Handle Base64 strings dropped into File inputs
+    // NEW WORKING: Handle Base64 strings dropped into File inputs
     if (inputEl.tagName === 'INPUT' && inputEl.type === 'file' && trimmedText.startsWith('data:image/')) {
       try {
-        const file = base64ToFile(trimmedText, 'uploaded_image.jpg');
+        // Extract extension from the data URI (e.g., data:image/png;base64,... -> png)
+        const mimeMatch = trimmedText.match(/^data:(image\/[a-zA-Z+]+);base64,/);
+        let extension = 'jpg';
+        if (mimeMatch && mimeMatch[1]) {
+          const subType = mimeMatch[1].split('/')[1];
+          extension = subType.replace('jpeg', 'jpg');
+        }
+
+        // Generate a unique filename using timestamp and a random string
+        const uniqueName = `image_${Date.now()}_${Math.random().toString(36.substring(2, 7))}.${extension}`;
+
+        const file = base64ToFile(trimmedText, uniqueName);
         const dataTransfer = new DataTransfer();
+        
+        // If the input allows multiple files and already has files, preserve them (optional)
+        if (inputEl.multiple && inputEl.files.length > 0) {
+          for (let i = 0; i < inputEl.files.length; i++) {
+            dataTransfer.items.add(inputEl.files[i]);
+          }
+        }
+        
         dataTransfer.items.add(file);
         inputEl.files = dataTransfer.files;
       } catch (err) {
