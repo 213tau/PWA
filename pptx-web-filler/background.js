@@ -27,7 +27,27 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 function wafid(){
-  console.log("tauseef");
+  document.querySelector("#id_country").value = "PAK";
+
+// Dispatch standard 'change' and 'input' events
+document.querySelector("#id_country").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_country").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_city").value = "76";
+document.querySelector("#id_city").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_city").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_traveled_country").value = "SA";
+document.querySelector("#id_traveled_country").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_traveled_country").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_appointment_type_0").checked = true;
+document.querySelector("#id_appointment_type_0").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_appointment_type_0").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_confirm").checked = true;
+document.querySelector("#id_confirm").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_confirm").dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 /**
