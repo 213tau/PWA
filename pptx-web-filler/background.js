@@ -48,6 +48,19 @@ document.querySelector("#id_appointment_type_0").dispatchEvent(new Event("input"
 document.querySelector("#id_confirm").checked = true;
 document.querySelector("#id_confirm").dispatchEvent(new Event("change", { bubbles: true }));
 document.querySelector("#id_confirm").dispatchEvent(new Event("input", { bubbles: true }));
+
+const firstNameInput = document.querySelector("#id_first_name");
+
+if (firstNameInput) {
+    firstNameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    firstNameInput.focus();
+    
+    // Simulate the full mouse click sequence
+    firstNameInput.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    firstNameInput.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    firstNameInput.click();
+}
 }
 
 /**
