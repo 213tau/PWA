@@ -9618,10 +9618,10 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         const svgText = document.createElementNS(SVG_NS, "text");
         svgText.setAttribute("x", bbox.x0);
         svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
-        svgText.setAttribute("font-size", `${boxH * 0.85}px`);
+        //svgText.setAttribute("font-size", `${boxH * 0.85}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
-        svgText.setAttribute("textLength", boxW);
+        //svgText.setAttribute("textLength", boxW);
         svgText.setAttribute("lengthAdjust", "spacingAndGlyphs");
         svgText.textContent = cleanText;
 
