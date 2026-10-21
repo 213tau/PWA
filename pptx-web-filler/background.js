@@ -23,8 +23,21 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       target: { tabId: tabId },
       func: wafid
     }).catch(err => console.log("Script injection skipped/failed for tab:", tabId, err));
+  } else if (
+    changeInfo.status === 'complete' && 
+    tab.url && 
+    tab.url.startsWith('https://wafid.com/en/appointment/') && tab.url.startsWith('/pay/')
+  ) {
+    chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: linktoclipboard
+    }).catch(err => console.log("Script injection skipped/failed for tab:", tabId, err));
   }
 });
+
+function linktoclipboard(){
+  console.log("tauseef");
+}
 
 function wafid(){
   document.querySelector("#id_country").value = "PAK";
