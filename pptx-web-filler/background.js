@@ -37,19 +37,49 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 function linktoclipboard(){
   // 1. Create and style the button
-const button = document.createElement("button");
-button.innerText = "share to whatsapp";
-button.style.background = "green";
-button.id = "whatsappclick";
-document.querySelector(".list").append(button);
+  const button = document.createElement("button");
+  
+  // Added an icon emoji and clean text
+  button.innerHTML = "Share to WhatsApp";
+  button.id = "whatsappclick";
+  
+  // Beautiful modern styling
+  button.style.background = "#25D366"; // Official WhatsApp Green
+  button.style.color = "#ffffff";
+  button.style.border = "none";
+  button.style.padding = "10px 18px";
+  button.style.fontSize = "14px";
+  button.style.fontWeight = "600";
+  button.style.borderRadius = "8px";
+  button.style.cursor = "pointer";
+  button.style.display = "inline-flex";
+  button.style.alignItems = "center";
+  button.style.gap = "8px";
+  button.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+  button.style.transition = "all 0.2s ease-in-out";
 
-// 2. Add the click event listener
-button.addEventListener("click", async () => {
+  // Hover and active effects for interactivity
+  button.onmouseover = () => {
+    button.style.background = "#20ba5a";
+    button.style.boxShadow = "0 6px 8px rgba(0, 0, 0, 0.15)";
+    button.style.transform = "translateY(-1px)";
+  };
+  
+  button.onmouseout = () => {
+    button.style.background = "#25D366";
+    button.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+    button.style.transform = "translateY(0)";
+  };
+
+  document.querySelector(".list").append(button);
+
+  // 2. Add the click event listener
+  button.addEventListener("click", async () => {
     // Get the payment value from the specified element
-    const paymentValue = document.querySelectorAll(".list .payment-value")[3]?.value || "";
+    const paymentValue = document.querySelectorAll(".list .payment-value")[2]?.innerText || "";
     
     // Construct the message text
-    const textToCopy = `${window.location.href}\n\n${paymentValue}\n\nMULTAN KSA`;
+    const textToCopy = `${window.location.href}\n${paymentValue}\nMULTAN KSA`;
 
     try {
         // Copy the formatted text to the clipboard
@@ -63,7 +93,7 @@ button.addEventListener("click", async () => {
     } catch (err) {
         console.error("Failed to copy: ", err);
     }
-});
+  });
 }
 
 function wafid(){
