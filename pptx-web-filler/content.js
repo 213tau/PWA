@@ -66,8 +66,7 @@
 
     const trimmedText = droppedText.trim();
 
-    // NEW WORKING: Handle Base64 strings dropped into File inputs
-    // NEW WORKING: Handle Base64 strings dropped into File inputs
+    // Handle Base64 strings dropped into File inputs
     if (inputEl.tagName === 'INPUT' && inputEl.type === 'file' && trimmedText.startsWith('data:image/')) {
       try {
         // Extract extension from the data URI (e.g., data:image/png;base64,... -> png)
@@ -79,12 +78,12 @@
         }
 
         // Generate a unique filename using timestamp and a random string
-        const uniqueName = `image_${Date.now()}_${Math.random().toString(36.substring(2, 7))}.${extension}`;
+        const uniqueName = `image_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${extension}`;
 
         const file = base64ToFile(trimmedText, uniqueName);
         const dataTransfer = new DataTransfer();
         
-        // If the input allows multiple files and already has files, preserve them (optional)
+        // If the input allows multiple files and already has files, preserve them
         if (inputEl.multiple && inputEl.files.length > 0) {
           for (let i = 0; i < inputEl.files.length; i++) {
             dataTransfer.items.add(inputEl.files[i]);
@@ -97,7 +96,7 @@
         console.error("Failed to parse base64 image string:", err);
       }
     } 
-    // PREVIOUS WORKING: Handle standard text inputs and select dropdowns
+    // Handle standard text inputs and select dropdowns
     else {
       const normalizedTarget = normalize(trimmedText);
       if (!normalizedTarget) return;
