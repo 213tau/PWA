@@ -26,7 +26,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   } else if (
     changeInfo.status === 'complete' && 
     tab.url && 
-    tab.url.startsWith('https://wafid.com/en/appointment/') && tab.url.startsWith('/pay/')
+    tab.url.startsWith('https://wafid.com/en/appointment/') && tab.url.endsWith('/pay/')
   ) {
     chrome.scripting.executeScript({
       target: { tabId: tabId },
@@ -36,7 +36,34 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 function linktoclipboard(){
-  console.log("tauseef");
+  // 1. Create and style the button
+const button = document.createElement("button");
+button.innerText = "share to whatsapp";
+button.style.background = "green";
+button.id = "whatsappclick";
+document.querySelector(".list").append(button);
+
+// 2. Add the click event listener
+button.addEventListener("click", async () => {
+    // Get the payment value from the specified element
+    const paymentValue = document.querySelectorAll(".list .payment-value")[3]?.value || "";
+    
+    // Construct the message text
+    const textToCopy = `${window.location.href}\n\n${paymentValue}\n\nMULTAN KSA`;
+
+    try {
+        // Copy the formatted text to the clipboard
+        await navigator.clipboard.writeText(textToCopy);
+        alert("Copied to clipboard!");
+        
+        // Optional: Open WhatsApp with the pre-filled text
+        // const encodedText = encodeURIComponent(textToCopy);
+        // window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+        
+    } catch (err) {
+        console.error("Failed to copy: ", err);
+    }
+});
 }
 
 function wafid(){
