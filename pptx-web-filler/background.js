@@ -94,8 +94,7 @@ function linktoclipboard(){
         
     } catch (err) {
         console.error("Failed to copy: ", err);
-    }
-    window.
+    }    
   });
 }
 
