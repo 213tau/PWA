@@ -90,7 +90,9 @@ function linktoclipboard(){
         // const encodedText = encodeURIComponent(textToCopy);
         // window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
         // Redirect to the Wafid appointment page
+        setTimeout(() => {
         window.location.href = "https://wafid.com/en/book-appointment/";
+    }, 3000);
         
     } catch (err) {
         console.error("Failed to copy: ", err);
