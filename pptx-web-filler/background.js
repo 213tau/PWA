@@ -89,10 +89,13 @@ function linktoclipboard(){
         // Optional: Open WhatsApp with the pre-filled text
         // const encodedText = encodeURIComponent(textToCopy);
         // window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+        // Redirect to the Wafid appointment page
+        window.location.href = "https://wafid.com/en/book-appointment/";
         
     } catch (err) {
         console.error("Failed to copy: ", err);
     }
+    window.
   });
 }
 
