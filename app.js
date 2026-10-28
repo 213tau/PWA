@@ -9434,7 +9434,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // Two-Pass CCL Bounding Box Extraction using cached pixel data
+    // Two-Pass CCL Bounding Box Extraction with noise filtering
     function computeCCL(dilationX = 4) {
         const binaryMap = new Uint8Array(w * h);
 
@@ -9519,7 +9519,14 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 b.count++;
             }
         }
-        return Object.values(boxMap).filter(b => b.count > 12);
+
+        // Filter out tiny artifacts, extreme aspect ratios, and oversized boxes
+        return Object.values(boxMap).filter(b => {
+            const boxW = b.x1 - b.x0;
+            const boxH = b.y1 - b.y0;
+            const aspect = boxW / (boxH || 1);
+            return b.count > 25 && boxH >= 8 && boxH <= 120 && aspect > 0.1 && aspect < 20;
+        });
     }
 
     // Color Sampler
@@ -9545,7 +9552,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Bounding Box Matcher
+    // Bounding Box Matcher with noise rejection
     function getMatchedBox(wordBbox, cclBoxes) {
         let bestMatch = null, maxOverlap = 0;
         const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
@@ -9564,7 +9571,19 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
                 }
             }
         }
-        return (bestMatch && maxOverlap / wArea > 0.3) ? { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 } : wordBbox;
+
+        if (bestMatch && (maxOverlap / wArea > 0.3)) {
+            const matchH = bestMatch.y1 - bestMatch.y0;
+            const origH = wordBbox.y1 - wordBbox.y0;
+            
+            // Reject if matched CCL box expanded excessively compared to original OCR box (noise artifact)
+            if (matchH > origH * 2) {
+                return wordBbox;
+            }
+            return { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 };
+        }
+        
+        return wordBbox;
     }
 
     // Binarize Canvas for OCR
@@ -9625,13 +9644,19 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         if (item.confidence < minConfidence || !cleanText) return;
 
         const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
-        const boxH = Math.max(8, bbox.y1 - bbox.y0);
+        const boxH = bbox.y1 - bbox.y0;
+
+        // Skip items that are too small or unrealistically tall (noise filter)
+        if (boxH < 8 || boxH > 120) return;
+
+        // Clamp font size to sane boundaries (min 10px, max 48px)
+        const fontSize = Math.min(Math.max(boxH * 0.75, 10), 48);
         const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
         const svgText = document.createElementNS(SVG_NS, "text");
         svgText.setAttribute("x", bbox.x0);
-        svgText.setAttribute("y", bbox.y1 - (boxH * 0.18));
-        svgText.setAttribute("font-size", `${boxH * 0.78}px`);
+        svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
+        svgText.setAttribute("font-size", `${fontSize}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
         svgText.textContent = cleanText;
