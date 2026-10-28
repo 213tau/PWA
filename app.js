@@ -8648,6 +8648,58 @@ function removeText() {
   ctx.putImageData(imgData, 0, 0);
 }
 
+function extractTextOnly() {
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imgData.data;
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const threshold = 160;
+  const brightnessMask = new Float32Array(width * height);
+  const combinedMask = new Float32Array(width * height);
+
+  // 1. Create brightness mask (detecting dark text pixels)
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+    const confidence = brightness < threshold ? (1 - brightness / threshold) : 0;
+    brightnessMask[i / 4] = confidence;
+  }
+
+  // 2. Edge detection mask (detecting sharp transitions like text outlines)
+  const edgeMask = applyEdgeDetection(data, width, height);
+
+  // 3. Combine masks to isolate text
+  for (let i = 0; i < combinedMask.length; i++) {
+    combinedMask[i] = Math.max(brightnessMask[i], edgeMask[i] * 0.9);
+  }
+
+  // 4. REVERSE: Keep only text pixels, make the rest white (or transparent)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const i = idx * 4;
+      const strength = combinedMask[idx];
+
+      // If it's NOT text (low mask value), turn it white (255, 255, 255)
+      // Alternatively, you can set alpha (data[i + 3]) to 0 for transparency
+      if (strength < 0.05) {
+        data[i] = 255;     // Red
+        data[i + 1] = 255; // Green
+        data[i + 2] = 255; // Blue
+        data[i + 3] = 255; // Alpha (set to 0 if you want transparent background)
+      } else {
+        // Optional: Enhance the text pixels to make them crisp black or keep original color
+        // e.g., make text solid black:
+        // data[i] = 0; data[i + 1] = 0; data[i + 2] = 0;
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
 
 function applyEdgeDetection(data, width, height) {
   const grayscale = new Float32Array(width * height);
