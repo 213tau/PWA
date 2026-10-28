@@ -9439,7 +9439,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // Optimized Two-Pass CCL Bounding Box Extraction
+    // Non-lossy CCL Bounding Box Extraction with safe, wide bounds
     function computeCCL(dilationX = 4) {
         const binaryMap = new Uint8Array(w * h);
 
@@ -9529,11 +9529,12 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
             }
         }
 
+        // Use wider, non-lossy thresholds to preserve subscripts, small text, and large titles
         return Object.values(boxMap).filter(b => {
             const boxW = b.x1 - b.x0;
             const boxH = b.y1 - b.y0;
             const aspect = boxW / (boxH || 1);
-            return b.count > 25 && boxH >= 8 && boxH <= 120 && aspect > 0.1 && aspect < 20;
+            return b.count > 3 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 50;
         });
     }
 
@@ -9580,10 +9581,10 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
             }
         }
 
-        if (bestMatch && (maxOverlap / wArea > 0.3)) {
+        if (bestMatch && (maxOverlap / wArea > 0.25)) {
             const matchH = bestMatch.y1 - bestMatch.y0;
             const origH = wordBbox.y1 - wordBbox.y0;
-            if (matchH > origH * 2) return wordBbox;
+            if (matchH > origH * 3) return wordBbox;
             return { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 };
         }
         
@@ -9645,7 +9646,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     svgEl.appendChild(pageGroup);
 
     const items = mode === 'line' ? ocrResult.data.lines : ocrResult.data.words;
-    const minConfidence = mode === 'line' ? 40 : 35;
+    const minConfidence = mode === 'line' ? 30 : 25; // Lower confidence threshold slightly to prevent dropping valid text
 
     // DocumentFragment for performance optimization
     const fragment = document.createDocumentFragment();
@@ -9655,11 +9656,12 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         if (item.confidence < minConfidence || !cleanText) return;
 
         const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
-        const boxH = bbox.y1 - bbox.y0;
+        
+        // Ensure non-zero height to prevent math errors
+        const boxH = Math.max(2, bbox.y1 - bbox.y0);
 
-        if (boxH < 8 || boxH > 120) return;
-
-        const fontSize = Math.min(Math.max(boxH * 0.75, 10), 48);
+        // Safely clamp font size between 6px and 150px (Preserves small subscripts & large titles without breaking layouts)
+        const fontSize = Math.min(Math.max(boxH * 0.75, 6), 150);
         const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
         const svgText = document.createElementNS(SVG_NS, "text");
@@ -9668,7 +9670,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         svgText.setAttribute("font-size", `${fontSize}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
-        svgText.textContent = cleanText; // Safe automated XML escaping
+        svgText.textContent = cleanText;
 
         fragment.appendChild(svgText);
     });
