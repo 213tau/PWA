@@ -9411,19 +9411,24 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     if (w === 0 || h === 0) throw new Error("Canvas has invalid dimensions (width or height is 0).");
 
     const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
-    const SVG_NS = "http://www.w3.org/2000/svg";
+    if (!ctx) throw new Error("Failed to get 2D context from canvas.");
 
-    // Standard A4 dimensions in pixels at 96 DPI (210mm x 297mm)
+    const SVG_NS = "http://www.w3.org/2000/svg";
     const A4_WIDTH_PX = 794;
     const A4_HEIGHT_PX = 1123;
 
-    // Calculate uniform scale to prevent distortion while fitting on A4
+    // Uniform scale calculation to maintain aspect ratio on A4
     const scale = Math.min(A4_WIDTH_PX / w, A4_HEIGHT_PX / h);
     const offsetX = (A4_WIDTH_PX - (w * scale)) / 2;
     const offsetY = (A4_HEIGHT_PX - (h * scale)) / 2;
 
-    // Grab full canvas pixel data ONCE
-    const mainImgData = ctx.getImageData(0, 0, w, h);
+    // Cache pixel data once
+    let mainImgData;
+    try {
+        mainImgData = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+        throw new Error(`Failed to retrieve canvas image data: ${e.message}`);
+    }
     const data = mainImgData.data;
 
     // Text Normalization
@@ -9434,13 +9439,13 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // Two-Pass CCL Bounding Box Extraction with noise filtering
+    // Optimized Two-Pass CCL Bounding Box Extraction
     function computeCCL(dilationX = 4) {
         const binaryMap = new Uint8Array(w * h);
 
-        for (let i = 0; i < data.length; i += 4) {
+        for (let i = 0, len = data.length; i < len; i += 4) {
             const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-            binaryMap[i / 4] = lum < 140 ? 1 : 0;
+            binaryMap[i >> 2] = lum < 140 ? 1 : 0;
         }
 
         const dilatedMap = new Uint8Array(w * h);
@@ -9508,10 +9513,14 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
             const rowOffset = y * w;
             for (let x = 0; x < w; x++) {
                 const idx = rowOffset + x;
-                if (!labels[idx]) continue;
-                const root = find(labels[idx]);
-                if (!boxMap[root]) boxMap[root] = { x0: x, y0: y, x1: x, y1: y, count: 0 };
-                const b = boxMap[root];
+                const label = labels[idx];
+                if (!label) continue;
+                const root = find(label);
+                
+                let b = boxMap[root];
+                if (!b) {
+                    b = boxMap[root] = { x0: x, y0: y, x1: x, y1: y, count: 0 };
+                }
                 if (x < b.x0) b.x0 = x;
                 if (x > b.x1) b.x1 = x;
                 if (y < b.y0) b.y0 = y;
@@ -9520,7 +9529,6 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
             }
         }
 
-        // Filter out tiny artifacts, extreme aspect ratios, and oversized boxes
         return Object.values(boxMap).filter(b => {
             const boxW = b.x1 - b.x0;
             const boxH = b.y1 - b.y0;
@@ -9529,7 +9537,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         });
     }
 
-    // Color Sampler
+    // Efficient Color Sampler
     function sampleColor(bbox) {
         const bx = Math.max(0, Math.floor(bbox.x0));
         const by = Math.max(0, Math.floor(bbox.y0));
@@ -9552,7 +9560,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Bounding Box Matcher with noise rejection
+    // Robust Bounding Box Matcher
     function getMatchedBox(wordBbox, cclBoxes) {
         let bestMatch = null, maxOverlap = 0;
         const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
@@ -9575,25 +9583,21 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         if (bestMatch && (maxOverlap / wArea > 0.3)) {
             const matchH = bestMatch.y1 - bestMatch.y0;
             const origH = wordBbox.y1 - wordBbox.y0;
-            
-            // Reject if matched CCL box expanded excessively compared to original OCR box (noise artifact)
-            if (matchH > origH * 2) {
-                return wordBbox;
-            }
+            if (matchH > origH * 2) return wordBbox;
             return { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 };
         }
         
         return wordBbox;
     }
 
-    // Binarize Canvas for OCR
+    // Binarize Canvas for OCR cleanly
     const binarizedCanvas = document.createElement('canvas');
     binarizedCanvas.width = w;
     binarizedCanvas.height = h;
     const bCtx = binarizedCanvas.getContext('2d');
     const bImgData = bCtx.createImageData(w, h);
     
-    for (let i = 0; i < data.length; i += 4) {
+    for (let i = 0, len = data.length; i < len; i += 4) {
         const v = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) < 140 ? 0 : 255;
         bImgData.data[i] = bImgData.data[i + 1] = bImgData.data[i + 2] = v;
         bImgData.data[i + 3] = 255;
@@ -9602,7 +9606,11 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 
     const cclBoxes = mode === 'word' ? computeCCL() : [];
     
-    // Perform OCR
+    // Validate OCRPool availability
+    if (typeof OCRPool === 'undefined' || typeof OCRPool.getWorker !== 'function') {
+        throw new Error("OCRPool is not defined or initialized in the global scope.");
+    }
+
     const worker = await OCRPool.getWorker();
     let ocrResult;
     try {
@@ -9624,20 +9632,23 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     svgEl.setAttribute("width", "210mm");
     svgEl.setAttribute("height", "297mm");
 
-    // A4 White Sheet Background
+    // White Sheet Background
     const bgRect = document.createElementNS(SVG_NS, "rect");
     bgRect.setAttribute("width", A4_WIDTH_PX);
     bgRect.setAttribute("height", A4_HEIGHT_PX);
     bgRect.setAttribute("fill", "#ffffff");
     svgEl.appendChild(bgRect);
 
-    // Uniformly Scaled Group to prevent distortion
+    // Scaled Group Wrapper
     const pageGroup = document.createElementNS(SVG_NS, "g");
     pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
     svgEl.appendChild(pageGroup);
 
     const items = mode === 'line' ? ocrResult.data.lines : ocrResult.data.words;
     const minConfidence = mode === 'line' ? 40 : 35;
+
+    // DocumentFragment for performance optimization
+    const fragment = document.createDocumentFragment();
 
     items.forEach(item => {
         const cleanText = fixText(item.text);
@@ -9646,10 +9657,8 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
         const boxH = bbox.y1 - bbox.y0;
 
-        // Skip items that are too small or unrealistically tall (noise filter)
         if (boxH < 8 || boxH > 120) return;
 
-        // Clamp font size to sane boundaries (min 10px, max 48px)
         const fontSize = Math.min(Math.max(boxH * 0.75, 10), 48);
         const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
@@ -9659,12 +9668,14 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         svgText.setAttribute("font-size", `${fontSize}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
-        svgText.textContent = cleanText;
+        svgText.textContent = cleanText; // Safe automated XML escaping
 
-        pageGroup.appendChild(svgText);
+        fragment.appendChild(svgText);
     });
 
-    // Resolve or create container
+    pageGroup.appendChild(fragment);
+
+    // Container Resolution
     let container = null;
     if (targetContainer) {
         container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
