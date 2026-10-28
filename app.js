@@ -8689,7 +8689,7 @@ function extractTextOnly() {
         data[i] = 255;     // Red
         data[i + 1] = 255; // Green
         data[i + 2] = 255; // Blue
-        data[i + 3] = 255; // Alpha (set to 0 if you want transparent background)
+        data[i + 3] = 0; // Alpha (set to 0 if you want transparent background)
       } else {
         // Optional: Enhance the text pixels to make them crisp black or keep original color
         // e.g., make text solid black:
