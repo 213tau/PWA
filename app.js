@@ -749,64 +749,76 @@ images = [...images, ...nestedImages.flat().filter(Boolean)];
     });
 
     function applyPerspectiveWarp() {
-      const current = images[currentImageIndex];
-      const [tl, tr, br, bl] = current.points;
+  const current = images[currentImageIndex];
+  const [tl, tr, br, bl] = current.points;
 
-      const width = Math.floor(Math.max(distance(tl, tr), distance(bl, br)));
-      const height = Math.floor(Math.max(distance(tl, bl), distance(tr, br)));
+  const width = Math.floor(Math.max(distance(tl, tr), distance(bl, br)));
+  const height = Math.floor(Math.max(distance(tl, bl), distance(tr, br)));
 
-      const destCanvas = document.createElement("canvas");
-      destCanvas.width = width;
-      destCanvas.height = height;
-      const destCtx = destCanvas.getContext("2d");
-      const destImageData = destCtx.createImageData(width, height);
+  const destCanvas = document.createElement("canvas");
+  destCanvas.width = width;
+  destCanvas.height = height;
+  const destCtx = destCanvas.getContext("2d");
+  const destImageData = destCtx.createImageData(width, height);
 
-      // Compute homography from dest → src
-      const H = computeHomography(
-        [
-          { x: 0, y: 0 },
-          { x: width, y: 0 },
-          { x: width, y: height },
-          { x: 0, y: height },
-        ],
-        [tl, tr, br, bl]
-      );
+  // Compute homography from dest → src
+  const H = computeHomography(
+    [
+      { x: 0, y: 0 },
+      { x: width, y: 0 },
+      { x: width, y: height },
+      { x: 0, y: height },
+    ],
+    [tl, tr, br, bl]
+  );
 
-      const src = current.imageData.data;
-      const srcW = canvas.width;
-      const srcH = canvas.height;
+  const src = current.imageData.data;
+  // Use the actual dimensions of the source image data buffer
+  const srcW = current.imageData.width;
+  const srcH = current.imageData.height;
 
-      // Warp each pixel
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const denom = H[6] * x + H[7] * y + H[8];
-          const sx = (H[0] * x + H[1] * y + H[2]) / denom;
-          const sy = (H[3] * x + H[4] * y + H[5]) / denom;
+  // Warp each pixel using Bilinear Interpolation
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const denom = H[6] * x + H[7] * y + H[8];
+      const sx = (H[0] * x + H[1] * y + H[2]) / denom;
+      const sy = (H[3] * x + H[4] * y + H[5]) / denom;
 
-          const sxi = Math.floor(sx);
-          const syi = Math.floor(sy);
+      const sxi = Math.floor(sx);
+      const syi = Math.floor(sy);
 
-          if (sxi < 0 || syi < 0 || sxi >= srcW || syi >= srcH) continue;
+      // Ensure 1-pixel margin for safe 4-neighbor lookup
+      if (sxi < 0 || syi < 0 || sxi >= srcW - 1 || syi >= srcH - 1) continue;
 
-          const srcIdx = (syi * srcW + sxi) * 4;
-          const destIdx = (y * width + x) * 4;
+      const fx = sx - sxi;
+      const fy = sy - syi;
+      const destIdx = (y * width + x) * 4;
 
-          for (let i = 0; i < 4; i++) {
-            destImageData.data[destIdx + i] = src[srcIdx + i];
-          }
-        }
+      for (let i = 0; i < 4; i++) {
+        // Fetch 4 surrounding pixels
+        const c00 = src[((syi) * srcW + sxi) * 4 + i];
+        const c10 = src[((syi) * srcW + (sxi + 1)) * 4 + i];
+        const c01 = src[((syi + 1) * srcW + sxi) * 4 + i];
+        const c11 = src[((syi + 1) * srcW + (sxi + 1)) * 4 + i];
+
+        // Bilinear blend formula
+        const top = c00 * (1 - fx) + c10 * fx;
+        const bottom = c01 * (1 - fx) + c11 * fx;
+        destImageData.data[destIdx + i] = Math.round(top * (1 - fy) + bottom * fy);
       }
-
-      destCtx.putImageData(destImageData, 0, 0);
-
-      // Replace the current image with warped version
-      const newImg = new Image();
-      newImg.src = destCanvas.toDataURL();
-      newImg.onload = () => {
-        images[currentImageIndex] = new ImageObject(newImg);
-        loadCurrentImage();
-      };
     }
+  }
+
+  destCtx.putImageData(destImageData, 0, 0);
+
+  // Replace the current image with warped version
+  const newImg = new Image();
+  newImg.src = destCanvas.toDataURL();
+  newImg.onload = () => {
+    images[currentImageIndex] = new ImageObject(newImg);
+    loadCurrentImage();
+  };
+}
 
     /* ========= Utility functions ========= */
 
