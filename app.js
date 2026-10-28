@@ -9413,7 +9413,16 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
     const SVG_NS = "http://www.w3.org/2000/svg";
 
-    // Grab full canvas pixel data ONCE to eliminate expensive repeated getImageData DOM calls
+    // Standard A4 dimensions in pixels at 96 DPI (210mm x 297mm)
+    const A4_WIDTH_PX = 794;
+    const A4_HEIGHT_PX = 1123;
+
+    // Calculate uniform scale to prevent distortion while fitting on A4
+    const scale = Math.min(A4_WIDTH_PX / w, A4_HEIGHT_PX / h);
+    const offsetX = (A4_WIDTH_PX - (w * scale)) / 2;
+    const offsetY = (A4_HEIGHT_PX - (h * scale)) / 2;
+
+    // Grab full canvas pixel data ONCE
     const mainImgData = ctx.getImageData(0, 0, w, h);
     const data = mainImgData.data;
 
@@ -9513,7 +9522,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         return Object.values(boxMap).filter(b => b.count > 12);
     }
 
-    // High-performance Memory-based Color Sampler (Zero DOM getImageData overhead)
+    // Color Sampler
     function sampleColor(bbox) {
         const bx = Math.max(0, Math.floor(bbox.x0));
         const by = Math.max(0, Math.floor(bbox.y0));
@@ -9574,13 +9583,12 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 
     const cclBoxes = mode === 'word' ? computeCCL() : [];
     
-    // Perform OCR with robust resource management
+    // Perform OCR
     const worker = await OCRPool.getWorker();
     let ocrResult;
     try {
         ocrResult = await worker.recognize(binarizedCanvas);
     } finally {
-        // Optional safety: release worker if your OCRPool supports it
         if (typeof OCRPool.releaseWorker === 'function') {
             OCRPool.releaseWorker(worker);
         }
@@ -9590,18 +9598,24 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         throw new Error("OCR recognition failed to return valid data.");
     }
 
-    // Build SVG Node
+    // Build A4 Root SVG Node
     const svgEl = document.createElementNS(SVG_NS, "svg");
     svgEl.setAttribute("xmlns", SVG_NS);
-    svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
-    svgEl.setAttribute("width", "100%");
-    svgEl.setAttribute("height", "100%");
+    svgEl.setAttribute("viewBox", `0 0 ${A4_WIDTH_PX} ${A4_HEIGHT_PX}`);
+    svgEl.setAttribute("width", "210mm");
+    svgEl.setAttribute("height", "297mm");
 
+    // A4 White Sheet Background
     const bgRect = document.createElementNS(SVG_NS, "rect");
-    bgRect.setAttribute("width", w);
-    bgRect.setAttribute("height", h);
+    bgRect.setAttribute("width", A4_WIDTH_PX);
+    bgRect.setAttribute("height", A4_HEIGHT_PX);
     bgRect.setAttribute("fill", "#ffffff");
     svgEl.appendChild(bgRect);
+
+    // Uniformly Scaled Group to prevent distortion
+    const pageGroup = document.createElementNS(SVG_NS, "g");
+    pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
+    svgEl.appendChild(pageGroup);
 
     const items = mode === 'line' ? ocrResult.data.lines : ocrResult.data.words;
     const minConfidence = mode === 'line' ? 40 : 35;
@@ -9611,21 +9625,18 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         if (item.confidence < minConfidence || !cleanText) return;
 
         const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
-        const boxW = Math.max(1, bbox.x1 - bbox.x0);
         const boxH = Math.max(8, bbox.y1 - bbox.y0);
         const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
         const svgText = document.createElementNS(SVG_NS, "text");
         svgText.setAttribute("x", bbox.x0);
-        svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
-        //svgText.setAttribute("font-size", `${boxH * 0.85}px`);
+        svgText.setAttribute("y", bbox.y1 - (boxH * 0.18));
+        svgText.setAttribute("font-size", `${boxH * 0.78}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
-        //svgText.setAttribute("textLength", boxW);
-        svgText.setAttribute("lengthAdjust", "spacingAndGlyphs");
         svgText.textContent = cleanText;
 
-        svgEl.appendChild(svgText);
+        pageGroup.appendChild(svgText);
     });
 
     // Resolve or create container
