@@ -9758,6 +9758,11 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 }
 
 async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targetContainer = null) {
+    // 1. Validation & Setup
+    if (typeof mode !== 'string' || !['word', 'line'].includes(mode)) {
+        mode = 'word';
+    }
+
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
@@ -9791,7 +9796,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // 1. Establish Canonical CCL Bounding Boxes from Original Image (The Anchor)
+    // 2. Establish Canonical CCL Bounding Boxes from Original Image (The Anchor)
     function computeCCL(dilationX = 4) {
         const binaryMap = new Uint8Array(w * h);
         for (let i = 0, len = data.length; i < len; i += 4) {
@@ -9904,15 +9909,19 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         if (cssFilters.length > 0) tempCtx.filter = cssFilters.join(' ');
         tempCtx.drawImage(source, 0, 0);
 
-        const frame = tempCtx.getImageData(0, 0, w, h);
-        const pData = frame.data;
-        for (let i = 0, len = pData.length; i < len; i += 4) {
-            const lum = 0.2126 * pData[i] + 0.7152 * pData[i + 1] + 0.0722 * pData[i + 2];
-            const v = lum < threshold ? 0 : 255;
-            pData[i] = pData[i + 1] = pData[i + 2] = v;
-            pData[i + 3] = 255;
+        try {
+            const frame = tempCtx.getImageData(0, 0, w, h);
+            const pData = frame.data;
+            for (let i = 0, len = pData.length; i < len; i += 4) {
+                const lum = 0.2126 * pData[i] + 0.7152 * pData[i + 1] + 0.0722 * pData[i + 2];
+                const v = lum < threshold ? 0 : 255;
+                pData[i] = pData[i + 1] = pData[i + 2] = v;
+                pData[i + 3] = 255;
+            }
+            tempCtx.putImageData(frame, 0, 0);
+        } catch (e) {
+            // Fallback if getImageData fails
         }
-        tempCtx.putImageData(frame, 0, 0);
         return tempCanvas;
     }
 
@@ -9937,9 +9946,15 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Matcher that locks any OCR word bbox to our canonical CCL boxes
+    // Cached Bounding Box Matcher
+    const matchCache = new Map();
     function getMatchedBox(wordBbox) {
+        if (!wordBbox) return { x0: 0, y0: 0, x1: 0, y1: 0 };
         if (cclBoxes.length === 0) return wordBbox;
+
+        const cacheKey = `${wordBbox.x0},${wordBbox.y0},${wordBbox.x1},${wordBbox.y1}`;
+        if (matchCache.has(cacheKey)) return matchCache.get(cacheKey);
+
         let bestMatch = null, maxOverlap = 0;
         const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
 
@@ -9958,17 +9973,15 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             }
         }
 
-        if (bestMatch && (maxOverlap / wArea > 0.2)) {
-            return bestMatch; // Locked securely to original anchor box!
-        }
-        return wordBbox;
+        const result = (bestMatch && (maxOverlap / wArea > 0.2)) ? bestMatch : wordBbox;
+        matchCache.set(cacheKey, result);
+        return result;
     }
 
     if (typeof OCRPool === 'undefined' || typeof OCRPool.getWorker !== 'function') {
         throw new Error("OCRPool is not defined or initialized in the global scope.");
     }
 
-    // Filter Profiles Matrix
     const filterProfiles = [
         { name: 'Standard Binary', opts: { invert: false, blurRadius: 0, threshold: 140 } },
         { name: 'Inverted Dark Mode', opts: { invert: true, blurRadius: 0, threshold: 140 } },
@@ -9976,50 +9989,56 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         { name: 'High Contrast', opts: { invert: false, blurRadius: 0, threshold: 175 } }
     ];
 
-    // Map to store the best text candidate for each canonical anchor box index
-    // Key: anchor box reference (or stringified coordinates), Value: { text, confidence }
     const anchorMap = new Map();
     const minConfidence = mode === 'line' ? 30 : 25;
 
-    for (const profile of filterProfiles) {
-        const worker = await OCRPool.getWorker();
+    // 3. Parallel Execution via Promise.all across Filter Profiles
+    await Promise.all(filterProfiles.map(async (profile) => {
+        let worker;
         try {
+            worker = await OCRPool.getWorker();
             const processedCanvas = createFilteredCanvas(sourceCanvas, profile.opts);
             const res = await worker.recognize(processedCanvas);
 
             if (res && res.data) {
                 const items = mode === 'line' ? res.data.lines : res.data.words;
-                items.forEach(item => {
-                    const cleanText = fixText(item.text);
-                    if (item.confidence >= minConfidence && cleanText) {
-                        // Snap this word's position to our canonical anchor layout
-                        const anchorBox = getMatchedBox(item.bbox);
-                        const anchorKey = `${anchorBox.x0},${anchorBox.y0},${anchorBox.x1},${anchorBox.y1}`;
+                if (items) {
+                    items.forEach(item => {
+                        const cleanText = fixText(item.text);
+                        if (item.confidence >= minConfidence && cleanText && item.bbox) {
+                            const anchorBox = getMatchedBox(item.bbox);
+                            const anchorKey = `${anchorBox.x0},${anchorBox.y0},${anchorBox.x1},${anchorBox.y1}`;
 
-                        // If this anchor box already has a candidate, keep the one with higher confidence
-                        const existing = anchorMap.get(anchorKey);
-                        if (!existing || item.confidence > existing.confidence) {
-                            anchorMap.set(anchorKey, {
-                                text: cleanText,
-                                confidence: item.confidence,
-                                bbox: anchorBox
-                            });
+                            const existing = anchorMap.get(anchorKey);
+                            if (!existing || item.confidence > existing.confidence) {
+                                anchorMap.set(anchorKey, {
+                                    text: cleanText,
+                                    confidence: item.confidence,
+                                    bbox: anchorBox
+                                });
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }
+        } catch (err) {
+            console.warn(`OCR Profile "${profile.name}" failed:`, err);
         } finally {
-            if (typeof OCRPool.releaseWorker === 'function') {
-                OCRPool.releaseWorker(worker);
+            if (worker && typeof OCRPool.releaseWorker === 'function') {
+                try {
+                    OCRPool.releaseWorker(worker);
+                } catch (e) {
+                    console.error("Failed to release OCR worker:", e);
+                }
             }
         }
-    }
+    }));
 
     if (anchorMap.size === 0) {
         throw new Error("Multi-pass OCR found no valid text items across filter configurations.");
     }
 
-    // Build A4 Root SVG Node
+    // 4. Build A4 Root SVG Node & Render
     const svgEl = document.createElementNS(SVG_NS, "svg");
     svgEl.setAttribute("xmlns", SVG_NS);
     svgEl.setAttribute("viewBox", `0 0 ${A4_WIDTH_PX} ${A4_HEIGHT_PX}`);
@@ -10038,7 +10057,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
     const fragment = document.createDocumentFragment();
 
-    // Render each locked anchor box with its winning text
     anchorMap.forEach(item => {
         const bbox = item.bbox;
         const boxH = Math.max(2, bbox.y1 - bbox.y0);
