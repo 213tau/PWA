@@ -9772,12 +9772,10 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     const A4_WIDTH_PX = 794;
     const A4_HEIGHT_PX = 1123;
 
-    // Uniform scale calculation to maintain aspect ratio on A4
     const scale = Math.min(A4_WIDTH_PX / w, A4_HEIGHT_PX / h);
     const offsetX = (A4_WIDTH_PX - (w * scale)) / 2;
     const offsetY = (A4_HEIGHT_PX - (h * scale)) / 2;
 
-    // Cache pixel data once
     let mainImgData;
     try {
         mainImgData = ctx.getImageData(0, 0, w, h);
@@ -9786,7 +9784,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     }
     const data = mainImgData.data;
 
-    // Text Normalization
     const fixText = (str) => (str || '')
         .replace(/([a-z])([A-Z])/g, '$1 $2')
         .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
@@ -9794,41 +9791,9 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
-    // Multi-Filter Canvas Preprocessing Generator
-    function createFilteredCanvas(source, options = {}) {
-        const { invert = false, blurRadius = 0, threshold = 140 } = options;
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = w;
-        tempCanvas.height = h;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-
-        let cssFilters = [];
-        if (invert) cssFilters.push('invert(100%)');
-        if (blurRadius > 0) cssFilters.push(`blur(${blurRadius}px)`);
-        
-        if (cssFilters.length > 0) {
-            tempCtx.filter = cssFilters.join(' ');
-        }
-        tempCtx.drawImage(source, 0, 0);
-
-        const frame = tempCtx.getImageData(0, 0, w, h);
-        const pData = frame.data;
-
-        for (let i = 0, len = pData.length; i < len; i += 4) {
-            const lum = 0.2126 * pData[i] + 0.7152 * pData[i + 1] + 0.0722 * pData[i + 2];
-            const v = lum < threshold ? 0 : 255;
-            pData[i] = pData[i + 1] = pData[i + 2] = v;
-            pData[i + 3] = 255;
-        }
-
-        tempCtx.putImageData(frame, 0, 0);
-        return tempCanvas;
-    }
-
-    // CCL Bounding Box Extraction
+    // 1. Establish Canonical CCL Bounding Boxes from Original Image (The Anchor)
     function computeCCL(dilationX = 4) {
         const binaryMap = new Uint8Array(w * h);
-
         for (let i = 0, len = data.length; i < len; i += 4) {
             const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
             binaryMap[i >> 2] = lum < 140 ? 1 : 0;
@@ -9875,7 +9840,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             for (let x = 0; x < w; x++) {
                 const idx = rowOffset + x;
                 if (!dilatedMap[idx]) continue;
-
                 const west = x > 0 ? labels[idx - 1] : 0;
                 const north = y > 0 ? labels[idx - w] : 0;
 
@@ -9923,7 +9887,35 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         });
     }
 
-    // Color Sampler
+    const cclBoxes = mode === 'word' ? computeCCL() : [];
+
+    // Filter Canvas Generator
+    function createFilteredCanvas(source, options = {}) {
+        const { invert = false, blurRadius = 0, threshold = 140 } = options;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+        let cssFilters = [];
+        if (invert) cssFilters.push('invert(100%)');
+        if (blurRadius > 0) cssFilters.push(`blur(${blurRadius}px)`);
+        
+        if (cssFilters.length > 0) tempCtx.filter = cssFilters.join(' ');
+        tempCtx.drawImage(source, 0, 0);
+
+        const frame = tempCtx.getImageData(0, 0, w, h);
+        const pData = frame.data;
+        for (let i = 0, len = pData.length; i < len; i += 4) {
+            const lum = 0.2126 * pData[i] + 0.7152 * pData[i + 1] + 0.0722 * pData[i + 2];
+            const v = lum < threshold ? 0 : 255;
+            pData[i] = pData[i + 1] = pData[i + 2] = v;
+            pData[i + 3] = 255;
+        }
+        tempCtx.putImageData(frame, 0, 0);
+        return tempCanvas;
+    }
+
     function sampleColor(bbox) {
         const bx = Math.max(0, Math.floor(bbox.x0));
         const by = Math.max(0, Math.floor(bbox.y0));
@@ -9931,7 +9923,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         const by1 = Math.min(h, Math.ceil(bbox.y1));
 
         let rSum = 0, gSum = 0, bSum = 0, count = 0;
-
         for (let y = by; y < by1; y++) {
             const rowOffset = y * w;
             for (let x = bx; x < bx1; x++) {
@@ -9946,8 +9937,9 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Bounding Box Matcher
-    function getMatchedBox(wordBbox, cclBoxes) {
+    // Matcher that locks any OCR word bbox to our canonical CCL boxes
+    function getMatchedBox(wordBbox) {
+        if (cclBoxes.length === 0) return wordBbox;
         let bestMatch = null, maxOverlap = 0;
         const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
 
@@ -9966,33 +9958,27 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             }
         }
 
-        if (bestMatch && (maxOverlap / wArea > 0.25)) {
-            const matchH = bestMatch.y1 - bestMatch.y0;
-            const origH = wordBbox.y1 - wordBbox.y0;
-            if (matchH > origH * 3) return wordBbox;
-            return { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 };
+        if (bestMatch && (maxOverlap / wArea > 0.2)) {
+            return bestMatch; // Locked securely to original anchor box!
         }
-        
         return wordBbox;
     }
 
-    // Validate OCRPool availability
     if (typeof OCRPool === 'undefined' || typeof OCRPool.getWorker !== 'function') {
         throw new Error("OCRPool is not defined or initialized in the global scope.");
     }
-
-    const cclBoxes = mode === 'word' ? computeCCL() : [];
 
     // Filter Profiles Matrix
     const filterProfiles = [
         { name: 'Standard Binary', opts: { invert: false, blurRadius: 0, threshold: 140 } },
         { name: 'Inverted Dark Mode', opts: { invert: true, blurRadius: 0, threshold: 140 } },
-        { name: 'Subtle Blur (Noise/Gap Fix)', opts: { invert: false, blurRadius: 1, threshold: 140 } },
-        { name: 'High Contrast Threshold', opts: { invert: false, blurRadius: 0, threshold: 175 } }
+        { name: 'Subtle Blur', opts: { invert: false, blurRadius: 1, threshold: 140 } },
+        { name: 'High Contrast', opts: { invert: false, blurRadius: 0, threshold: 175 } }
     ];
 
-    // Collect all word candidates across all filter passes
-    let allCandidates = [];
+    // Map to store the best text candidate for each canonical anchor box index
+    // Key: anchor box reference (or stringified coordinates), Value: { text, confidence }
+    const anchorMap = new Map();
     const minConfidence = mode === 'line' ? 30 : 25;
 
     for (const profile of filterProfiles) {
@@ -10006,12 +9992,19 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
                 items.forEach(item => {
                     const cleanText = fixText(item.text);
                     if (item.confidence >= minConfidence && cleanText) {
-                        allCandidates.push({
-                            text: cleanText,
-                            confidence: item.confidence,
-                            bbox: item.bbox,
-                            filterSource: profile.name
-                        });
+                        // Snap this word's position to our canonical anchor layout
+                        const anchorBox = getMatchedBox(item.bbox);
+                        const anchorKey = `${anchorBox.x0},${anchorBox.y0},${anchorBox.x1},${anchorBox.y1}`;
+
+                        // If this anchor box already has a candidate, keep the one with higher confidence
+                        const existing = anchorMap.get(anchorKey);
+                        if (!existing || item.confidence > existing.confidence) {
+                            anchorMap.set(anchorKey, {
+                                text: cleanText,
+                                confidence: item.confidence,
+                                bbox: anchorBox
+                            });
+                        }
                     }
                 });
             }
@@ -10022,43 +10015,8 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         }
     }
 
-    if (allCandidates.length === 0) {
-        throw new Error("Multi-pass OCR found no valid text items across any filter configuration.");
-    }
-
-    // Spatial Consensus Fusion: Merge overlapping words and pick highest confidence per region
-    // Sort candidates by confidence descending so stronger matches take precedence
-    allCandidates.sort((a, b) => b.confidence - a.confidence);
-
-    const fusedItems = [];
-    
-    for (const candidate of allCandidates) {
-        let hasOverlap = false;
-
-        for (const accepted of fusedItems) {
-            // Calculate Intersection over Union (IoU) or center distance overlap check
-            const interX0 = Math.max(candidate.bbox.x0, accepted.bbox.x0);
-            const interY0 = Math.max(candidate.bbox.y0, accepted.bbox.y0);
-            const interX1 = Math.min(candidate.bbox.x1, accepted.bbox.x1);
-            const interY1 = Math.min(candidate.bbox.y1, accepted.bbox.y1);
-
-            if (interX1 > interX0 && interY1 > interY0) {
-                const intersectionArea = (interX1 - interX0) * (interY1 - interY0);
-                const candArea = Math.max(1, (candidate.bbox.x1 - candidate.bbox.x0) * (candidate.bbox.y1 - candidate.bbox.y0));
-                const acceptedArea = Math.max(1, (accepted.bbox.x1 - accepted.bbox.x0) * (accepted.bbox.y1 - accepted.bbox.y0));
-                
-                // If overlap is significant (> 40% of either box), consider them the same physical word/span
-                if (intersectionArea / Math.min(candArea, acceptedArea) > 0.4) {
-                    hasOverlap = true;
-                    break;
-                }
-            }
-        }
-
-        // If no significant overlap with an already accepted (higher-confidence) word, keep it!
-        if (!hasOverlap) {
-            fusedItems.push(candidate);
-        }
+    if (anchorMap.size === 0) {
+        throw new Error("Multi-pass OCR found no valid text items across filter configurations.");
     }
 
     // Build A4 Root SVG Node
@@ -10068,25 +10026,22 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     svgEl.setAttribute("width", "210mm");
     svgEl.setAttribute("height", "297mm");
 
-    // White Sheet Background
     const bgRect = document.createElementNS(SVG_NS, "rect");
     bgRect.setAttribute("width", A4_WIDTH_PX);
     bgRect.setAttribute("height", A4_HEIGHT_PX);
     bgRect.setAttribute("fill", "#ffffff");
     svgEl.appendChild(bgRect);
 
-    // Scaled Group Wrapper
     const pageGroup = document.createElementNS(SVG_NS, "g");
     pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
     svgEl.appendChild(pageGroup);
 
-    // DocumentFragment for SVG performance
     const fragment = document.createDocumentFragment();
 
-    fusedItems.forEach(item => {
-        const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
+    // Render each locked anchor box with its winning text
+    anchorMap.forEach(item => {
+        const bbox = item.bbox;
         const boxH = Math.max(2, bbox.y1 - bbox.y0);
-
         const fontSize = Math.min(Math.max(boxH * 0.75, 6), 150);
         const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
@@ -10103,12 +10058,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
     pageGroup.appendChild(fragment);
 
-    // Container Resolution
-    let container = null;
-    if (targetContainer) {
-        container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
-    }
-
+    let container = targetContainer ? (typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer) : null;
     if (!container) {
         container = document.createElement('div');
         container.className = 'generated-svg-container';
