@@ -9802,7 +9802,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         tempCanvas.height = h;
         const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
-        // Build CSS filter pipeline for fast GPU-assisted operations
         let cssFilters = [];
         if (invert) cssFilters.push('invert(100%)');
         if (blurRadius > 0) cssFilters.push(`blur(${blurRadius}px)`);
@@ -9812,7 +9811,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         }
         tempCtx.drawImage(source, 0, 0);
 
-        // Fetch transformed pixel buffer for thresholding (Binarization)
         const frame = tempCtx.getImageData(0, 0, w, h);
         const pData = frame.data;
 
@@ -9985,7 +9983,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
     const cclBoxes = mode === 'word' ? computeCCL() : [];
 
-    // Filter Configurations Matrix
+    // Filter Profiles Matrix
     const filterProfiles = [
         { name: 'Standard Binary', opts: { invert: false, blurRadius: 0, threshold: 140 } },
         { name: 'Inverted Dark Mode', opts: { invert: true, blurRadius: 0, threshold: 140 } },
@@ -9993,10 +9991,10 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         { name: 'High Contrast Threshold', opts: { invert: false, blurRadius: 0, threshold: 175 } }
     ];
 
-    let bestOcrResult = null;
-    let highestConfidence = -1;
+    // Collect all word candidates across all filter passes
+    let allCandidates = [];
+    const minConfidence = mode === 'line' ? 30 : 25;
 
-    // Multi-pass evaluation loop
     for (const profile of filterProfiles) {
         const worker = await OCRPool.getWorker();
         try {
@@ -10004,17 +10002,18 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             const res = await worker.recognize(processedCanvas);
 
             if (res && res.data) {
-                const avgConf = res.data.confidence || 0;
-                
-                if (avgConf > highestConfidence) {
-                    highestConfidence = avgConf;
-                    bestOcrResult = res.data;
-                }
-
-                // Short-circuit if high confidence threshold is achieved
-                if (highestConfidence >= 90) {
-                    break;
-                }
+                const items = mode === 'line' ? res.data.lines : res.data.words;
+                items.forEach(item => {
+                    const cleanText = fixText(item.text);
+                    if (item.confidence >= minConfidence && cleanText) {
+                        allCandidates.push({
+                            text: cleanText,
+                            confidence: item.confidence,
+                            bbox: item.bbox,
+                            filterSource: profile.name
+                        });
+                    }
+                });
             }
         } finally {
             if (typeof OCRPool.releaseWorker === 'function') {
@@ -10023,8 +10022,43 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         }
     }
 
-    if (!bestOcrResult) {
-        throw new Error("Multi-pass OCR failed to return valid data across all filter configurations.");
+    if (allCandidates.length === 0) {
+        throw new Error("Multi-pass OCR found no valid text items across any filter configuration.");
+    }
+
+    // Spatial Consensus Fusion: Merge overlapping words and pick highest confidence per region
+    // Sort candidates by confidence descending so stronger matches take precedence
+    allCandidates.sort((a, b) => b.confidence - a.confidence);
+
+    const fusedItems = [];
+    
+    for (const candidate of allCandidates) {
+        let hasOverlap = false;
+
+        for (const accepted of fusedItems) {
+            // Calculate Intersection over Union (IoU) or center distance overlap check
+            const interX0 = Math.max(candidate.bbox.x0, accepted.bbox.x0);
+            const interY0 = Math.max(candidate.bbox.y0, accepted.bbox.y0);
+            const interX1 = Math.min(candidate.bbox.x1, accepted.bbox.x1);
+            const interY1 = Math.min(candidate.bbox.y1, accepted.bbox.y1);
+
+            if (interX1 > interX0 && interY1 > interY0) {
+                const intersectionArea = (interX1 - interX0) * (interY1 - interY0);
+                const candArea = Math.max(1, (candidate.bbox.x1 - candidate.bbox.x0) * (candidate.bbox.y1 - candidate.bbox.y0));
+                const acceptedArea = Math.max(1, (accepted.bbox.x1 - accepted.bbox.x0) * (accepted.bbox.y1 - accepted.bbox.y0));
+                
+                // If overlap is significant (> 40% of either box), consider them the same physical word/span
+                if (intersectionArea / Math.min(candArea, acceptedArea) > 0.4) {
+                    hasOverlap = true;
+                    break;
+                }
+            }
+        }
+
+        // If no significant overlap with an already accepted (higher-confidence) word, keep it!
+        if (!hasOverlap) {
+            fusedItems.push(candidate);
+        }
     }
 
     // Build A4 Root SVG Node
@@ -10046,16 +10080,10 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
     svgEl.appendChild(pageGroup);
 
-    const items = mode === 'line' ? bestOcrResult.lines : bestOcrResult.words;
-    const minConfidence = mode === 'line' ? 30 : 25;
-
-    // DocumentFragment for SVG node assembly performance
+    // DocumentFragment for SVG performance
     const fragment = document.createDocumentFragment();
 
-    items.forEach(item => {
-        const cleanText = fixText(item.text);
-        if (item.confidence < minConfidence || !cleanText) return;
-
+    fusedItems.forEach(item => {
         const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
         const boxH = Math.max(2, bbox.y1 - bbox.y0);
 
@@ -10068,7 +10096,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         svgText.setAttribute("font-size", `${fontSize}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
-        svgText.textContent = cleanText;
+        svgText.textContent = item.text;
 
         fragment.appendChild(svgText);
     });
