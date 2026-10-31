@@ -9789,16 +9789,14 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     }
     const data = mainImgData.data;
 
+    // Safe text cleaner that preserves intentional spaces (like "dd mm yyyy")
     const fixText = (str) => (str || '')
         .replace(/([a-z])([A-Z])/g, '$1 $2')
         .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-        .replace(/([a-zA-Z])(\d)/g, '$1 $2')
-        .replace(/(\d)([a-zA-Z])/g, '$1 $2')
         .trim();
 
     // 2. High-Speed Downscaled CCL (Fast Anchor Generation)
     function computeCCL(dilationX = 2) {
-        // Use a downscale factor of 0.5 to cut pixel processing overhead by 75%
         const scaleFactor = 0.5;
         const dw = Math.max(1, Math.round(w * scaleFactor));
         const dh = Math.max(1, Math.round(h * scaleFactor));
@@ -9896,7 +9894,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             }
         }
 
-        // Scale bounding boxes back up to original canvas dimensions
         const invScale = 1 / scaleFactor;
         return Object.values(boxMap).map(b => ({
             x0: b.x0 * invScale,
@@ -9912,7 +9909,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         });
     }
 
-    const cclBoxes = mode === 'word' ? computeCCL() : [];
+    const cclBoxes = computeCCL(); // Always compute CCL anchors to stabilize multi-word/spaced items
 
     // Filter Canvas Generator
     function createFilteredCanvas(source, options = {}) {
@@ -9962,7 +9959,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Cached Bounding Box Matcher
+    // Cached Bounding Box Matcher (Expanded overlap threshold for spaced strings)
     const matchCache = new Map();
     function getMatchedBox(wordBbox) {
         if (!wordBbox) return { x0: 0, y0: 0, x1: 0, y1: 0 };
@@ -9989,7 +9986,8 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             }
         }
 
-        const result = (bestMatch && (maxOverlap / wArea > 0.2)) ? bestMatch : wordBbox;
+        // Lowered overlap ratio requirement slightly to safely accommodate multi-token spacing fields
+        const result = (bestMatch && (maxOverlap / wArea > 0.1)) ? bestMatch : wordBbox;
         matchCache.set(cacheKey, result);
         return result;
     }
@@ -10006,9 +10004,9 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     ];
 
     const anchorMap = new Map();
-    const minConfidence = mode === 'line' ? 30 : 25;
+    const minConfidence = 20; // Slightly relaxed confidence threshold to ensure spaced tokens aren't dropped
 
-    // 3. Sequential Execution across Filter Profiles
+    // 3. Sequential Execution across Filter Profiles (Extracting lines/words safely)
     for (const profile of filterProfiles) {
         let worker = null;
         try {
@@ -10017,7 +10015,9 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             const res = await worker.recognize(processedCanvas);
 
             if (res && res.data) {
-                const items = mode === 'line' ? res.data.lines : res.data.words;
+                // Use lines if mode is 'line', otherwise check words. 
+                // Fallback option: iterate over lines to safely capture spacing blocks like dates.
+                const items = mode === 'line' ? res.data.lines : (res.data.words || res.data.lines);
                 if (items) {
                     items.forEach(item => {
                         const cleanText = fixText(item.text);
@@ -10063,7 +10063,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
     const bgRect = document.createElementNS(SVG_NS, "rect");
     bgRect.setAttribute("width", A4_WIDTH_PX);
-    bgRect.setAttribute("height", A4_HEIGHT_PX);
+    bgrect = bgRect.setAttribute("height", A4_HEIGHT_PX);
     bgRect.setAttribute("fill", "#ffffff");
     svgEl.appendChild(bgRect);
 
