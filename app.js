@@ -3565,7 +3565,8 @@ images.forEach(function (e, index) {
       ctx.putImageData(imageData, 0, 0);
     }
 
-    
+
+
     function downscaleImage(canvas, maxWidth, maxHeight) {
       const originalWidth = canvas.width;
       const originalHeight = canvas.height;
@@ -7671,7 +7672,86 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       });
     });
 
-        function callAHK() {
+    function contrastStretchingWithHistogramClipping(
+      canvas = document.querySelector("canvas"),
+      clipPercent = 1,
+      clipMode = "both" // "both", "low", or "high"
+    ) {
+      if (!canvas) {
+        console.error("Canvas element not found.");
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        console.error("2D context not available.");
+        return;
+      }
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // Helper to get sorted intensities for a given channel index (0: R, 1: G, 2: B)
+      function getSortedChannelData(channelIndex) {
+        const channelData = [];
+        for (let i = channelIndex; i < data.length; i += 4) {
+          channelData.push(data[i]);
+        }
+        channelData.sort((a, b) => a - b);
+        return channelData;
+      }
+
+      // Calculate clipping bounds based on clipPercent and clipMode
+      function getClipBounds(sortedData) {
+        const length = sortedData.length;
+        const clipCount = Math.floor((clipPercent / 100) * length);
+
+        let lowBound = sortedData[0];
+        let highBound = sortedData[length - 1];
+
+        if (clipMode === "low" || clipMode === "both") {
+          lowBound = sortedData[clipCount];
+        }
+
+        if (clipMode === "high" || clipMode === "both") {
+          highBound = sortedData[length - 1 - clipCount];
+        }
+
+        // Prevent divide-by-zero
+        if (highBound === lowBound) {
+          highBound = lowBound + 1;
+        }
+
+        return { lowBound, highBound };
+      }
+
+
+      const rSorted = getSortedChannelData(0);
+      const gSorted = getSortedChannelData(1);
+      const bSorted = getSortedChannelData(2);
+
+      const rBounds = getClipBounds(rSorted);
+      const gBounds = getClipBounds(gSorted);
+      const bBounds = getClipBounds(bSorted);
+
+      // Stretch each channel using clipped min/max values
+      function stretchValue(value, minVal, maxVal) {
+        if (value <= minVal) return 0;
+        if (value >= maxVal) return 255;
+        return Math.round(((value - minVal) * 255) / (maxVal - minVal));
+      }
+
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = stretchValue(data[i], rBounds.lowBound, rBounds.highBound);
+        data[i + 1] = stretchValue(data[i + 1], gBounds.lowBound, gBounds.highBound);
+        data[i + 2] = stretchValue(data[i + 2], bBounds.lowBound, bBounds.highBound);
+        // Alpha channel remains unchanged
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function callAHK() {
       fetch('http://localhost:8080/run?cmd=openNotepad')
         .then(res => console.log("Command sent to AHK"))
         .catch(err => console.error(err));
