@@ -9789,14 +9789,13 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     }
     const data = mainImgData.data;
 
-    // Safe text cleaner that preserves intentional spaces (like "dd mm yyyy")
     const fixText = (str) => (str || '')
         .replace(/([a-z])([A-Z])/g, '$1 $2')
         .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
         .trim();
 
-    // 2. High-Speed Downscaled CCL (Fast Anchor Generation)
-    function computeCCL(dilationX = 2) {
+    // 2. High-Speed CCL with Wide Horizontal Bridging for Spaced Words/Phrases
+    function computeCCL(dilationX = 14) { // Increased horizontal dilation to bridge spaces between words like "dd mm yyyy"
         const scaleFactor = 0.5;
         const dw = Math.max(1, Math.round(w * scaleFactor));
         const dh = Math.max(1, Math.round(h * scaleFactor));
@@ -9814,13 +9813,16 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             }
         }
 
+        // Apply robust horizontal-only morphological expansion to bridge spaces within words/dates
         const dilatedMap = new Uint8Array(dw * dh);
+        const scaledDilationX = Math.max(2, Math.round(dilationX * scaleFactor));
+
         for (let y = 0; y < dh; y++) {
             const rowOffset = y * dw;
             for (let x = 0; x < dw; x++) {
                 if (binaryMap[rowOffset + x] === 1) {
-                    const startX = Math.max(0, x - dilationX);
-                    const endX = Math.min(dw - 1, x + dilationX);
+                    const startX = Math.max(0, x - scaledDilationX);
+                    const endX = Math.min(dw - 1, x + scaledDilationX);
                     for (let nx = startX; nx <= endX; nx++) {
                         dilatedMap[rowOffset + nx] = 1;
                     }
@@ -9875,9 +9877,9 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
         const boxMap = {};
         for (let y = 0; y < dh; y++) {
-            const rowOffset = y * dw;
+            const rowOffset = y * dh; // Fixed row offset index bug in original map scanning loop if any
             for (let x = 0; x < dw; x++) {
-                const idx = rowOffset + x;
+                const idx = (y * dw) + x;
                 const label = labels[idx];
                 if (!label) continue;
                 const root = find(label);
@@ -9905,11 +9907,12 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             const boxW = b.x1 - b.x0;
             const boxH = b.y1 - b.y0;
             const aspect = boxW / (boxH || 1);
-            return b.count > 1 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 50;
+            // Allow wider aspect ratios to correctly contain multi-word text like dates
+            return b.count > 1 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 80;
         });
     }
 
-    const cclBoxes = computeCCL(); // Always compute CCL anchors to stabilize multi-word/spaced items
+    const cclBoxes = computeCCL();
 
     // Filter Canvas Generator
     function createFilteredCanvas(source, options = {}) {
@@ -9959,7 +9962,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Cached Bounding Box Matcher (Expanded overlap threshold for spaced strings)
+    // Cached Bounding Box Matcher with flexible matching for multi-word blobs
     const matchCache = new Map();
     function getMatchedBox(wordBbox) {
         if (!wordBbox) return { x0: 0, y0: 0, x1: 0, y1: 0 };
@@ -9986,8 +9989,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             }
         }
 
-        // Lowered overlap ratio requirement slightly to safely accommodate multi-token spacing fields
-        const result = (bestMatch && (maxOverlap / wArea > 0.1)) ? bestMatch : wordBbox;
+        const result = (bestMatch && (maxOverlap / wArea > 0.05)) ? bestMatch : wordBbox;
         matchCache.set(cacheKey, result);
         return result;
     }
@@ -10004,9 +10006,9 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     ];
 
     const anchorMap = new Map();
-    const minConfidence = 20; // Slightly relaxed confidence threshold to ensure spaced tokens aren't dropped
+    const minConfidence = 20;
 
-    // 3. Sequential Execution across Filter Profiles (Extracting lines/words safely)
+    // 3. Sequential Execution across Filter Profiles
     for (const profile of filterProfiles) {
         let worker = null;
         try {
@@ -10015,8 +10017,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             const res = await worker.recognize(processedCanvas);
 
             if (res && res.data) {
-                // Use lines if mode is 'line', otherwise check words. 
-                // Fallback option: iterate over lines to safely capture spacing blocks like dates.
+                // Harvest lines or words safely
                 const items = mode === 'line' ? res.data.lines : (res.data.words || res.data.lines);
                 if (items) {
                     items.forEach(item => {
@@ -10063,7 +10064,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
     const bgRect = document.createElementNS(SVG_NS, "rect");
     bgRect.setAttribute("width", A4_WIDTH_PX);
-    bgrect = bgRect.setAttribute("height", A4_HEIGHT_PX);
+    bgRect.setAttribute("height", A4_HEIGHT_PX);
     bgRect.setAttribute("fill", "#ffffff");
     svgEl.appendChild(bgRect);
 
