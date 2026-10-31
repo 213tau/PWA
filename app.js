@@ -9757,6 +9757,340 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     return svgEl;
 }
 
+async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targetContainer = null) {
+    const sourceCanvas = document.getElementById('canvas');
+    if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
+
+    const w = sourceCanvas.width;
+    const h = sourceCanvas.height;
+    if (w === 0 || h === 0) throw new Error("Canvas has invalid dimensions (width or height is 0).");
+
+    const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error("Failed to get 2D context from canvas.");
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const A4_WIDTH_PX = 794;
+    const A4_HEIGHT_PX = 1123;
+
+    // Uniform scale calculation to maintain aspect ratio on A4
+    const scale = Math.min(A4_WIDTH_PX / w, A4_HEIGHT_PX / h);
+    const offsetX = (A4_WIDTH_PX - (w * scale)) / 2;
+    const offsetY = (A4_HEIGHT_PX - (h * scale)) / 2;
+
+    // Cache pixel data once
+    let mainImgData;
+    try {
+        mainImgData = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+        throw new Error(`Failed to retrieve canvas image data: ${e.message}`);
+    }
+    const data = mainImgData.data;
+
+    // Text Normalization
+    const fixText = (str) => (str || '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+        .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+        .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+        .trim();
+
+    // Multi-Filter Canvas Preprocessing Generator
+    function createFilteredCanvas(source, options = {}) {
+        const { invert = false, blurRadius = 0, threshold = 140 } = options;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Build CSS filter pipeline for fast GPU-assisted operations
+        let cssFilters = [];
+        if (invert) cssFilters.push('invert(100%)');
+        if (blurRadius > 0) cssFilters.push(`blur(${blurRadius}px)`);
+        
+        if (cssFilters.length > 0) {
+            tempCtx.filter = cssFilters.join(' ');
+        }
+        tempCtx.drawImage(source, 0, 0);
+
+        // Fetch transformed pixel buffer for thresholding (Binarization)
+        const frame = tempCtx.getImageData(0, 0, w, h);
+        const pData = frame.data;
+
+        for (let i = 0, len = pData.length; i < len; i += 4) {
+            const lum = 0.2126 * pData[i] + 0.7152 * pData[i + 1] + 0.0722 * pData[i + 2];
+            const v = lum < threshold ? 0 : 255;
+            pData[i] = pData[i + 1] = pData[i + 2] = v;
+            pData[i + 3] = 255;
+        }
+
+        tempCtx.putImageData(frame, 0, 0);
+        return tempCanvas;
+    }
+
+    // CCL Bounding Box Extraction
+    function computeCCL(dilationX = 4) {
+        const binaryMap = new Uint8Array(w * h);
+
+        for (let i = 0, len = data.length; i < len; i += 4) {
+            const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+            binaryMap[i >> 2] = lum < 140 ? 1 : 0;
+        }
+
+        const dilatedMap = new Uint8Array(w * h);
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                if (binaryMap[rowOffset + x] === 1) {
+                    const startX = Math.max(0, x - dilationX);
+                    const endX = Math.min(w - 1, x + dilationX);
+                    for (let nx = startX; nx <= endX; nx++) {
+                        dilatedMap[rowOffset + nx] = 1;
+                    }
+                }
+            }
+        }
+
+        const labels = new Int32Array(w * h);
+        const parent = [0];
+        let nextLabel = 1;
+
+        const find = (i) => {
+            let root = i;
+            while (root !== parent[root]) root = parent[root];
+            let curr = i;
+            while (curr !== root) {
+                let nxt = parent[curr];
+                parent[curr] = root;
+                curr = nxt;
+            }
+            return root;
+        };
+
+        const union = (i, j) => {
+            const rootI = find(i);
+            const rootJ = find(j);
+            if (rootI !== rootJ) parent[rootI] = rootJ;
+        };
+
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                const idx = rowOffset + x;
+                if (!dilatedMap[idx]) continue;
+
+                const west = x > 0 ? labels[idx - 1] : 0;
+                const north = y > 0 ? labels[idx - w] : 0;
+
+                if (!west && !north) {
+                    labels[idx] = nextLabel;
+                    parent[nextLabel] = nextLabel;
+                    nextLabel++;
+                } else if (west && !north) {
+                    labels[idx] = west;
+                } else if (!west && north) {
+                    labels[idx] = north;
+                } else {
+                    labels[idx] = west;
+                    union(west, north);
+                }
+            }
+        }
+
+        const boxMap = {};
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                const idx = rowOffset + x;
+                const label = labels[idx];
+                if (!label) continue;
+                const root = find(label);
+                
+                let b = boxMap[root];
+                if (!b) {
+                    b = boxMap[root] = { x0: x, y0: y, x1: x, y1: y, count: 0 };
+                }
+                if (x < b.x0) b.x0 = x;
+                if (x > b.x1) b.x1 = x;
+                if (y < b.y0) b.y0 = y;
+                if (y > b.y1) b.y1 = y;
+                b.count++;
+            }
+        }
+
+        return Object.values(boxMap).filter(b => {
+            const boxW = b.x1 - b.x0;
+            const boxH = b.y1 - b.y0;
+            const aspect = boxW / (boxH || 1);
+            return b.count > 3 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 50;
+        });
+    }
+
+    // Color Sampler
+    function sampleColor(bbox) {
+        const bx = Math.max(0, Math.floor(bbox.x0));
+        const by = Math.max(0, Math.floor(bbox.y0));
+        const bx1 = Math.min(w, Math.ceil(bbox.x1));
+        const by1 = Math.min(h, Math.ceil(bbox.y1));
+
+        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+
+        for (let y = by; y < by1; y++) {
+            const rowOffset = y * w;
+            for (let x = bx; x < bx1; x++) {
+                const i = (rowOffset + x) * 4;
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 180) {
+                    rSum += r; gSum += g; bSum += b;
+                    count++;
+                }
+            }
+        }
+        return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
+    }
+
+    // Bounding Box Matcher
+    function getMatchedBox(wordBbox, cclBoxes) {
+        let bestMatch = null, maxOverlap = 0;
+        const wArea = Math.max(1, (wordBbox.x1 - wordBbox.x0) * (wordBbox.y1 - wordBbox.y0));
+
+        for (const box of cclBoxes) {
+            const interX0 = Math.max(wordBbox.x0, box.x0);
+            const interY0 = Math.max(wordBbox.y0, box.y0);
+            const interX1 = Math.min(wordBbox.x1, box.x1);
+            const interY1 = Math.min(wordBbox.y1, box.y1);
+
+            if (interX1 > interX0 && interY1 > interY0) {
+                const overlap = (interX1 - interX0) * (interY1 - interY0);
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    bestMatch = box;
+                }
+            }
+        }
+
+        if (bestMatch && (maxOverlap / wArea > 0.25)) {
+            const matchH = bestMatch.y1 - bestMatch.y0;
+            const origH = wordBbox.y1 - wordBbox.y0;
+            if (matchH > origH * 3) return wordBbox;
+            return { x0: bestMatch.x0, y0: bestMatch.y0, x1: bestMatch.x1, y1: bestMatch.y1 };
+        }
+        
+        return wordBbox;
+    }
+
+    // Validate OCRPool availability
+    if (typeof OCRPool === 'undefined' || typeof OCRPool.getWorker !== 'function') {
+        throw new Error("OCRPool is not defined or initialized in the global scope.");
+    }
+
+    const cclBoxes = mode === 'word' ? computeCCL() : [];
+
+    // Filter Configurations Matrix
+    const filterProfiles = [
+        { name: 'Standard Binary', opts: { invert: false, blurRadius: 0, threshold: 140 } },
+        { name: 'Inverted Dark Mode', opts: { invert: true, blurRadius: 0, threshold: 140 } },
+        { name: 'Subtle Blur (Noise/Gap Fix)', opts: { invert: false, blurRadius: 1, threshold: 140 } },
+        { name: 'High Contrast Threshold', opts: { invert: false, blurRadius: 0, threshold: 175 } }
+    ];
+
+    let bestOcrResult = null;
+    let highestConfidence = -1;
+
+    // Multi-pass evaluation loop
+    for (const profile of filterProfiles) {
+        const worker = await OCRPool.getWorker();
+        try {
+            const processedCanvas = createFilteredCanvas(sourceCanvas, profile.opts);
+            const res = await worker.recognize(processedCanvas);
+
+            if (res && res.data) {
+                const avgConf = res.data.confidence || 0;
+                
+                if (avgConf > highestConfidence) {
+                    highestConfidence = avgConf;
+                    bestOcrResult = res.data;
+                }
+
+                // Short-circuit if high confidence threshold is achieved
+                if (highestConfidence >= 90) {
+                    break;
+                }
+            }
+        } finally {
+            if (typeof OCRPool.releaseWorker === 'function') {
+                OCRPool.releaseWorker(worker);
+            }
+        }
+    }
+
+    if (!bestOcrResult) {
+        throw new Error("Multi-pass OCR failed to return valid data across all filter configurations.");
+    }
+
+    // Build A4 Root SVG Node
+    const svgEl = document.createElementNS(SVG_NS, "svg");
+    svgEl.setAttribute("xmlns", SVG_NS);
+    svgEl.setAttribute("viewBox", `0 0 ${A4_WIDTH_PX} ${A4_HEIGHT_PX}`);
+    svgEl.setAttribute("width", "210mm");
+    svgEl.setAttribute("height", "297mm");
+
+    // White Sheet Background
+    const bgRect = document.createElementNS(SVG_NS, "rect");
+    bgRect.setAttribute("width", A4_WIDTH_PX);
+    bgRect.setAttribute("height", A4_HEIGHT_PX);
+    bgRect.setAttribute("fill", "#ffffff");
+    svgEl.appendChild(bgRect);
+
+    // Scaled Group Wrapper
+    const pageGroup = document.createElementNS(SVG_NS, "g");
+    pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
+    svgEl.appendChild(pageGroup);
+
+    const items = mode === 'line' ? bestOcrResult.lines : bestOcrResult.words;
+    const minConfidence = mode === 'line' ? 30 : 25;
+
+    // DocumentFragment for SVG node assembly performance
+    const fragment = document.createDocumentFragment();
+
+    items.forEach(item => {
+        const cleanText = fixText(item.text);
+        if (item.confidence < minConfidence || !cleanText) return;
+
+        const bbox = (mode === 'word' && cclBoxes.length > 0) ? getMatchedBox(item.bbox, cclBoxes) : item.bbox;
+        const boxH = Math.max(2, bbox.y1 - bbox.y0);
+
+        const fontSize = Math.min(Math.max(boxH * 0.75, 6), 150);
+        const textColor = sampleColors ? sampleColor(bbox) : "#000000";
+
+        const svgText = document.createElementNS(SVG_NS, "text");
+        svgText.setAttribute("x", bbox.x0);
+        svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
+        svgText.setAttribute("font-size", `${fontSize}px`);
+        svgText.setAttribute("font-family", "Arial, sans-serif");
+        svgText.setAttribute("fill", textColor);
+        svgText.textContent = cleanText;
+
+        fragment.appendChild(svgText);
+    });
+
+    pageGroup.appendChild(fragment);
+
+    // Container Resolution
+    let container = null;
+    if (targetContainer) {
+        container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
+    }
+
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'generated-svg-container';
+        document.body.appendChild(container);
+    }
+
+    container.appendChild(svgEl);
+    return svgEl;
+}
+
 function stripShadowsAndBinarize() {
   const canvas = document.querySelector("canvas");
   const ctx = canvas.getContext("2d");
