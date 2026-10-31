@@ -3565,69 +3565,7 @@ images.forEach(function (e, index) {
       ctx.putImageData(imageData, 0, 0);
     }
 
-
-    function applyMedianBlur(kernelSize = 3) {
-      if (kernelSize % 2 === 0 || kernelSize < 1) {
-        console.error("Kernel size must be an odd number >= 1.");
-        return;
-      }
-
-      const canvas = document.querySelector("canvas");
-      const ctx = canvas.getContext("2d");
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const width = canvas.width;
-      const height = canvas.height;
-      const src = imageData.data;
-      const dst = new Uint8ClampedArray(src.length);
-
-      const half = Math.floor(kernelSize / 2);
-      const windowSize = kernelSize * kernelSize;
-
-      const rVals = new Uint8Array(windowSize);
-      const gVals = new Uint8Array(windowSize);
-      const bVals = new Uint8Array(windowSize);
-      const aVals = new Uint8Array(windowSize);
-
-      const getIndex = (x, y) => (y * width + x) * 4;
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          let count = 0;
-
-          for (let ky = -half; ky <= half; ky++) {
-            const ny = Math.min(height - 1, Math.max(0, y + ky));
-            for (let kx = -half; kx <= half; kx++) {
-              const nx = Math.min(width - 1, Math.max(0, x + kx));
-              const idx = getIndex(nx, ny);
-
-              rVals[count] = src[idx];
-              gVals[count] = src[idx + 1];
-              bVals[count] = src[idx + 2];
-              aVals[count] = src[idx + 3];
-              count++;
-            }
-          }
-
-          const mid = Math.floor(count / 2);
-          const median = arr => {
-            const copy = Array.from(arr.subarray(0, count));
-            copy.sort((a, b) => a - b);
-            return copy[mid];
-          };
-
-          const dstIdx = getIndex(x, y);
-          dst[dstIdx] = median(rVals);
-          dst[dstIdx + 1] = median(gVals);
-          dst[dstIdx + 2] = median(bVals);
-          dst[dstIdx + 3] = median(aVals);
-        }
-      }
-
-      imageData.data.set(dst);
-      ctx.putImageData(imageData, 0, 0);
-    }
-
-
+    
     function downscaleImage(canvas, maxWidth, maxHeight) {
       const originalWidth = canvas.width;
       const originalHeight = canvas.height;
@@ -7359,66 +7297,7 @@ function openGasbill() {
       });
 
     })
-    /*
-    function contrastStretchingWithHistogramClipping(canvas = document.querySelector("canvas"), clipPercent = 1) {
-      if (!canvas) {
-        console.error("Canvas element not found.");
-        return;
-      }
     
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        console.error("2D context not available.");
-        return;
-      }
-    
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      const totalPixels = data.length / 4;
-    
-      // Helper to get sorted intensities for a given channel index (0: R, 1: G, 2: B)
-      function getSortedChannelData(channelIndex) {
-        const channelData = [];
-        for (let i = channelIndex; i < data.length; i += 4) {
-          channelData.push(data[i]);
-        }
-        channelData.sort((a, b) => a - b);
-        return channelData;
-      }
-    
-      // Calculate clipping bounds based on clipPercent for each channel
-      function getClipBounds(sortedData) {
-        const clipCount = Math.floor((clipPercent / 100) * sortedData.length);
-        const lowBound = sortedData[clipCount];
-        const highBound = sortedData[sortedData.length - 1 - clipCount];
-        return { lowBound, highBound };
-      }
-    
-      const rSorted = getSortedChannelData(0);
-      const gSorted = getSortedChannelData(1);
-      const bSorted = getSortedChannelData(2);
-    
-      const rBounds = getClipBounds(rSorted);
-      const gBounds = getClipBounds(gSorted);
-      const bBounds = getClipBounds(bSorted);
-    
-      // Stretch each channel using clipped min/max values
-      function stretchValue(value, minVal, maxVal) {
-        if (value <= minVal) return 0;
-        if (value >= maxVal) return 255;
-        return Math.round(((value - minVal) * 255) / (maxVal - minVal));
-      }
-    
-      for (let i = 0; i < data.length; i += 4) {
-        data[i] = stretchValue(data[i], rBounds.lowBound, rBounds.highBound);
-        data[i + 1] = stretchValue(data[i + 1], gBounds.lowBound, gBounds.highBound);
-        data[i + 2] = stretchValue(data[i + 2], bBounds.lowBound, bBounds.highBound);
-        // Alpha remains unchanged
-      }
-    
-      ctx.putImageData(imageData, 0, 0);
-    }
-      */
 
     function googletranslate() {
       const text = document.querySelector('#output').innerText.trim();
@@ -7792,86 +7671,7 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       });
     });
 
-    function contrastStretchingWithHistogramClipping(
-      canvas = document.querySelector("canvas"),
-      clipPercent = 1,
-      clipMode = "both" // "both", "low", or "high"
-    ) {
-      if (!canvas) {
-        console.error("Canvas element not found.");
-        return;
-      }
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        console.error("2D context not available.");
-        return;
-      }
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      // Helper to get sorted intensities for a given channel index (0: R, 1: G, 2: B)
-      function getSortedChannelData(channelIndex) {
-        const channelData = [];
-        for (let i = channelIndex; i < data.length; i += 4) {
-          channelData.push(data[i]);
-        }
-        channelData.sort((a, b) => a - b);
-        return channelData;
-      }
-
-      // Calculate clipping bounds based on clipPercent and clipMode
-      function getClipBounds(sortedData) {
-        const length = sortedData.length;
-        const clipCount = Math.floor((clipPercent / 100) * length);
-
-        let lowBound = sortedData[0];
-        let highBound = sortedData[length - 1];
-
-        if (clipMode === "low" || clipMode === "both") {
-          lowBound = sortedData[clipCount];
-        }
-
-        if (clipMode === "high" || clipMode === "both") {
-          highBound = sortedData[length - 1 - clipCount];
-        }
-
-        // Prevent divide-by-zero
-        if (highBound === lowBound) {
-          highBound = lowBound + 1;
-        }
-
-        return { lowBound, highBound };
-      }
-
-
-      const rSorted = getSortedChannelData(0);
-      const gSorted = getSortedChannelData(1);
-      const bSorted = getSortedChannelData(2);
-
-      const rBounds = getClipBounds(rSorted);
-      const gBounds = getClipBounds(gSorted);
-      const bBounds = getClipBounds(bSorted);
-
-      // Stretch each channel using clipped min/max values
-      function stretchValue(value, minVal, maxVal) {
-        if (value <= minVal) return 0;
-        if (value >= maxVal) return 255;
-        return Math.round(((value - minVal) * 255) / (maxVal - minVal));
-      }
-
-      for (let i = 0; i < data.length; i += 4) {
-        data[i] = stretchValue(data[i], rBounds.lowBound, rBounds.highBound);
-        data[i + 1] = stretchValue(data[i + 1], gBounds.lowBound, gBounds.highBound);
-        data[i + 2] = stretchValue(data[i + 2], bBounds.lowBound, bBounds.highBound);
-        // Alpha channel remains unchanged
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-    }
-
-    function callAHK() {
+        function callAHK() {
       fetch('http://localhost:8080/run?cmd=openNotepad')
         .then(res => console.log("Command sent to AHK"))
         .catch(err => console.error(err));
