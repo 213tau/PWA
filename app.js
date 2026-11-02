@@ -9625,7 +9625,7 @@ async function convertCanvasToSVGline(mode = 'line', sampleColors = false, targe
     return svgEl;
 }
 
-async function convertCanvasToSVG(mode = 'line', sampleColors = false, targetContainer = null) {
+async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
