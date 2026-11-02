@@ -10077,31 +10077,91 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
     const cclBoxes = computeCCL();
 
-    function createFilteredCanvas(source, options = {}) {
-        const { invert = false, blurRadius = 0, threshold = 140 } = options;
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = w;
-        tempCanvas.height = h;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+    // Replace your existing createFilteredCanvas function with this advanced version
+function createFilteredCanvas(source, options = {}) {
+    const { mode = 'binary', blurRadius = 0, thresholdRatio = 0.85, windowSize = 15 } = options;
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = w;
+    tempCanvas.height = h;
+    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
+    tempCtx.drawImage(source, 0, 0);
+    const frame = tempCtx.getImageData(0, 0, w, h);
+    const pData = frame.data;
+    
+    // Extract grayscale luminance map
+    const lumMap = new Float32Array(w * h);
+    for (let i = 0, len = pData.length; i < len; i += 4) {
+        lumMap[i / 4] = 0.2126 * pData[i] + 0.7152 * pData[i + 1] + 0.0722 * pData[i + 2];
+    }
+
+    if (mode === 'adaptive') {
+        // --- 1. ADAPTIVE LOCAL THRESHOLDING (Best for uneven lighting & shadows) ---
+        // Build an integral image for O(1) box-average calculations
+        const integral = new Float64Array(w * h);
+        for (let y = 0; y < h; y++) {
+            let sum = 0;
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                sum += lumMap[rowOffset + x];
+                integral[rowOffset + x] = sum + (y > 0 ? integral[(y - 1) * w + x] : 0);
+            }
+        }
+
+        const s2 = Math.floor(windowSize / 2);
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                const x1 = Math.max(0, x - s2);
+                const x2 = Math.min(w - 1, x + s2);
+                const y1 = Math.max(0, y - s2);
+                const y2 = Math.min(h - 1, y + s2);
+                
+                const count = (x2 - x1 + 1) * (y2 - y1 + 1);
+                
+                // Sum area lookup from integral image
+                const sum = integral[y2 * w + x2] 
+                          - (y1 > 0 ? integral[(y1 - 1) * w + x2] : 0) 
+                          - (x1 > 0 ? integral[y2 * w + (x1 - 1)] : 0) 
+                          + ((y1 > 0 && x1 > 0) ? integral[(y1 - 1) * w + (x1 - 1)] : 0);
+
+                const idx = (rowOffset + x) * 4;
+                const localAvg = sum / count;
+                const v = lumMap[rowOffset + x] < (localAvg * thresholdRatio) ? 0 : 255;
+                
+                pData[idx] = pData[idx + 1] = pData[idx + 2] = v;
+                pData[idx + 3] = 255;
+            }
+        }
+    } else {
+        // --- 2. STANDARD / GLOBAL PROFILES ---
         let cssFilters = [];
-        if (invert) cssFilters.push('invert(100%)');
+        if (options.invert) cssFilters.push('invert(100%)');
         if (blurRadius > 0) cssFilters.push(`blur(${blurRadius}px)`);
         
-        if (cssFilters.length > 0) tempCtx.filter = cssFilters.join(' ');
-        tempCtx.drawImage(source, 0, 0);
+        if (cssFilters.length > 0) {
+            tempCtx.filter = cssFilters.join(' ');
+            tempCtx.drawImage(source, 0, 0);
+            const reframed = tempCtx.getImageData(0, 0, w, h);
+            for (let i = 0, len = reframed.data.length; i < len; i += 4) {
+                pData[i] = reframed.data[i];
+                pData[i+1] = reframed.data[i+1];
+                pData[i+2] = reframed.data[i+2];
+            }
+        }
 
-        const frame = tempCtx.getImageData(0, 0, w, h);
-        const pData = frame.data;
+        const threshold = options.threshold || 140;
         for (let i = 0, len = pData.length; i < len; i += 4) {
             const lum = 0.2126 * pData[i] + 0.7152 * pData[i + 1] + 0.0722 * pData[i + 2];
             const v = lum < threshold ? 0 : 255;
             pData[i] = pData[i + 1] = pData[i + 2] = v;
             pData[i + 3] = 255;
         }
-        tempCtx.putImageData(frame, 0, 0);
-        return tempCanvas;
     }
+
+    tempCtx.putImageData(frame, 0, 0);
+    return tempCanvas;
+}
 
     function sampleColor(bbox) {
         const bx = Math.max(0, Math.floor(bbox.x0));
@@ -10160,11 +10220,23 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     }
 
     const filterProfiles = [
-        { name: 'Standard Binary', opts: { invert: false, blurRadius: 0, threshold: 140 } },
-        { name: 'Inverted Dark Mode', opts: { invert: true, blurRadius: 0, threshold: 140 } },
-        { name: 'Subtle Blur', opts: { invert: false, blurRadius: 1, threshold: 140 } },
-        { name: 'High Contrast', opts: { invert: false, blurRadius: 0, threshold: 175 } }
-    ];
+    { 
+        name: 'Adaptive Local (Uneven Lighting)', 
+        opts: { mode: 'adaptive', windowSize: 21, thresholdRatio: 0.88 } 
+    },
+    { 
+        name: 'Standard Binary', 
+        opts: { mode: 'binary', invert: false, threshold: 140 } 
+    },
+    { 
+        name: 'High Contrast', 
+        opts: { mode: 'binary', invert: false, threshold: 175 } 
+    },
+    { 
+        name: 'Inverted Dark Mode', 
+        opts: { mode: 'binary', invert: true, threshold: 140 } 
+    }
+];
 
     const anchorMap = new Map();
     const minConfidence = 20;
