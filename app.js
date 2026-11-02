@@ -5663,101 +5663,120 @@ images.forEach(function (e, index) {
 
 
     function edgeAwareAdaptiveThresholding(radius = 1.0, blockSize = 15, C = 10) {
-      const canvas = document.querySelector("canvas");
-      const ctx = canvas.getContext("2d");
-      const width = canvas.width;
-      const height = canvas.height;
+  const canvas = document.querySelector("canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const width = canvas.width;
+  const height = canvas.height;
+  const pixelCount = width * height;
 
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const original = new Uint8ClampedArray(imageData.data);
-      const blurred = gaussianBlur(original, width, height, radius);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
 
-      const pixelCount = width * height;
-      const gray = new Float32Array(pixelCount);
-      const grayBlur = new Float32Array(pixelCount);
-      const edgeMagnitude = new Float32Array(pixelCount);
+  // 1. Single-pass grayscale conversion
+  const gray = new Float32Array(pixelCount);
+  for (let i = 0; i < pixelCount; i++) {
+    const idx = i * 4;
+    gray[i] = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+  }
 
-      // Convert both original and blurred to grayscale
-      for (let i = 0; i < pixelCount; i++) {
-        const r1 = original[i * 4], g1 = original[i * 4 + 1], b1 = original[i * 4 + 2];
-        const r2 = blurred[i * 4], g2 = blurred[i * 4 + 1], b2 = blurred[i * 4 + 2];
-        const gray1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
-        const gray2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
+  // 2. Compute Gaussian blur on grayscale array
+  const grayBlur = gaussianBlurGray(gray, width, height, radius);
 
-        gray[i] = gray1;
-        grayBlur[i] = gray2;
-        edgeMagnitude[i] = Math.abs(gray1 - gray2); // High-pass
-      }
+  // 3. Compute High-Pass Edge Magnitude & track max value safely
+  const edgeMagnitude = new Float32Array(pixelCount);
+  let maxEdge = 0;
 
-      // Normalize edgeMagnitude to [0, 1] without using spread
-      const maxEdge = edgeMagnitude.reduce((max, val) => Math.max(max, val), -Infinity) || 1e-5;
+  for (let i = 0; i < pixelCount; i++) {
+    const diff = Math.abs(gray[i] - grayBlur[i]);
+    edgeMagnitude[i] = diff;
+    if (diff > maxEdge) maxEdge = diff;
+  }
 
-      for (let i = 0; i < edgeMagnitude.length; i++) {
-        edgeMagnitude[i] /= maxEdge;
-      }
-
-
-      // Build integral image of grayscale for fast local mean computation
-      const integral = new Float32Array(pixelCount);
-
-      for (let y = 0; y < height; y++) {
-        let rowSum = 0;
-        for (let x = 0; x < width; x++) {
-          const idx = y * width + x;
-          rowSum += gray[idx];
-          integral[idx] = rowSum + (y > 0 ? integral[(y - 1) * width + x] : 0);
-        }
-      }
-
-      // Helper to get sum from integral image in a region
-      function getRegionSum(x0, y0, x1, y1) {
-        x0 = Math.max(0, x0);
-        y0 = Math.max(0, y0);
-        x1 = Math.min(width - 1, x1);
-        y1 = Math.min(height - 1, y1);
-
-        const A = integral[y0 * width + x0];
-        const B = integral[y0 * width + x1];
-        const C = integral[y1 * width + x0];
-        const D = integral[y1 * width + x1];
-
-        return D - B - C + A;
-      }
-
-      const halfBlock = Math.floor(blockSize / 2);
-
-      // Apply adaptive threshold
-      for (let y = 0; y < height; y++) {
-        const y0 = y - halfBlock;
-        const y1 = y + halfBlock;
-
-        for (let x = 0; x < width; x++) {
-          const x0 = x - halfBlock;
-          const x1 = x + halfBlock;
-
-          const idx = y * width + x;
-
-          // Get local mean using integral image
-          const regionWidth = x1 - x0 + 1;
-          const regionHeight = y1 - y0 + 1;
-          const count = regionWidth * regionHeight;
-
-          const regionSum = getRegionSum(x0, y0, x1, y1);
-          const localMean = regionSum / count;
-
-          const edgeBoost = edgeMagnitude[idx] * C;
-          const threshold = localMean - (C - edgeBoost);
-
-          const value = gray[idx] >= threshold ? 255 : 0;
-
-          const offset = idx * 4;
-          imageData.data[offset] = imageData.data[offset + 1] = imageData.data[offset + 2] = value;
-          imageData.data[offset + 3] = 255;
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0);
+  // Normalize edge magnitude safely (avoid division by zero on flat images)
+  const invMaxEdge = maxEdge > 1e-5 ? 1.0 / maxEdge : 0;
+  if (invMaxEdge > 0) {
+    for (let i = 0; i < pixelCount; i++) {
+      edgeMagnitude[i] *= invMaxEdge;
     }
+  }
+
+  // 4. Build Padded Integral Image (W+1 by H+1)
+  // This eliminates all conditional checks inside the region query.
+  const intWidth = width + 1;
+  const integral = new Float32Array(intWidth * (height + 1));
+
+  for (let y = 0; y < height; y++) {
+    let rowSum = 0;
+    const yOffsetSrc = y * width;
+    const yOffsetDst = (y + 1) * intWidth;
+    const prevYOffsetDst = y * intWidth;
+
+    for (let x = 0; x < width; x++) {
+      rowSum += gray[yOffsetSrc + x];
+      integral[yOffsetDst + (x + 1)] = rowSum + integral[prevYOffsetDst + (x + 1)];
+    }
+  }
+
+  // O(1) Box Sum Helper using padded integral coordinates
+  function getRegionSum(x0, y0, x1, y1) {
+    // Clamp coordinates to image boundaries
+    const rx0 = Math.max(0, x0);
+    const ry0 = Math.max(0, y0);
+    const rx1 = Math.min(width - 1, x1);
+    const ry1 = Math.min(height - 1, y1);
+
+    // Padded lookup offsets (+1 shift)
+    const x0_p = rx0;
+    const y0_p = ry0;
+    const x1_p = rx1 + 1;
+    const y1_p = ry1 + 1;
+
+    const D = integral[y1_p * intWidth + x1_p];
+    const B = integral[y0_p * intWidth + x1_p];
+    const C = integral[y1_p * intWidth + x0_p];
+    const A = integral[y0_p * intWidth + x0_p];
+
+    return D - B - C + A;
+  }
+
+  const halfBlock = Math.floor(blockSize / 2);
+
+  // 5. Fast Uint32 view over ImageData buffer (Little-Endian: ABGR)
+  const buf32 = new Uint32Array(data.buffer);
+  const WHITE = 0xFFFFFFFF;
+  const BLACK = 0xFF000000;
+
+  for (let y = 0; y < height; y++) {
+    const y0 = y - halfBlock;
+    const y1 = y + halfBlock;
+    const yOffset = y * width;
+
+    for (let x = 0; x < width; x++) {
+      const x0 = x - halfBlock;
+      const x1 = x + halfBlock;
+      const idx = yOffset + x;
+
+      // Actual region bounds for pixel count
+      const rx0 = Math.max(0, x0);
+      const ry0 = Math.max(0, y0);
+      const rx1 = Math.min(width - 1, x1);
+      const ry1 = Math.min(height - 1, y1);
+      const count = (rx1 - rx0 + 1) * (ry1 - ry0 + 1);
+
+      const regionSum = getRegionSum(x0, y0, x1, y1);
+      const localMean = count > 0 ? regionSum / count : gray[idx];
+
+      // Edge-aware threshold calculation
+      const edgeBoost = edgeMagnitude[idx] * C;
+      const threshold = localMean - (C - edgeBoost);
+
+      buf32[idx] = gray[idx] >= threshold ? WHITE : BLACK;
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
 
 
     function gaussianBlur(data, width, height, radius) {
