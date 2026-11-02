@@ -5383,31 +5383,57 @@ images.forEach(function (e, index) {
 }
 
     function unsharpMasking(amount = 1.0, radius = 1.0, threshold = 10) {
-      const canvas = document.querySelector("canvas");
-      const ctx = canvas.getContext("2d");
-      const width = canvas.width;
-      const height = canvas.height;
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const original = new Uint8ClampedArray(imageData.data); // copy of original data
-      const blurred = gaussianBlur(original, width, height, radius);
+  const canvas = document.querySelector("canvas");
+  if (!canvas) {
+    console.error("Canvas element not found.");
+    return;
+  }
 
-      for (let i = 0; i < imageData.data.length; i += 4) {
-        for (let c = 0; c < 3; c++) {
-          const diff = original[i + c] - blurred[i + c];
-          if (Math.abs(diff) > threshold) {
-            let sharp = original[i + c] + amount * diff;
-            sharp = Math.round(sharp);
-            imageData.data[i + c] = Math.min(255, Math.max(0, sharp));
-          } else {
-            // No change if difference is below threshold
-            imageData.data[i + c] = original[i + c];
-          }
-        }
-        imageData.data[i + 3] = original[i + 3]; // preserve alpha
-      }
+  // Optimize context for frequent pixel manipulation
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) {
+    console.error("Failed to get 2D rendering context.");
+    return;
+  }
 
-      ctx.putImageData(imageData, 0, 0);
-    }
+  const width = canvas.width;
+  const height = canvas.height;
+  if (width === 0 || height === 0) return;
+
+  let imageData;
+  try {
+    imageData = ctx.getImageData(0, 0, width, height);
+  } catch (e) {
+    console.error("Failed to get image data (likely a CORS violation with cross-origin images):", e);
+    return;
+  }
+
+  const data = imageData.data;
+  const original = new Uint8ClampedArray(data); // Copy of original data
+  
+  const blurred = gaussianBlur(original, width, height, radius);
+  if (!blurred) return;
+
+  const len = data.length;
+  
+  for (let i = 0; i < len; i += 4) {
+    // Red channel
+    const rDiff = original[i] - blurred[i];
+    data[i] = Math.abs(rDiff) > threshold ? original[i] + amount * rDiff : original[i];
+
+    // Green channel
+    const gDiff = original[i + 1] - blurred[i + 1];
+    data[i + 1] = Math.abs(gDiff) > threshold ? original[i + 1] + amount * gDiff : original[i + 1];
+
+    // Blue channel
+    const bDiff = original[i + 2] - blurred[i + 2];
+    data[i + 2] = Math.abs(bDiff) > threshold ? original[i + 2] + amount * bDiff : original[i + 2];
+
+    // Alpha channel (i + 3) is untouched, preserving original transparency
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
 
 
     function laplacianEdgeAwareEnhancement({
