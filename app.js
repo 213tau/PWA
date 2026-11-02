@@ -3665,87 +3665,86 @@ images.forEach(function (e, index) {
     loadCurrentImage();
 }
 
-    function upscaleAndSharpen(canvas, maxWidth, maxHeight) {
-      const originalWidth = canvas.width;
-      const originalHeight = canvas.height;
+    function upscaleAndSharpen(canvas, maxWidth, maxHeight, sharpenStrength = 0.3) {
+    const originalWidth = canvas.width;
+    const originalHeight = canvas.height;
 
-      // Calculate scale to maintain aspect ratio
-      const scale = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
+    // Calculate scale to maintain aspect ratio
+    const scale = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
 
-      // Calculate new dimensions
-      const targetWidth = Math.floor(originalWidth * scale);
-      const targetHeight = Math.floor(originalHeight * scale);
+    // Calculate new dimensions
+    const targetWidth = Math.floor(originalWidth * scale);
+    const targetHeight = Math.floor(originalHeight * scale);
 
-      // Create offscreen canvas to perform upscale
-      const upscaleCanvas = document.createElement("canvas");
-      upscaleCanvas.width = targetWidth;
-      upscaleCanvas.height = targetHeight;
-      const upscaleCtx = upscaleCanvas.getContext("2d");
+    // Create offscreen canvas to perform upscale
+    const upscaleCanvas = document.createElement("canvas");
+    upscaleCanvas.width = targetWidth;
+    upscaleCanvas.height = targetHeight;
+    const upscaleCtx = upscaleCanvas.getContext("2d");
 
-      // Enable high-quality image smoothing
-      upscaleCtx.imageSmoothingEnabled = true;
-      upscaleCtx.imageSmoothingQuality = "high";
+    // Enable high-quality image smoothing
+    upscaleCtx.imageSmoothingEnabled = true;
+    upscaleCtx.imageSmoothingQuality = "high";
 
-      // Draw the original image scaled to target size
-      upscaleCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+    // Draw the original image scaled to target size
+    upscaleCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
 
-      // Get image data for sharpening
-      const imageData = upscaleCtx.getImageData(0, 0, targetWidth, targetHeight);
-      const data = imageData.data;
-
-      // Sharpen kernel matrix (3x3)
-      const kernel = [
-        0, -1, 0,
-        -1, 5, -1,
-        0, -1, 0
-      ];
-
-      // Copy original image data to avoid overwriting during convolution
-      const copy = new Uint8ClampedArray(data);
-
-      const width = targetWidth;
-      const height = targetHeight;
-      const kernelSize = 3;
-      const half = Math.floor(kernelSize / 2);
-
-      // Apply sharpening filter
-      for (let y = half; y < height - half; y++) {
-        for (let x = half; x < width - half; x++) {
-          for (let c = 0; c < 3; c++) { // Loop over R, G, B channels
-            let i = (y * width + x) * 4 + c;
-            let sum = 0;
-
-            for (let ky = -half; ky <= half; ky++) {
-              for (let kx = -half; kx <= half; kx++) {
-                const ii = ((y + ky) * width + (x + kx)) * 4 + c;
-                const weight = kernel[(ky + half) * kernelSize + (kx + half)];
-                sum += copy[ii] * weight;
-              }
-            }
-
-            // Clamp the result between 0 and 255
-            data[i] = Math.min(255, Math.max(0, sum));
-          }
-        }
-      }
-
-      // Update canvas with sharpened image data
-      upscaleCtx.putImageData(imageData, 0, 0);
-
-      // Resize original canvas and draw the processed image back
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(upscaleCanvas, 0, 0);
-
-      // Update any image references if you track them
-      const newImg = new Image();
-      newImg.src = canvas.toDataURL();
-      newImg.onload = () => {
-        images[currentImageIndex] = new ImageObject(newImg);
-        loadCurrentImage();
-      };
+    // Skip sharpening if we are downscaling (prevents heavy text noise/aliasing)
+    if (scale <= 1.0) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        canvas.getContext("2d").drawImage(upscaleCanvas, 0, 0);
+        return;
     }
+
+    // Get image data for selective sharpening
+    const imageData = upscaleCtx.getImageData(0, 0, targetWidth, targetHeight);
+    const data = imageData.data;
+    const copy = new Uint8ClampedArray(data);
+
+    const width = targetWidth;
+    const height = targetHeight;
+    const kernelSize = 3;
+    const half = Math.floor(kernelSize / 2);
+
+    // Milder kernel to prevent harsh text halos
+    const kernel = [
+        0, -1,  0,
+       -1,  4.2, -1,
+        0, -1,  0
+    ];
+
+    // Apply sharpening filter with blending strength
+    for (let y = half; y < height - half; y++) {
+        for (let x = half; x < width - half; x++) {
+            for (let c = 0; c < 3; c++) { // R, G, B channels
+                let i = (y * width + x) * 4 + c;
+                let sum = 0;
+
+                for (let ky = -half; ky <= half; ky++) {
+                    for (let kx = -half; kx <= half; kx++) {
+                        const ii = ((y + ky) * width + (x + kx)) * 4 + c;
+                        const weight = kernel[(ky + half) * kernelSize + (kx + half)];
+                        sum += copy[ii] * weight;
+                    }
+                }
+
+                // Blend original pixel with sharpened result using sharpenStrength (0.0 to 1.0)
+                const sharpened = Math.min(255, Math.max(0, sum));
+                data[i] = Math.min(255, Math.max(0, copy[i] * (1 - sharpenStrength) + sharpened * sharpenStrength));
+            }
+        }
+    }
+
+    // Update canvas with processed image data
+    upscaleCtx.putImageData(imageData, 0, 0);
+
+    // Resize original canvas and draw the processed image back
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(upscaleCanvas, 0, 0);
+}
 
 
     function enhanceCanvasImageColorAndSharpen() {
