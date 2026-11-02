@@ -9955,7 +9955,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     }
     const data = mainImgData.data;
 
-    // Safe text cleaner that preserves intentional spaces (like "dd mm yyyy")
+    // Safe text cleaner that preserves intentional spaces
     const fixText = (str) => (str || '')
         .replace(/([a-z])([A-Z])/g, '$1 $2')
         .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
@@ -10075,9 +10075,8 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         });
     }
 
-    const cclBoxes = computeCCL(); // Always compute CCL anchors to stabilize multi-word/spaced items
+    const cclBoxes = computeCCL();
 
-    // Filter Canvas Generator
     function createFilteredCanvas(source, options = {}) {
         const { invert = false, blurRadius = 0, threshold = 140 } = options;
         const tempCanvas = document.createElement('canvas');
@@ -10125,7 +10124,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Cached Bounding Box Matcher (Expanded overlap threshold for spaced strings)
     const matchCache = new Map();
     function getMatchedBox(wordBbox) {
         if (!wordBbox) return { x0: 0, y0: 0, x1: 0, y1: 0 };
@@ -10152,7 +10150,6 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             }
         }
 
-        // Lowered overlap ratio requirement slightly to safely accommodate multi-token spacing fields
         const result = (bestMatch && (maxOverlap / wArea > 0.1)) ? bestMatch : wordBbox;
         matchCache.set(cacheKey, result);
         return result;
@@ -10170,9 +10167,9 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
     ];
 
     const anchorMap = new Map();
-    const minConfidence = 20; // Slightly relaxed confidence threshold to ensure spaced tokens aren't dropped
+    const minConfidence = 20;
 
-    // 3. Sequential Execution across Filter Profiles (Extracting lines/words safely)
+    // 3. Sequential Execution across Filter Profiles
     for (const profile of filterProfiles) {
         let worker = null;
         try {
@@ -10181,15 +10178,19 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
             const res = await worker.recognize(processedCanvas);
 
             if (res && res.data) {
-                // Use lines if mode is 'line', otherwise check words. 
-                // Fallback option: iterate over lines to safely capture spacing blocks like dates.
                 const items = mode === 'line' ? res.data.lines : (res.data.words || res.data.lines);
                 if (items) {
                     items.forEach(item => {
                         const cleanText = fixText(item.text);
                         if (item.confidence >= minConfidence && cleanText && item.bbox) {
                             const anchorBox = getMatchedBox(item.bbox);
-                            const anchorKey = `${anchorBox.x0},${anchorBox.y0},${anchorBox.x1},${anchorBox.y1}`;
+
+                            // QUANTIZE coordinates (round to nearest 4px grid) to merge cross-profile jitter duplicates
+                            const qx0 = Math.round(anchorBox.x0 / 4) * 4;
+                            const qy0 = Math.round(anchorBox.y0 / 4) * 4;
+                            const qx1 = Math.round(anchorBox.x1 / 4) * 4;
+                            const qy1 = Math.round(anchorBox.y1 / 4) * 4;
+                            const anchorKey = `${qx0},${qy0},${qx1},${qy1}`;
 
                             const existing = anchorMap.get(anchorKey);
                             if (!existing || item.confidence > existing.confidence) {
@@ -10229,7 +10230,7 @@ async function convertCanvasToSVGMulti(mode = 'word', sampleColors = false, targ
 
     const bgRect = document.createElementNS(SVG_NS, "rect");
     bgRect.setAttribute("width", A4_WIDTH_PX);
-    bgrect = bgRect.setAttribute("height", A4_HEIGHT_PX);
+    bgRect.setAttribute("height", A4_HEIGHT_PX); // Fixed assignment bug here
     bgRect.setAttribute("fill", "#ffffff");
     svgEl.appendChild(bgRect);
 
