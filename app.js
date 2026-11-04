@@ -11001,7 +11001,8 @@ async function convertCanvasToSVGhybrid(mode = 'full-layout', sampleColors = fal
     container.appendChild(svgEl);
     return svgEl;
 }
-async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = false, targetContainer = null) {
+
+async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
@@ -11030,46 +11031,31 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
     }
     const data = mainImgData.data;
 
-    // Text Normalization
-    const fixText = (str) => (str || '')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-        .replace(/([a-zA-Z])(\d)/g, '$1 $2')
-        .replace(/(\d)([a-zA-Z])/g, '$1 $2')
-        .trim();
+    // Text Normalization & Noise Cleaning
+    const fixText = (str) => {
+        if (!str) return '';
+        let cleaned = str
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+            .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+            .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+            .trim();
+        
+        // Filter out standalone punctuation noise artifacts
+        if (cleaned.length === 1 && /[^a-zA-Z0-9]/.test(cleaned)) return '';
+        return cleaned;
+    };
 
-    // 1. CCL Bounding Box Extraction tuned for Phrases & Words
-    function computeCCL(dilationX = 8, dilationY = 1) {
+    // 1. CCL Layout Component Extraction (Non-Text Shapes & Text Snapboxes)
+    function computeLayoutComponents() {
         const binaryMap = new Uint8Array(w * h);
 
-        // Binarization: Identify dark text pixels
         for (let i = 0, len = data.length; i < len; i += 4) {
-            const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-            binaryMap[i >> 2] = lum < 140 ? 1 : 0;
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            binaryMap[i >> 2] = (lum < 240 && !(r > 240 && g > 240 && b > 240)) ? 1 : 0;
         }
 
-        // Morphological Dilation
-        const dilatedMap = new Uint8Array(w * h);
-        for (let y = 0; y < h; y++) {
-            const rowOffset = y * w;
-            for (let x = 0; x < w; x++) {
-                if (binaryMap[rowOffset + x] === 1) {
-                    const startX = Math.max(0, x - dilationX);
-                    const endX = Math.min(w - 1, x + dilationX);
-                    const startY = Math.max(0, y - dilationY);
-                    const endY = Math.min(h - 1, y + dilationY);
-
-                    for (let ny = startY; ny <= endY; ny++) {
-                        const nRow = ny * w;
-                        for (let nx = startX; nx <= endX; nx++) {
-                            dilatedMap[nRow + nx] = 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Two-Pass CCL
         const labels = new Int32Array(w * h);
         const parent = [0];
         let nextLabel = 1;
@@ -11096,7 +11082,7 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
             const rowOffset = y * w;
             for (let x = 0; x < w; x++) {
                 const idx = rowOffset + x;
-                if (!dilatedMap[idx]) continue;
+                if (!binaryMap[idx]) continue;
 
                 const west = x > 0 ? labels[idx - 1] : 0;
                 const north = y > 0 ? labels[idx - w] : 0;
@@ -11137,12 +11123,25 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
             }
         }
 
-        return Object.values(boxMap).filter(b => {
+        const boxes = Object.values(boxMap);
+        const textMatchedBoxes = [];
+        const layoutShapes = [];
+
+        boxes.forEach(b => {
             const boxW = b.x1 - b.x0;
             const boxH = b.y1 - b.y0;
             const aspect = boxW / (boxH || 1);
-            return b.count > 5 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 100;
+
+            if ((boxH <= 3 && boxW > 30) || (boxW <= 3 && boxH > 30)) {
+                layoutShapes.push({ type: 'line', ...b });
+            } else if (b.count > 10 && boxW > 40 && boxH > 40 && (aspect > 3 || aspect < 0.3 || (boxW < w * 0.9 && boxH < h * 0.9))) {
+                layoutShapes.push({ type: 'container', ...b });
+            } else if (b.count > 5 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 100) {
+                textMatchedBoxes.push(b);
+            }
         });
+
+        return { textMatchedBoxes, layoutShapes };
     }
 
     // Color Sampler
@@ -11159,7 +11158,7 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
             for (let x = bx; x < bx1; x++) {
                 const i = (rowOffset + x) * 4;
                 const r = data[i], g = data[i + 1], b = data[i + 2];
-                if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 180) {
+                if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 220) {
                     rSum += r; gSum += g; bSum += b;
                     count++;
                 }
@@ -11168,7 +11167,7 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // 2. Bounding Box Matcher to refine position using CCL boundaries
+    // Bounding Box Matcher
     function getMatchedBox(itemBbox, cclBoxes) {
         let bestMatch = null, maxOverlap = 0;
         const itemArea = Math.max(1, (itemBbox.x1 - itemBbox.x0) * (itemBbox.y1 - itemBbox.y0));
@@ -11196,7 +11195,6 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
                 y1: Math.max(itemBbox.y1, bestMatch.y1)
             };
         }
-        
         return itemBbox;
     }
 
@@ -11214,7 +11212,7 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
     }
     bCtx.putImageData(bImgData, 0, 0);
 
-    const cclBoxes = computeCCL(8, 1);
+    const { textMatchedBoxes, layoutShapes } = computeLayoutComponents();
     
     if (typeof OCRPool === 'undefined' || typeof OCRPool.getWorker !== 'function') {
         throw new Error("OCRPool is not defined or initialized in the global scope.");
@@ -11234,7 +11232,7 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
         throw new Error("OCR recognition failed to return valid data.");
     }
 
-    // 3. Build A4 SVG Node
+    // 2. Build A4 SVG Node
     const svgEl = document.createElementNS(SVG_NS, "svg");
     svgEl.setAttribute("xmlns", SVG_NS);
     svgEl.setAttribute("viewBox", `0 0 ${A4_WIDTH_PX} ${A4_HEIGHT_PX}`);
@@ -11251,54 +11249,70 @@ async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = fal
     pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
     svgEl.appendChild(pageGroup);
 
-    // Process Paragraph-Level OCR items
-    const paragraphs = ocrResult.data.paragraphs || [];
-    const minConfidence = 30;
     const fragment = document.createDocumentFragment();
 
-    paragraphs.forEach(paraItem => {
-        const cleanText = fixText(paraItem.text);
-        if (paraItem.confidence < minConfidence || !cleanText) return;
-
-        const linesInPara = cleanText.split(/\r?\n/).filter(line => line.trim().length > 0);
-        if (linesInPara.length === 0) return;
-
-        // Match paragraph bounding box
-        const bbox = cclBoxes.length > 0 ? getMatchedBox(paraItem.bbox, cclBoxes) : paraItem.bbox;
-        const totalBoxH = Math.max(2, bbox.y1 - bbox.y0);
-
-        // Compute average height per line inside the paragraph
-        let lineH = totalBoxH / linesInPara.length;
-        if (paraItem.lines && paraItem.lines.length > 0) {
-            let totalLineHeights = 0;
-            paraItem.lines.forEach(l => {
-                totalLineHeights += (l.bbox.y1 - l.bbox.y0);
-            });
-            lineH = totalLineHeights / paraItem.lines.length;
+    // 3. Render Non-Text Layout Shapes (Dividing lines & containers)
+    layoutShapes.forEach(shape => {
+        const strokeColor = sampleColor(shape);
+        if (shape.type === 'line') {
+            const lineEl = document.createElementNS(SVG_NS, "line");
+            lineEl.setAttribute("x1", shape.x0);
+            lineEl.setAttribute("y1", shape.y0);
+            lineEl.setAttribute("x2", shape.x1);
+            lineEl.setAttribute("y2", shape.y1);
+            lineEl.setAttribute("stroke", strokeColor);
+            lineEl.setAttribute("stroke-width", Math.max(1, shape.y1 - shape.y0 || shape.x1 - shape.x0));
+            fragment.appendChild(lineEl);
+        } else if (shape.type === 'container') {
+            const rectEl = document.createElementNS(SVG_NS, "rect");
+            rectEl.setAttribute("x", shape.x0);
+            rectEl.setAttribute("y", shape.y0);
+            rectEl.setAttribute("width", shape.x1 - shape.x0);
+            rectEl.setAttribute("height", shape.y1 - shape.y0);
+            rectEl.setAttribute("fill", "none");
+            rectEl.setAttribute("stroke", strokeColor);
+            rectEl.setAttribute("stroke-width", "1");
+            rectEl.setAttribute("rx", "4");
+            fragment.appendChild(rectEl);
         }
+    });
 
-        const fontSize = Math.min(Math.max(lineH * 0.75, 6), 40);
-        const lineSpacing = fontSize * 1.2;
-        const textColor = sampleColors ? sampleColor(bbox) : "#000000";
+    // 4. Hierarchical Traversal: Blocks -> Paragraphs -> Lines -> Words
+    const blocks = ocrResult.data.blocks || [];
+    const minConfidence = 40;
 
-        const svgText = document.createElementNS(SVG_NS, "text");
-        svgText.setAttribute("x", bbox.x0);
-        svgText.setAttribute("y", bbox.y0 + fontSize);
-        svgText.setAttribute("font-size", `${fontSize}px`);
-        svgText.setAttribute("font-family", "Arial, sans-serif");
-        svgText.setAttribute("fill", textColor);
+    blocks.forEach(blockItem => {
+        if (!blockItem.paragraphs) return;
 
-        linesInPara.forEach((lineText, index) => {
-            const tspan = document.createElementNS(SVG_NS, "tspan");
-            tspan.setAttribute("x", bbox.x0);
-            if (index > 0) {
-                tspan.setAttribute("dy", `${lineSpacing}px`);
-            }
-            tspan.textContent = lineText;
-            svgText.appendChild(tspan);
+        blockItem.paragraphs.forEach(paraItem => {
+            if (!paraItem.lines) return;
+
+            paraItem.lines.forEach(lineItem => {
+                if (!lineItem.words) return;
+
+                // Process at the word level, anchored precisely within line and block layout context
+                lineItem.words.forEach(wordItem => {
+                    const cleanText = fixText(wordItem.text);
+                    if (wordItem.confidence < minConfidence || !cleanText) return;
+
+                    const bbox = textMatchedBoxes.length > 0 ? getMatchedBox(wordItem.bbox, textMatchedBoxes) : wordItem.bbox;
+                    const boxH = Math.max(2, bbox.y1 - bbox.y0);
+
+                    const fontSize = Math.min(Math.max(boxH * 0.75, 6), 120);
+                    const textColor = sampleColors ? sampleColor(bbox) : "#000000";
+
+                    const svgText = document.createElementNS(SVG_NS, "text");
+                    svgText.setAttribute("x", bbox.x0);
+                    svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
+                    svgText.setAttribute("font-size", `${fontSize}px`);
+                    svgText.setAttribute("font-family", "Arial, sans-serif");
+                    svgText.setAttribute("fill", textColor);
+                    svgText.textContent = cleanText;
+
+                    fragment.appendChild(svgText);
+                });
+            });
         });
-
-        fragment.appendChild(svgText);
     });
 
     pageGroup.appendChild(fragment);
