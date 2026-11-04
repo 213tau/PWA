@@ -10670,7 +10670,7 @@ function createFilteredCanvas(source, options = {}) {
     container.appendChild(svgEl);
     return svgEl;
 }
-async function convertCanvasToSVGhybrid(mode = 'hybrid', sampleColors = false, targetContainer = null) {
+async function convertCanvasToSVG(mode = 'hybrid', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
@@ -10950,8 +10950,35 @@ async function convertCanvasToSVGhybrid(mode = 'hybrid', sampleColors = false, t
 
                     const svgText = document.createElementNS(SVG_NS, "text");
                     svgText.setAttribute("x", bbox.x0);
-                    svgText.setAttribute("y", bbox.y1 - (box
+                    svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
+                    svgText.setAttribute("font-size", `${fontSize}px`);
+                    svgText.setAttribute("font-family", "Arial, sans-serif");
+                    svgText.setAttribute("fill", textColor);
+                    svgText.textContent = cleanText;
 
+                    fragment.appendChild(svgText);
+                });
+            });
+        });
+    });
+
+    pageGroup.appendChild(fragment);
+
+    // Container Resolution
+    let container = null;
+    if (targetContainer) {
+        container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
+    }
+
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'generated-svg-container';
+        document.body.appendChild(container);
+    }
+
+    container.appendChild(svgEl);
+    return svgEl;
+}
 async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
