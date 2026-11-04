@@ -9927,7 +9927,7 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
 }
 
 
-async function convertCanvasToSVGBlock(mode = 'word', sampleColors = false, targetContainer = null) {
+async function convertCanvasToSVGBlock(mode = 'block', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
@@ -9974,7 +9974,7 @@ async function convertCanvasToSVGBlock(mode = 'word', sampleColors = false, targ
             binaryMap[i >> 2] = lum < 140 ? 1 : 0;
         }
 
-        // Morphological Dilation: Connect neighboring character components into words/phrases
+        // Morphological Dilation
         const dilatedMap = new Uint8Array(w * h);
         for (let y = 0; y < h; y++) {
             const rowOffset = y * w;
@@ -9995,7 +9995,7 @@ async function convertCanvasToSVGBlock(mode = 'word', sampleColors = false, targ
             }
         }
 
-        // Two-Pass CCL (Union-Find)
+        // Two-Pass CCL
         const labels = new Int32Array(w * h);
         const parent = [0];
         let nextLabel = 1;
@@ -10140,10 +10140,8 @@ async function convertCanvasToSVGBlock(mode = 'word', sampleColors = false, targ
     }
     bCtx.putImageData(bImgData, 0, 0);
 
-    // Compute CCL boxes for phrase/word detection
     const cclBoxes = computeCCL(8, 1);
     
-    // Validate OCRPool
     if (typeof OCRPool === 'undefined' || typeof OCRPool.getWorker !== 'function') {
         throw new Error("OCRPool is not defined or initialized in the global scope.");
     }
@@ -10179,7 +10177,7 @@ async function convertCanvasToSVGBlock(mode = 'word', sampleColors = false, targ
     pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
     svgEl.appendChild(pageGroup);
 
-    // Filter block-level OCR items
+    // Process Block-Level OCR items correctly
     const blocks = ocrResult.data.blocks || [];
     const minConfidence = 30;
     const fragment = document.createDocumentFragment();
@@ -10188,27 +10186,46 @@ async function convertCanvasToSVGBlock(mode = 'word', sampleColors = false, targ
         const cleanText = fixText(blockItem.text);
         if (blockItem.confidence < minConfidence || !cleanText) return;
 
-        // Match block bounding box with CCL for precise coordinates
-        const bbox = cclBoxes.length > 0 ? getMatchedBox(blockItem.bbox, cclBoxes) : blockItem.bbox;
-        const boxH = Math.max(2, bbox.y1 - bbox.y0);
+        const linesInBlock = cleanText.split(/\r?\n/).filter(line => line.trim().length > 0);
+        if (linesInBlock.length === 0) return;
 
-        const fontSize = Math.min(Math.max(boxH * 0.75, 6), 150);
+        // Match block bounding box
+        const bbox = cclBoxes.length > 0 ? getMatchedBox(blockItem.bbox, cclBoxes) : blockItem.bbox;
+        const totalBoxH = Math.max(2, bbox.y1 - bbox.y0);
+
+        // Key Fix: Calculate height per line instead of using full block height
+        let lineH = totalBoxH / linesInBlock.length;
+        if (blockItem.paragraphs && blockItem.paragraphs.length > 0) {
+            // If Tesseract line data is available, compute average height of child lines
+            let totalLineHeights = 0, countLines = 0;
+            blockItem.paragraphs.forEach(p => {
+                if (p.lines) {
+                    p.lines.forEach(l => {
+                        totalLineHeights += (l.bbox.y1 - l.bbox.y0);
+                        countLines++;
+                    });
+                }
+            });
+            if (countLines > 0) lineH = totalLineHeights / countLines;
+        }
+
+        // Clamp single-line font size to sensible limits
+        const fontSize = Math.min(Math.max(lineH * 0.75, 6), 40);
+        const lineSpacing = fontSize * 1.2;
         const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
         const svgText = document.createElementNS(SVG_NS, "text");
         svgText.setAttribute("x", bbox.x0);
-        svgText.setAttribute("y", bbox.y0 + fontSize); // Position at top of block
+        svgText.setAttribute("y", bbox.y0 + fontSize); // First line baseline position
         svgText.setAttribute("font-size", `${fontSize}px`);
         svgText.setAttribute("font-family", "Arial, sans-serif");
         svgText.setAttribute("fill", textColor);
 
-        // Handle multi-line blocks using <tspan>
-        const linesArray = cleanText.split(/\r?\n/);
-        linesArray.forEach((lineText, index) => {
+        linesInBlock.forEach((lineText, index) => {
             const tspan = document.createElementNS(SVG_NS, "tspan");
             tspan.setAttribute("x", bbox.x0);
             if (index > 0) {
-                tspan.setAttribute("dy", `${fontSize * 1.2}px`);
+                tspan.setAttribute("dy", `${lineSpacing}px`);
             }
             tspan.textContent = lineText;
             svgText.appendChild(tspan);
