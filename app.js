@@ -10670,7 +10670,7 @@ function createFilteredCanvas(source, options = {}) {
     container.appendChild(svgEl);
     return svgEl;
 }
-async function convertCanvasToSVG(mode = 'hybrid', sampleColors = false, targetContainer = null) {
+async function convertCanvasToSVGhybrid(mode = 'hybrid', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
