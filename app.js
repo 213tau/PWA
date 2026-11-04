@@ -10670,8 +10670,7 @@ function createFilteredCanvas(source, options = {}) {
     container.appendChild(svgEl);
     return svgEl;
 }
-
-async function convertCanvasToSVGSymbols(mode = 'symbol', sampleColors = false, targetContainer = null) {
+async function convertCanvasToSVGhybrid(mode = 'hybrid', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
@@ -10921,58 +10920,37 @@ async function convertCanvasToSVGSymbols(mode = 'symbol', sampleColors = false, 
     pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
     svgEl.appendChild(pageGroup);
 
-    // Process Symbol-Level OCR items (Nested inside lines -> words -> symbols)
-    const lines = ocrResult.data.lines || [];
+    // 4. Hybrid Traversal: Blocks -> Paragraphs -> Lines -> Words
+    const blocks = ocrResult.data.blocks || [];
     const minConfidence = 30;
     const fragment = document.createDocumentFragment();
 
-    lines.forEach(lineItem => {
-        if (!lineItem.words) return;
+    blocks.forEach(blockItem => {
+        // Optional: you can use blockItem.bbox for block-level layout bounds if needed
+        if (!blockItem.paragraphs) return;
 
-        lineItem.words.forEach(wordItem => {
-            if (!wordItem.symbols) return;
+        blockItem.paragraphs.forEach(paraItem => {
+            if (!paraItem.lines) return;
 
-            wordItem.symbols.forEach(symbolItem => {
-                const cleanText = fixText(symbolItem.text);
-                if (symbolItem.confidence < minConfidence || !cleanText) return;
+            paraItem.lines.forEach(lineItem => {
+                if (!lineItem.words) return;
 
-                // Match symbol bounding box with CCL for precise coordinates
-                const bbox = cclBoxes.length > 0 ? getMatchedBox(symbolItem.bbox, cclBoxes) : symbolItem.bbox;
-                const boxH = Math.max(2, bbox.y1 - bbox.y0);
+                // Process at the word level for precise text tokens, 
+                // nested securely within the block & line layout hierarchy.
+                lineItem.words.forEach(wordItem => {
+                    const cleanText = fixText(wordItem.text);
+                    if (wordItem.confidence < minConfidence || !cleanText) return;
 
-                const fontSize = Math.min(Math.max(boxH * 0.75, 4), 150);
-                const textColor = sampleColors ? sampleColor(bbox) : "#000000";
+                    // Match word bounding box with CCL for precise coordinates
+                    const bbox = cclBoxes.length > 0 ? getMatchedBox(wordItem.bbox, cclBoxes) : wordItem.bbox;
+                    const boxH = Math.max(2, bbox.y1 - bbox.y0);
 
-                const svgText = document.createElementNS(SVG_NS, "text");
-                svgText.setAttribute("x", bbox.x0);
-                svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
-                svgText.setAttribute("font-size", `${fontSize}px`);
-                svgText.setAttribute("font-family", "Arial, sans-serif");
-                svgText.setAttribute("fill", textColor);
-                svgText.textContent = cleanText;
+                    const fontSize = Math.min(Math.max(boxH * 0.75, 6), 150);
+                    const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
-                fragment.appendChild(svgText);
-            });
-        });
-    });
-
-    pageGroup.appendChild(fragment);
-
-    // Container Resolution
-    let container = null;
-    if (targetContainer) {
-        container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
-    }
-
-    if (!container) {
-        container = document.createElement('div');
-        container.className = 'generated-svg-container';
-        document.body.appendChild(container);
-    }
-
-    container.appendChild(svgEl);
-    return svgEl;
-}
+                    const svgText = document.createElementNS(SVG_NS, "text");
+                    svgText.setAttribute("x", bbox.x0);
+                    svgText.setAttribute("y", bbox.y1 - (box
 
 async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
