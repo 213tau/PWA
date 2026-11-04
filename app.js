@@ -10671,6 +10671,309 @@ function createFilteredCanvas(source, options = {}) {
     return svgEl;
 }
 
+async function convertCanvasToSVGSymbols(mode = 'symbol', sampleColors = false, targetContainer = null) {
+    const sourceCanvas = document.getElementById('canvas');
+    if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
+
+    const w = sourceCanvas.width;
+    const h = sourceCanvas.height;
+    if (w === 0 || h === 0) throw new Error("Canvas has invalid dimensions (width or height is 0).");
+
+    const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error("Failed to get 2D context from canvas.");
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const A4_WIDTH_PX = 794;
+    const A4_HEIGHT_PX = 1123;
+
+    // Uniform scale calculation to maintain aspect ratio on A4
+    const scale = Math.min(A4_WIDTH_PX / w, A4_HEIGHT_PX / h);
+    const offsetX = (A4_WIDTH_PX - (w * scale)) / 2;
+    const offsetY = (A4_HEIGHT_PX - (h * scale)) / 2;
+
+    // Cache pixel data
+    let mainImgData;
+    try {
+        mainImgData = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+        throw new Error(`Failed to retrieve canvas image data: ${e.message}`);
+    }
+    const data = mainImgData.data;
+
+    // Text Normalization
+    const fixText = (str) => (str || '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+        .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+        .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+        .trim();
+
+    // 1. CCL Bounding Box Extraction tuned for Phrases & Words
+    function computeCCL(dilationX = 8, dilationY = 1) {
+        const binaryMap = new Uint8Array(w * h);
+
+        // Binarization: Identify dark text pixels
+        for (let i = 0, len = data.length; i < len; i += 4) {
+            const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+            binaryMap[i >> 2] = lum < 140 ? 1 : 0;
+        }
+
+        // Morphological Dilation
+        const dilatedMap = new Uint8Array(w * h);
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                if (binaryMap[rowOffset + x] === 1) {
+                    const startX = Math.max(0, x - dilationX);
+                    const endX = Math.min(w - 1, x + dilationX);
+                    const startY = Math.max(0, y - dilationY);
+                    const endY = Math.min(h - 1, y + dilationY);
+
+                    for (let ny = startY; ny <= endY; ny++) {
+                        const nRow = ny * w;
+                        for (let nx = startX; nx <= endX; nx++) {
+                            dilatedMap[nRow + nx] = 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Two-Pass CCL
+        const labels = new Int32Array(w * h);
+        const parent = [0];
+        let nextLabel = 1;
+
+        const find = (i) => {
+            let root = i;
+            while (root !== parent[root]) root = parent[root];
+            let curr = i;
+            while (curr !== root) {
+                let nxt = parent[curr];
+                parent[curr] = root;
+                curr = nxt;
+            }
+            return root;
+        };
+
+        const union = (i, j) => {
+            const rootI = find(i);
+            const rootJ = find(j);
+            if (rootI !== rootJ) parent[rootI] = rootJ;
+        };
+
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                const idx = rowOffset + x;
+                if (!dilatedMap[idx]) continue;
+
+                const west = x > 0 ? labels[idx - 1] : 0;
+                const north = y > 0 ? labels[idx - w] : 0;
+
+                if (!west && !north) {
+                    labels[idx] = nextLabel;
+                    parent[nextLabel] = nextLabel;
+                    nextLabel++;
+                } else if (west && !north) {
+                    labels[idx] = west;
+                } else if (!west && north) {
+                    labels[idx] = north;
+                } else {
+                    labels[idx] = west;
+                    union(west, north);
+                }
+            }
+        }
+
+        const boxMap = {};
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                const idx = rowOffset + x;
+                const label = labels[idx];
+                if (!label) continue;
+                const root = find(label);
+                
+                let b = boxMap[root];
+                if (!b) {
+                    b = boxMap[root] = { x0: x, y0: y, x1: x, y1: y, count: 0 };
+                }
+                if (x < b.x0) b.x0 = x;
+                if (x > b.x1) b.x1 = x;
+                if (y < b.y0) b.y0 = y;
+                if (y > b.y1) b.y1 = y;
+                b.count++;
+            }
+        }
+
+        return Object.values(boxMap).filter(b => {
+            const boxW = b.x1 - b.x0;
+            const boxH = b.y1 - b.y0;
+            const aspect = boxW / (boxH || 1);
+            return b.count > 5 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 100;
+        });
+    }
+
+    // Color Sampler
+    function sampleColor(bbox) {
+        const bx = Math.max(0, Math.floor(bbox.x0));
+        const by = Math.max(0, Math.floor(bbox.y0));
+        const bx1 = Math.min(w, Math.ceil(bbox.x1));
+        const by1 = Math.min(h, Math.ceil(bbox.y1));
+
+        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+
+        for (let y = by; y < by1; y++) {
+            const rowOffset = y * w;
+            for (let x = bx; x < bx1; x++) {
+                const i = (rowOffset + x) * 4;
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                if ((0.2126 * r + 0.7152 * g + 0.0722 * b) < 180) {
+                    rSum += r; gSum += g; bSum += b;
+                    count++;
+                }
+            }
+        }
+        return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
+    }
+
+    // 2. Bounding Box Matcher to refine position using CCL boundaries
+    function getMatchedBox(itemBbox, cclBoxes) {
+        let bestMatch = null, maxOverlap = 0;
+        const itemArea = Math.max(1, (itemBbox.x1 - itemBbox.x0) * (itemBbox.y1 - itemBbox.y0));
+
+        for (const box of cclBoxes) {
+            const interX0 = Math.max(itemBbox.x0, box.x0);
+            const interY0 = Math.max(itemBbox.y0, box.y0);
+            const interX1 = Math.min(itemBbox.x1, box.x1);
+            const interY1 = Math.min(itemBbox.y1, box.y1);
+
+            if (interX1 > interX0 && interY1 > interY0) {
+                const overlap = (interX1 - interX0) * (interY1 - interY0);
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    bestMatch = box;
+                }
+            }
+        }
+
+        if (bestMatch && (maxOverlap / itemArea > 0.2)) {
+            return {
+                x0: Math.min(itemBbox.x0, bestMatch.x0),
+                y0: Math.min(itemBbox.y0, bestMatch.y0),
+                x1: Math.max(itemBbox.x1, bestMatch.x1),
+                y1: Math.max(itemBbox.y1, bestMatch.y1)
+            };
+        }
+        
+        return itemBbox;
+    }
+
+    // Binarize Canvas for OCR
+    const binarizedCanvas = document.createElement('canvas');
+    binarizedCanvas.width = w;
+    binarizedCanvas.height = h;
+    const bCtx = binarizedCanvas.getContext('2d');
+    const bImgData = bCtx.createImageData(w, h);
+    
+    for (let i = 0, len = data.length; i < len; i += 4) {
+        const v = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) < 140 ? 0 : 255;
+        bImgData.data[i] = bImgData.data[i + 1] = bImgData.data[i + 2] = v;
+        bImgData.data[i + 3] = 255;
+    }
+    bCtx.putImageData(bImgData, 0, 0);
+
+    const cclBoxes = computeCCL(8, 1);
+    
+    if (typeof OCRPool === 'undefined' || typeof OCRPool.getWorker !== 'function') {
+        throw new Error("OCRPool is not defined or initialized in the global scope.");
+    }
+
+    const worker = await OCRPool.getWorker();
+    let ocrResult;
+    try {
+        ocrResult = await worker.recognize(binarizedCanvas);
+    } finally {
+        if (typeof OCRPool.releaseWorker === 'function') {
+            OCRPool.releaseWorker(worker);
+        }
+    }
+
+    if (!ocrResult || !ocrResult.data) {
+        throw new Error("OCR recognition failed to return valid data.");
+    }
+
+    // 3. Build A4 SVG Node
+    const svgEl = document.createElementNS(SVG_NS, "svg");
+    svgEl.setAttribute("xmlns", SVG_NS);
+    svgEl.setAttribute("viewBox", `0 0 ${A4_WIDTH_PX} ${A4_HEIGHT_PX}`);
+    svgEl.setAttribute("width", "210mm");
+    svgEl.setAttribute("height", "297mm");
+
+    const bgRect = document.createElementNS(SVG_NS, "rect");
+    bgRect.setAttribute("width", A4_WIDTH_PX);
+    bgRect.setAttribute("height", A4_HEIGHT_PX);
+    bgRect.setAttribute("fill", "#ffffff");
+    svgEl.appendChild(bgRect);
+
+    const pageGroup = document.createElementNS(SVG_NS, "g");
+    pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
+    svgEl.appendChild(pageGroup);
+
+    // Process Symbol-Level OCR items (Nested inside lines -> words -> symbols)
+    const lines = ocrResult.data.lines || [];
+    const minConfidence = 30;
+    const fragment = document.createDocumentFragment();
+
+    lines.forEach(lineItem => {
+        if (!lineItem.words) return;
+
+        lineItem.words.forEach(wordItem => {
+            if (!wordItem.symbols) return;
+
+            wordItem.symbols.forEach(symbolItem => {
+                const cleanText = fixText(symbolItem.text);
+                if (symbolItem.confidence < minConfidence || !cleanText) return;
+
+                // Match symbol bounding box with CCL for precise coordinates
+                const bbox = cclBoxes.length > 0 ? getMatchedBox(symbolItem.bbox, cclBoxes) : symbolItem.bbox;
+                const boxH = Math.max(2, bbox.y1 - bbox.y0);
+
+                const fontSize = Math.min(Math.max(boxH * 0.75, 4), 150);
+                const textColor = sampleColors ? sampleColor(bbox) : "#000000";
+
+                const svgText = document.createElementNS(SVG_NS, "text");
+                svgText.setAttribute("x", bbox.x0);
+                svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
+                svgText.setAttribute("font-size", `${fontSize}px`);
+                svgText.setAttribute("font-family", "Arial, sans-serif");
+                svgText.setAttribute("fill", textColor);
+                svgText.textContent = cleanText;
+
+                fragment.appendChild(svgText);
+            });
+        });
+    });
+
+    pageGroup.appendChild(fragment);
+
+    // Container Resolution
+    let container = null;
+    if (targetContainer) {
+        container = typeof targetContainer === 'string' ? document.querySelector(targetContainer) : targetContainer;
+    }
+
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'generated-svg-container';
+        document.body.appendChild(container);
+    }
+
+    container.appendChild(svgEl);
+    return svgEl;
+}
+
 async function convertCanvasToSVGParagrah(mode = 'paragraph', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
