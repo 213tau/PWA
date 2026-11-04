@@ -11002,7 +11002,7 @@ async function convertCanvasToSVGhybrid(mode = 'full-layout', sampleColors = fal
     return svgEl;
 }
 
-async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors = false, targetContainer = null) {
+async function convertCanvasToSVGLayout(mode = 'optimized-ccl', sampleColors = false, targetContainer = null) {
     const sourceCanvas = document.getElementById('canvas');
     if (!sourceCanvas) throw new Error("Canvas element with ID 'canvas' not found.");
 
@@ -11041,19 +11041,40 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
             .replace(/(\d)([a-zA-Z])/g, '$1 $2')
             .trim();
         
-        // Filter out standalone punctuation noise artifacts
         if (cleaned.length === 1 && /[^a-zA-Z0-9]/.test(cleaned)) return '';
         return cleaned;
     };
 
-    // 1. CCL Layout Component Extraction (Non-Text Shapes & Text Snapboxes)
-    function computeLayoutComponents() {
+    // 1. Enhanced CCL Layout Component Extraction with Density & Fill Filtering
+    function computeLayoutComponents(dilationX = 10, dilationY = 1) {
         const binaryMap = new Uint8Array(w * h);
 
+        // Advanced Binarization: Adaptive luminance cutoff for text pixels
         for (let i = 0, len = data.length; i < len; i += 4) {
             const r = data[i], g = data[i + 1], b = data[i + 2];
             const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            binaryMap[i >> 2] = (lum < 240 && !(r > 240 && g > 240 && b > 240)) ? 1 : 0;
+            binaryMap[i >> 2] = (lum < 150 && !(r > 230 && g > 230 && b > 230)) ? 1 : 0;
+        }
+
+        // Morphological Dilation to bridge character strokes into words/phrases
+        const dilatedMap = new Uint8Array(w * h);
+        for (let y = 0; y < h; y++) {
+            const rowOffset = y * w;
+            for (let x = 0; x < w; x++) {
+                if (binaryMap[rowOffset + x] === 1) {
+                    const startX = Math.max(0, x - dilationX);
+                    const endX = Math.min(w - 1, x + dilationX);
+                    const startY = Math.max(0, y - dilationY);
+                    const endY = Math.min(h - 1, y + dilationY);
+
+                    for (let ny = startY; ny <= endY; ny++) {
+                        const nRow = ny * w;
+                        for (let nx = startX; nx <= endX; nx++) {
+                            dilatedMap[nRow + nx] = 1;
+                        }
+                    }
+                }
+            }
         }
 
         const labels = new Int32Array(w * h);
@@ -11078,11 +11099,12 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
             if (rootI !== rootJ) parent[rootI] = rootJ;
         };
 
+        // Two-Pass CCL Union-Find
         for (let y = 0; y < h; y++) {
             const rowOffset = y * w;
             for (let x = 0; x < w; x++) {
                 const idx = rowOffset + x;
-                if (!binaryMap[idx]) continue;
+                if (!dilatedMap[idx]) continue;
 
                 const west = x > 0 ? labels[idx - 1] : 0;
                 const north = y > 0 ? labels[idx - w] : 0;
@@ -11128,16 +11150,22 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
         const layoutShapes = [];
 
         boxes.forEach(b => {
-            const boxW = b.x1 - b.x0;
-            const boxH = b.y1 - b.y0;
+            const boxW = (b.x1 - b.x0) + 1;
+            const boxH = (b.y1 - b.y0) + 1;
             const aspect = boxW / (boxH || 1);
+            const area = boxW * boxH;
+            const fillDensity = b.count / area;
 
-            if ((boxH <= 3 && boxW > 30) || (boxW <= 3 && boxH > 30)) {
+            // Non-Text Layout Elements (Dividing rules & container cards)
+            if ((boxH <= 3 && boxW > 25) || (boxW <= 3 && boxH > 25)) {
                 layoutShapes.push({ type: 'line', ...b });
-            } else if (b.count > 10 && boxW > 40 && boxH > 40 && (aspect > 3 || aspect < 0.3 || (boxW < w * 0.9 && boxH < h * 0.9))) {
+            } else if (b.count > 15 && boxW > 40 && boxH > 40 && fillDensity < 0.3 && (aspect > 2.5 || aspect < 0.4)) {
                 layoutShapes.push({ type: 'container', ...b });
-            } else if (b.count > 5 && boxH >= 3 && boxH <= 300 && aspect > 0.05 && aspect < 100) {
-                textMatchedBoxes.push(b);
+            } else {
+                // Refined Text Region Validation (Filters out graphic artifacts and solid speckles)
+                if (b.count > 4 && boxH >= 4 && boxH <= 250 && aspect > 0.05 && aspect < 120 && fillDensity > 0.08 && fillDensity < 0.9) {
+                    textMatchedBoxes.push(b);
+                }
             }
         });
 
@@ -11167,7 +11195,7 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // Bounding Box Matcher
+    // High-Precision Bounding Box Matcher
     function getMatchedBox(itemBbox, cclBoxes) {
         let bestMatch = null, maxOverlap = 0;
         const itemArea = Math.max(1, (itemBbox.x1 - itemBbox.x0) * (itemBbox.y1 - itemBbox.y0));
@@ -11187,7 +11215,7 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
             }
         }
 
-        if (bestMatch && (maxOverlap / itemArea > 0.2)) {
+        if (bestMatch && (maxOverlap / itemArea > 0.15)) {
             return {
                 x0: Math.min(itemBbox.x0, bestMatch.x0),
                 y0: Math.min(itemBbox.y0, bestMatch.y0),
@@ -11198,7 +11226,7 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
         return itemBbox;
     }
 
-    // Binarize Canvas for OCR
+    // Binarize Canvas for OCR Worker
     const binarizedCanvas = document.createElement('canvas');
     binarizedCanvas.width = w;
     binarizedCanvas.height = h;
@@ -11279,7 +11307,7 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
 
     // 4. Hierarchical Traversal: Blocks -> Paragraphs -> Lines -> Words
     const blocks = ocrResult.data.blocks || [];
-    const minConfidence = 40;
+    const minConfidence = 35;
 
     blocks.forEach(blockItem => {
         if (!blockItem.paragraphs) return;
@@ -11290,7 +11318,6 @@ async function convertCanvasToSVGLayout(mode = 'complete-layout', sampleColors =
             paraItem.lines.forEach(lineItem => {
                 if (!lineItem.words) return;
 
-                // Process at the word level, anchored precisely within line and block layout context
                 lineItem.words.forEach(wordItem => {
                     const cleanText = fixText(wordItem.text);
                     if (wordItem.confidence < minConfidence || !cleanText) return;
