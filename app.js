@@ -9792,16 +9792,16 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
         return count === 0 ? "#000000" : `rgb(${Math.round(rSum / count)},${Math.round(gSum / count)},${Math.round(bSum / count)})`;
     }
 
-    // 2. Bounding Box Matcher to refine line position using CCL boundaries
-    function getMatchedBox(lineBbox, cclBoxes) {
+    // 2. Bounding Box Matcher to refine line/word position using CCL boundaries
+    function getMatchedBox(itemBbox, cclBoxes) {
         let bestMatch = null, maxOverlap = 0;
-        const lineArea = Math.max(1, (lineBbox.x1 - lineBbox.x0) * (lineBbox.y1 - lineBbox.y0));
+        const itemArea = Math.max(1, (itemBbox.x1 - itemBbox.x0) * (itemBbox.y1 - itemBbox.y0));
 
         for (const box of cclBoxes) {
-            const interX0 = Math.max(lineBbox.x0, box.x0);
-            const interY0 = Math.max(lineBbox.y0, box.y0);
-            const interX1 = Math.min(lineBbox.x1, box.x1);
-            const interY1 = Math.min(lineBbox.y1, box.y1);
+            const interX0 = Math.max(itemBbox.x0, box.x0);
+            const interY0 = Math.max(itemBbox.y0, box.y0);
+            const interX1 = Math.min(itemBbox.x1, box.x1);
+            const interY1 = Math.min(itemBbox.y1, box.y1);
 
             if (interX1 > interX0 && interY1 > interY0) {
                 const overlap = (interX1 - interX0) * (interY1 - interY0);
@@ -9812,16 +9812,16 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
             }
         }
 
-        if (bestMatch && (maxOverlap / lineArea > 0.2)) {
+        if (bestMatch && (maxOverlap / itemArea > 0.2)) {
             return {
-                x0: Math.min(lineBbox.x0, bestMatch.x0),
-                y0: Math.min(lineBbox.y0, bestMatch.y0),
-                x1: Math.max(lineBbox.x1, bestMatch.x1),
-                y1: Math.max(lineBbox.y1, bestMatch.y1)
+                x0: Math.min(itemBbox.x0, bestMatch.x0),
+                y0: Math.min(itemBbox.y0, bestMatch.y0),
+                x1: Math.max(itemBbox.x1, bestMatch.x1),
+                y1: Math.max(itemBbox.y1, bestMatch.y1)
             };
         }
         
-        return lineBbox;
+        return itemBbox;
     }
 
     // Binarize Canvas for OCR
@@ -9877,32 +9877,35 @@ async function convertCanvasToSVG(mode = 'word', sampleColors = false, targetCon
     pageGroup.setAttribute("transform", `translate(${offsetX}, ${offsetY}) scale(${scale})`);
     svgEl.appendChild(pageGroup);
 
-    // Filter line-based OCR items
+    // Filter word-level OCR items from lines
     const lines = ocrResult.data.lines || [];
     const minConfidence = 30;
-
     const fragment = document.createDocumentFragment();
 
     lines.forEach(lineItem => {
-        const cleanText = fixText(lineItem.text);
-        if (lineItem.confidence < minConfidence || !cleanText) return;
+        if (!lineItem.words || lineItem.words.length === 0) return;
 
-        // Match line bounding box with CCL for precise coordinates
-        const bbox = cclBoxes.length > 0 ? getMatchedBox(lineItem.bbox, cclBoxes) : lineItem.bbox;
-        const boxH = Math.max(2, bbox.y1 - bbox.y0);
+        lineItem.words.forEach(wordItem => {
+            const cleanText = fixText(wordItem.text);
+            if (wordItem.confidence < minConfidence || !cleanText) return;
 
-        const fontSize = Math.min(Math.max(boxH * 0.75, 6), 150);
-        const textColor = sampleColors ? sampleColor(bbox) : "#000000";
+            // Match word bounding box with CCL for precise coordinates
+            const bbox = cclBoxes.length > 0 ? getMatchedBox(wordItem.bbox, cclBoxes) : wordItem.bbox;
+            const boxH = Math.max(2, bbox.y1 - bbox.y0);
 
-        const svgText = document.createElementNS(SVG_NS, "text");
-        svgText.setAttribute("x", bbox.x0);
-        svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
-        svgText.setAttribute("font-size", `${fontSize}px`);
-        svgText.setAttribute("font-family", "Arial, sans-serif");
-        svgText.setAttribute("fill", textColor);
-        svgText.textContent = cleanText;
+            const fontSize = Math.min(Math.max(boxH * 0.75, 6), 150);
+            const textColor = sampleColors ? sampleColor(bbox) : "#000000";
 
-        fragment.appendChild(svgText);
+            const svgText = document.createElementNS(SVG_NS, "text");
+            svgText.setAttribute("x", bbox.x0);
+            svgText.setAttribute("y", bbox.y1 - (boxH * 0.15));
+            svgText.setAttribute("font-size", `${fontSize}px`);
+            svgText.setAttribute("font-family", "Arial, sans-serif");
+            svgText.setAttribute("fill", textColor);
+            svgText.textContent = cleanText;
+
+            fragment.appendChild(svgText);
+        });
     });
 
     pageGroup.appendChild(fragment);
