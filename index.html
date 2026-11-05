@@ -648,7 +648,10 @@ pre {
     </div>
 
     <div class="tab-content" id="TabTools">      
-      <button onclick="window.location.href='whatsApp://'">Open Whatsapp</button>
+      <!-- Avoid 'whatsApp://' with uppercase A -->
+<button onclick="window.location.href='whatsapp://send?phone=15551234567'">
+  Open WhatsApp
+</button>
       <button onclick="window.open('https://www.google.com/webhp', '_blank')">Google</button>
       <button onclick="window.open('https://chatgpt.com/', '_blank')">ChatGPT</button>
       <button onclick="window.open('https://pixlr.com/editor/', '_blank')">Pixlr</button>
