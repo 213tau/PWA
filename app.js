@@ -5662,7 +5662,7 @@ images.forEach(function (e, index) {
     }
 
 
-    function edgeAwareAdaptiveThresholding(radius = 1.0, blockSize = 15, C = 10) {
+    function robustMixedAdaptiveThresholding(blockSize = 15, k = 0.35, R = 128) {
   const canvas = document.querySelector("canvas");
   if (!canvas) return;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -5673,80 +5673,78 @@ images.forEach(function (e, index) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
 
-  // 1. Single-pass grayscale conversion
+  // 1. Grayscale & Squared Grayscale arrays for variance calculation
   const gray = new Float32Array(pixelCount);
+  const graySq = new Float32Array(pixelCount);
+
   for (let i = 0; i < pixelCount; i++) {
     const idx = i * 4;
-    gray[i] = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+    const g = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+    gray[i] = g;
+    graySq[i] = g * g;
   }
 
-  // 2. Compute Gaussian blur on grayscale array
-  const grayBlur = gaussianBlurGray(gray, width, height, radius);
-
-  // 3. Compute High-Pass Edge Magnitude & track max value safely
-  const edgeMagnitude = new Float32Array(pixelCount);
-  let maxEdge = 0;
-
-  for (let i = 0; i < pixelCount; i++) {
-    const diff = Math.abs(gray[i] - grayBlur[i]);
-    edgeMagnitude[i] = diff;
-    if (diff > maxEdge) maxEdge = diff;
-  }
-
-  // Normalize edge magnitude safely (avoid division by zero on flat images)
-  const invMaxEdge = maxEdge > 1e-5 ? 1.0 / maxEdge : 0;
-  if (invMaxEdge > 0) {
-    for (let i = 0; i < pixelCount; i++) {
-      edgeMagnitude[i] *= invMaxEdge;
-    }
-  }
-
-  // 4. Build Padded Integral Image (W+1 by H+1)
-  // This eliminates all conditional checks inside the region query.
+  // 2. Build Padded Integral Images for Sum and Sum of Squares ((W+1) x (H+1))
   const intWidth = width + 1;
-  const integral = new Float32Array(intWidth * (height + 1));
+  const integralSum = new Float32Array(intWidth * (height + 1));
+  const integralSq = new Float32Array(intWidth * (height + 1));
 
   for (let y = 0; y < height; y++) {
     let rowSum = 0;
+    let rowSqSum = 0;
     const yOffsetSrc = y * width;
     const yOffsetDst = (y + 1) * intWidth;
     const prevYOffsetDst = y * intWidth;
 
     for (let x = 0; x < width; x++) {
-      rowSum += gray[yOffsetSrc + x];
-      integral[yOffsetDst + (x + 1)] = rowSum + integral[prevYOffsetDst + (x + 1)];
+      const srcIdx = yOffsetSrc + x;
+      rowSum += gray[srcIdx];
+      rowSqSum += graySq[srcIdx];
+
+      const dstIdx = yOffsetDst + (x + 1);
+      const prevDstIdx = prevYOffsetDst + (x + 1);
+
+      integralSum[dstIdx] = rowSum + integralSum[prevDstIdx];
+      integralSq[dstIdx] = rowSqSum + integralSq[prevDstIdx];
     }
   }
 
-  // O(1) Box Sum Helper using padded integral coordinates
-  function getRegionSum(x0, y0, x1, y1) {
-    // Clamp coordinates to image boundaries
+  // O(1) Region Stats Helper (Mean & Standard Deviation)
+  function getRegionStats(x0, y0, x1, y1) {
     const rx0 = Math.max(0, x0);
     const ry0 = Math.max(0, y0);
     const rx1 = Math.min(width - 1, x1);
     const ry1 = Math.min(height - 1, y1);
 
-    // Padded lookup offsets (+1 shift)
+    const count = (rx1 - rx0 + 1) * (ry1 - ry0 + 1);
+    if (count <= 0) return { mean: 0, stdDev: 0 };
+
     const x0_p = rx0;
     const y0_p = ry0;
     const x1_p = rx1 + 1;
     const y1_p = ry1 + 1;
 
-    const D = integral[y1_p * intWidth + x1_p];
-    const B = integral[y0_p * intWidth + x1_p];
-    const C = integral[y1_p * intWidth + x0_p];
-    const A = integral[y0_p * intWidth + x0_p];
+    const idxD = y1_p * intWidth + x1_p;
+    const idxB = y0_p * intWidth + x1_p;
+    const idxC = y1_p * intWidth + x0_p;
+    const idxA = y0_p * intWidth + x0_p;
 
-    return D - B - C + A;
+    const sum = integralSum[idxD] - integralSum[idxB] - integralSum[idxC] + integralSum[idxA];
+    const sumSq = integralSq[idxD] - integralSq[idxB] - integralSq[idxC] + integralSq[idxA];
+
+    const mean = sum / count;
+    const variance = (sumSq / count) - (mean * mean);
+    const stdDev = Math.sqrt(Math.max(0, variance));
+
+    return { mean, stdDev };
   }
 
   const halfBlock = Math.floor(blockSize / 2);
-
-  // 5. Fast Uint32 view over ImageData buffer (Little-Endian: ABGR)
   const buf32 = new Uint32Array(data.buffer);
   const WHITE = 0xFFFFFFFF;
   const BLACK = 0xFF000000;
 
+  // 3. Pixel-wise thresholding loop
   for (let y = 0; y < height; y++) {
     const y0 = y - halfBlock;
     const y1 = y + halfBlock;
@@ -5757,19 +5755,11 @@ images.forEach(function (e, index) {
       const x1 = x + halfBlock;
       const idx = yOffset + x;
 
-      // Actual region bounds for pixel count
-      const rx0 = Math.max(0, x0);
-      const ry0 = Math.max(0, y0);
-      const rx1 = Math.min(width - 1, x1);
-      const ry1 = Math.min(height - 1, y1);
-      const count = (rx1 - rx0 + 1) * (ry1 - ry0 + 1);
+      const { mean, stdDev } = getRegionStats(x0, y0, x1, y1);
 
-      const regionSum = getRegionSum(x0, y0, x1, y1);
-      const localMean = count > 0 ? regionSum / count : gray[idx];
-
-      // Edge-aware threshold calculation
-      const edgeBoost = edgeMagnitude[idx] * C;
-      const threshold = localMean - (C - edgeBoost);
+      // Sauvola's Adaptive Threshold Formula:
+      // T = mean * [1 + k * ((stdDev / R) - 1)]
+      const threshold = mean * (1.0 + k * ((stdDev / R) - 1.0));
 
       buf32[idx] = gray[idx] >= threshold ? WHITE : BLACK;
     }
@@ -5777,71 +5767,6 @@ images.forEach(function (e, index) {
 
   ctx.putImageData(imageData, 0, 0);
 }
-
-
-    function gaussianBlur(data, width, height, radius) {
-      const kernel = createGaussianKernel(radius);
-      const temp = new Uint8ClampedArray(data.length);
-      const output = new Uint8ClampedArray(data.length);
-
-      // Horizontal pass
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          for (let c = 0; c < 3; c++) {
-            let acc = 0, weightSum = 0;
-            for (let k = -radius; k <= radius; k++) {
-              const ix = Math.min(width - 1, Math.max(0, x + k));
-              const idx = 4 * (y * width + ix);
-              acc += data[idx + c] * kernel[k + radius];
-              weightSum += kernel[k + radius];
-            }
-            const idx = 4 * (y * width + x);
-            temp[idx + c] = acc / weightSum;
-          }
-          temp[4 * (y * width + x) + 3] = 255;
-        }
-      }
-
-      // Vertical pass
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          for (let c = 0; c < 3; c++) {
-            let acc = 0, weightSum = 0;
-            for (let k = -radius; k <= radius; k++) {
-              const iy = Math.min(height - 1, Math.max(0, y + k));
-              const idx = 4 * (iy * width + x);
-              acc += temp[idx + c] * kernel[k + radius];
-              weightSum += kernel[k + radius];
-            }
-            const idx = 4 * (y * width + x);
-            output[idx + c] = acc / weightSum;
-          }
-          output[4 * (y * width + x) + 3] = 255;
-        }
-      }
-
-      return output;
-    }
-
-    function createGaussianKernel(radius) {
-      const kernelSize = 2 * radius + 1;
-      const sigma = radius / 2;
-      const kernel = new Float32Array(kernelSize);
-      let sum = 0;
-
-      for (let i = 0; i < kernelSize; i++) {
-        const x = i - radius;
-        kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
-        sum += kernel[i];
-      }
-
-      // Normalize
-      for (let i = 0; i < kernel.length; i++) {
-        kernel[i] /= sum;
-      }
-
-      return kernel;
-    }
 
     //function adaptiveHistogramEqualization(tileSize = 100, clipLimit = 35) {
     function adaptiveHistogramEqualization(tileSize = 130, clipLimit = 50) {
