@@ -5661,8 +5661,7 @@ images.forEach(function (e, index) {
       return output;
     }
 
-
-    function robustMixedAdaptiveThresholding(blockSize = 15, k = 0.35, R = 128) {
+function robustMixedAdaptiveThresholding(radius = 1.0, blockSize = 15, k = 0.35, R = 128) {
   const canvas = document.querySelector("canvas");
   if (!canvas) return;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -5673,7 +5672,7 @@ images.forEach(function (e, index) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
 
-  // 1. Grayscale & Squared Grayscale arrays for variance calculation
+  // 1. Single-pass grayscale & squared grayscale conversion
   const gray = new Float32Array(pixelCount);
   const graySq = new Float32Array(pixelCount);
 
@@ -5684,7 +5683,11 @@ images.forEach(function (e, index) {
     graySq[i] = g * g;
   }
 
-  // 2. Build Padded Integral Images for Sum and Sum of Squares ((W+1) x (H+1))
+  // 2. Optional: Gaussian blur pre-filtering (if you want to smooth out high-frequency sensor noise)
+  const smoothedGray = gaussianBlurGray(gray, width, height, radius);
+
+  // 3. Build Padded Integral Images for Sum and Sum of Squares ((W+1) x (H+1))
+  // This enables O(1) calculations for both mean and standard deviation regardless of block size.
   const intWidth = width + 1;
   const integralSum = new Float32Array(intWidth * (height + 1));
   const integralSq = new Float32Array(intWidth * (height + 1));
@@ -5698,8 +5701,8 @@ images.forEach(function (e, index) {
 
     for (let x = 0; x < width; x++) {
       const srcIdx = yOffsetSrc + x;
-      rowSum += gray[srcIdx];
-      rowSqSum += graySq[srcIdx];
+      rowSum += smoothedGray[srcIdx];
+      rowSqSum += smoothedGray[srcIdx] * smoothedGray[srcIdx];
 
       const dstIdx = yOffsetDst + (x + 1);
       const prevDstIdx = prevYOffsetDst + (x + 1);
@@ -5709,7 +5712,7 @@ images.forEach(function (e, index) {
     }
   }
 
-  // O(1) Region Stats Helper (Mean & Standard Deviation)
+  // O(1) Region Stats Helper using padded integral coordinates
   function getRegionStats(x0, y0, x1, y1) {
     const rx0 = Math.max(0, x0);
     const ry0 = Math.max(0, y0);
@@ -5740,11 +5743,12 @@ images.forEach(function (e, index) {
   }
 
   const halfBlock = Math.floor(blockSize / 2);
+
+  // 4. Fast Uint32 view over ImageData buffer (Little-Endian: ABGR)
   const buf32 = new Uint32Array(data.buffer);
   const WHITE = 0xFFFFFFFF;
   const BLACK = 0xFF000000;
 
-  // 3. Pixel-wise thresholding loop
   for (let y = 0; y < height; y++) {
     const y0 = y - halfBlock;
     const y1 = y + halfBlock;
@@ -5767,6 +5771,71 @@ images.forEach(function (e, index) {
 
   ctx.putImageData(imageData, 0, 0);
 }
+
+function gaussianBlurGray(gray, width, height, radius) {
+  const kernel = createGaussianKernel(radius);
+  const temp = new Float32Array(gray.length);
+  const output = new Float32Array(gray.length);
+
+  // Horizontal pass
+  for (let y = 0; y < height; y++) {
+    const yOffset = y * width;
+    for (let x = 0; x < width; x++) {
+      let acc = 0;
+      let weightSum = 0;
+      
+      for (let k = -radius; k <= radius; k++) {
+        const ix = Math.min(width - 1, Math.max(0, x + k));
+        const weight = kernel[k + radius];
+        acc += gray[yOffset + ix] * weight;
+        weightSum += weight;
+      }
+      
+      temp[yOffset + x] = acc / weightSum;
+    }
+  }
+
+  // Vertical pass
+  for (let y = 0; y < height; y++) {
+    const yOffset = y * width;
+    for (let x = 0; x < width; x++) {
+      let acc = 0;
+      let weightSum = 0;
+      
+      for (let k = -radius; k <= radius; k++) {
+        const iy = Math.min(height - 1, Math.max(0, y + k));
+        const weight = kernel[k + radius];
+        acc += temp[iy * width + x] * weight;
+        weightSum += weight;
+      }
+      
+      output[yOffset + x] = acc / weightSum;
+    }
+  }
+
+  return output;
+}
+
+function createGaussianKernel(radius) {
+  const kernelSize = 2 * radius + 1;
+  const sigma = radius / 2;
+  const kernel = new Float32Array(kernelSize);
+  let sum = 0;
+
+  for (let i = 0; i < kernelSize; i++) {
+    const x = i - radius;
+    kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+    sum += kernel[i];
+  }
+
+  // Normalize
+  for (let i = 0; i < kernel.length; i++) {
+    kernel[i] /= sum;
+  }
+
+  return kernel;
+}
+
 
     //function adaptiveHistogramEqualization(tileSize = 100, clipLimit = 35) {
     function adaptiveHistogramEqualization(tileSize = 130, clipLimit = 50) {
