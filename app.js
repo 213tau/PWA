@@ -1902,6 +1902,69 @@ async function rotateCurrentImage() {
     }, "image/png");
 });
 
+document.querySelector('#copyPdf').addEventListener("click", async function () {
+    const canvas = document.querySelector("canvas");
+    
+    if (!canvas) {
+        console.error("Canvas element not found.");
+        return;
+    }
+
+    // Convert canvas to a Blob (PNG format)
+    canvas.toBlob(async function(blob) {
+        if (!blob) {
+            console.error("Failed to create blob from canvas.");
+            return;
+        }
+
+        try {
+            // Read blob as ArrayBuffer for pdf-lib
+            const arrayBuffer = await blob.arrayBuffer();
+
+            // Create a new PDF document using pdf-lib
+            const pdfDoc = await PDFLib.PDFDocument.create();
+            
+            // Embed the PNG image bytes into the PDF
+            const pngImage = await pdfDoc.embedPng(arrayBuffer);
+
+            // Add a page matching the exact pixel dimensions of your canvas
+            const page = pdfDoc.addPage([canvas.width, canvas.height]);
+
+            // Draw the image to fill the page entirely
+            page.drawImage(pngImage, {
+                x: 0,
+                y: 0,
+                width: canvas.width,
+                height: canvas.height,
+            });
+
+            // Serialize the PDF to bytes
+            const pdfBytes = await pdfDoc.save();
+
+            // Trigger browser download via a temporary blob URL
+            const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const pdfUrl = URL.createObjectURL(pdfBlob);
+            
+            const link = document.createElement('a');
+            link.href = pdfUrl;
+            link.download = 'canvas-export.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up the URL object
+            URL.revokeObjectURL(pdfUrl);
+
+            console.log("PDF generated and downloaded successfully using pdf-lib!");
+            
+            // Optional: Give visual feedback to the user
+            // this.textContent = "Downloaded PDF!";
+        } catch (err) {
+            console.error("Failed to generate PDF with pdf-lib: ", err);
+        }
+    }, "image/png");
+});
+
     document.querySelector('#print').addEventListener("click", function () {
       zoomLevel = 1;
       document.body.style.zoom = zoomLevel;
