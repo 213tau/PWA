@@ -867,30 +867,51 @@ pre {
 
   <script>
     document.getElementById('captureScreenBtn').addEventListener('click', async () => {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-
-        video.onloadedmetadata = async () => {
-          // Wait for the video to actually render
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Set canvas to video frame size
-          document.querySelector("canvas").width = video.videoWidth;
-          document.querySelector("canvas").height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, document.querySelector("canvas").width, document.querySelector("canvas").height);
-
-          // Stop the video stream (important)
-          stream.getTracks().forEach(track => track.stop());
-         
-        };
-      } catch (err) {
-        alert('Screen capture failed: ' + err.message);
-      }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ 
+      video: { 
+        displaySurface: "monitor",
+        // Request higher resolution preference
+        width: { ideal: window.screen.width * window.devicePixelRatio },
+        height: { ideal: window.screen.height * window.devicePixelRatio }
+      } 
     });
+
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play();
+
+    // Wait until the browser has actually decoded the video frame data
+    if ('requestVideoFrameCallback' in video) {
+      await new Promise(resolve => video.requestVideoFrameCallback(resolve));
+    } else {
+      // Fallback for older environments
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    const canvas = document.querySelector("canvas");
+    
+    // Set the actual pixel resolution of the canvas to match the video feed
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext('2d');
+    
+    // Optional: Improve image scaling quality if drawing scaled down
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Stop the screen sharing stream
+    stream.getTracks().forEach(track => track.stop());
+    video.remove();
+
+  } catch (err) {
+    alert('Screen capture failed: ' + err.message);
+  }
+});
 
     function parsePassportMRZ() {
       let raw = document.querySelector('#output')?.innerText || '';
