@@ -1941,13 +1941,23 @@ document.querySelector('#copyPdf').addEventListener("click", async function () {
             // Serialize the PDF to bytes
             const pdfBytes = await pdfDoc.save();
 
-            // Trigger browser download via a temporary blob URL
+            // Generate a formatted timestamp string for the filename
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const timestamp = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
+
+            // Trigger browser download via a temporary blob URL with dynamic name
             const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
             const pdfUrl = URL.createObjectURL(pdfBlob);
             
             const link = document.createElement('a');
             link.href = pdfUrl;
-            link.download = 'canvas-export.pdf';
+            link.download = `PDF-${timestamp}.pdf`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
