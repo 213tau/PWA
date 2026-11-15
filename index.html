@@ -1044,45 +1044,44 @@ function toProperCase(text) {
     return text.toLowerCase().replace(/\b\p{L}/gu, char => char.toUpperCase());
 }
 
-// Event listener for button click
-document.querySelector("#propercase").addEventListener("click", function() {
-    // Get the current text from #saved
-    const text = document.querySelector("#output").innerText;
-
-    // Convert to proper case
-    const properText = toProperCase(text);
-
-    // Update #saved with proper case
-    document.querySelector("#output").innerText = properText;
-});
-
-document.getElementById("uppercase").addEventListener("click", () => {
-    const output = document.getElementById("output");
-    output.innerText = output.innerText.toUpperCase();
-  });
-
-    document.getElementById("lowercase").addEventListener("click", () => {
+// Helper function to handle text replacement (selection or whole element fallback)
+function modifyText(transformerFn) {
     const selection = window.getSelection();
-    
+
     // Check if there is active text selected and it's not empty
     if (selection.rangeCount > 0 && selection.toString().length > 0) {
         const range = selection.getRangeAt(0);
         const selectedText = range.toString();
         
-        // Convert only the selected text to lowercase
-        const lowerText = selectedText.toLowerCase();
+        // Transform only the selected text
+        const transformedText = transformerFn(selectedText);
         
-        // Replace the highlighted text with the lowercase version
-        const newNode = document.createTextNode(lowerText);
+        // Replace the highlighted text with the transformed version
+        const newNode = document.createTextNode(transformedText);
         range.deleteContents();
         range.insertNode(newNode);
         
         selection.removeAllRanges();
     } else {
-        // Fallback: if nothing is selected, convert the whole output element
+        // Fallback: if nothing is selected, convert the whole #output element
         const output = document.getElementById("output");
-        output.innerText = output.innerText.toLowerCase();
+        output.innerText = transformerFn(output.innerText);
     }
+}
+
+// 1. Proper Case Button
+document.querySelector("#propercase").addEventListener("click", function() {
+    modifyText(text => toProperCase(text));
+});
+
+// 2. Uppercase Button
+document.getElementById("uppercase").addEventListener("click", () => {
+    modifyText(text => text.toUpperCase());
+});
+
+// 3. Lowercase Button
+document.getElementById("lowercase").addEventListener("click", () => {
+    modifyText(text => text.toLowerCase());
 });
 
   </script>
