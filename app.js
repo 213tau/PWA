@@ -7890,10 +7890,10 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       }
 
       //document.querySelector("table").style.paddingLeft = "2.8in";
-      document.querySelector("table").style.borderSpacing = "12px 12px";
-      document.querySelector("table").style.margin = "0 auto";
-      document.querySelector("table").style.paddingRight = "0.85in";
-      document.querySelector("table").style.marginTop = "0.05in";
+      document.querySelector("table")[1].style.borderSpacing = "12px 12px";
+      document.querySelector("table")[1].style.margin = "0 auto";
+      document.querySelector("table")[1].style.paddingRight = "0.85in";
+      document.querySelector("table")[1].style.marginTop = "0.05in";
 
       document.querySelector(".tab-content.active").style.display = "none";
       window.print();
