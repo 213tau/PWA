@@ -7896,8 +7896,10 @@ document.querySelector("#pdfpageassvg").addEventListener("click", async function
       document.querySelectorAll("table")[1].style.marginTop = "0.05in";
 
       document.querySelector(".tab-content.active").style.display = "none";
+      document.querySelector("main").style.padding = "0";
       window.print();
       document.querySelector(".tab-content.active").style = "";
+      document.querySelector("main").style.padding = "24px";
     }
     document.querySelector("#fivepics").addEventListener("click", function () {
   const img = document.querySelector("img");
