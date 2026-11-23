@@ -4721,8 +4721,8 @@ window.addEventListener('dragstart', (e) => {
 (() => {
   const TARGET_SELECTOR = "#output"; // Change to your container selector or "body"
   const PADDING = 8;
+  const BLOCK_TAGS = new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "PRE", "SECTION", "ARTICLE"]);
 
-  // 1. Inject minimal CSS
   const style = document.createElement("style");
   style.textContent = `
     #ft-bar {
@@ -4740,11 +4740,8 @@ window.addEventListener('dragstart', (e) => {
       font-family: system-ui, -apple-system, sans-serif;
       box-sizing: border-box;
     }
-    #ft-bar, #ft-bar * {
-      box-sizing: border-box;
-    }
-    #ft-bar button,
-    #ft-bar select {
+    #ft-bar, #ft-bar * { box-sizing: border-box; }
+    #ft-bar button, #ft-bar select {
       background: transparent;
       border: none;
       border-radius: 4px;
@@ -4760,21 +4757,9 @@ window.addEventListener('dragstart', (e) => {
       justify-content: center;
       white-space: nowrap;
     }
-    #ft-bar select {
-      max-width: 84px;
-      padding-right: 2px;
-    }
-    #ft-bar button:hover,
-    #ft-bar select:hover {
-      background: #f1f3f5;
-    }
-    .ft-div {
-      width: 1px;
-      height: 16px;
-      background: #e5e7eb;
-      margin: 0 2px;
-      flex-shrink: 0;
-    }
+    #ft-bar select { max-width: 84px; padding-right: 2px; }
+    #ft-bar button:hover, #ft-bar select:hover { background: #f1f3f5; }
+    .ft-div { width: 1px; height: 16px; background: #e5e7eb; margin: 0 2px; flex-shrink: 0; }
     .ft-color {
       position: relative;
       width: 26px;
@@ -4786,37 +4771,13 @@ window.addEventListener('dragstart', (e) => {
       cursor: pointer;
       flex-shrink: 0;
     }
-    .ft-color:hover {
-      background: #f1f3f5;
-    }
-    .ft-color input[type="color"] {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      width: 100%;
-      height: 100%;
-      cursor: pointer;
-    }
-    .ft-a {
-      font-size: 12px;
-      font-weight: 700;
-      line-height: 1;
-      border-bottom: 2.5px solid #e11d48;
-      pointer-events: none;
-    }
-    .ft-bg {
-      font-size: 11px;
-      font-weight: 700;
-      line-height: 1;
-      padding: 2px 3px;
-      border-radius: 2px;
-      background: #fef08a;
-      pointer-events: none;
-    }
+    .ft-color:hover { background: #f1f3f5; }
+    .ft-color input[type="color"] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+    .ft-a { font-size: 12px; font-weight: 700; line-height: 1; border-bottom: 2.5px solid #e11d48; pointer-events: none; }
+    .ft-bg { font-size: 11px; font-weight: 700; line-height: 1; padding: 2px 3px; border-radius: 2px; background: #fef08a; pointer-events: none; }
   `;
   document.head.appendChild(style);
 
-  // 2. Build compact DOM
   const el = (tag, props = {}, children = []) => {
     const node = document.createElement(tag);
     Object.assign(node, props);
@@ -4825,13 +4786,9 @@ window.addEventListener('dragstart', (e) => {
   };
 
   const makeSelect = (id, title, items, selected) =>
-    el(
-      "select",
-      { id, title },
-      items.map(([label, value]) =>
-        el("option", { textContent: label, value, selected: value === selected })
-      )
-    );
+    el("select", { id, title }, items.map(([label, value]) =>
+      el("option", { textContent: label, value, selected: value === selected })
+    ));
 
   const makeColor = (inputId, indId, title, cls, color, text) => {
     const ind = el("span", { id: indId, className: cls, textContent: text });
@@ -4840,20 +4797,13 @@ window.addEventListener('dragstart', (e) => {
   };
 
   const fontFamily = makeSelect("ft-ff", "Font", [
-    ["Arial", "Arial"],
-    ["Georgia", "Georgia"],
-    ["Mono", "'Courier New'"],
-    ["Serif", "'Times New Roman'"],
-    ["Verdana", "Verdana"]
+    ["Arial", "Arial"], ["Georgia", "Georgia"], ["Mono", "'Courier New'"],
+    ["Serif", "'Times New Roman'"], ["Verdana", "Verdana"]
   ], "Arial");
 
   const fontSize = makeSelect("ft-fs", "Size", [
-    ["12", "12px"],
-    ["14", "14px"],
-    ["16", "16px"],
-    ["20", "20px"],
-    ["24", "24px"],
-    ["32", "32px"]
+    ["12", "12px"], ["14", "14px"], ["16", "16px"],
+    ["20", "20px"], ["24", "24px"], ["32", "32px"]
   ], "16px");
 
   const boldBtn = el("button", { type: "button", id: "ft-b", title: "Bold", innerHTML: "<b>B</b>" });
@@ -4861,37 +4811,82 @@ window.addEventListener('dragstart', (e) => {
   const textColor = makeColor("ft-tc", "ft-tc-i", "Text Color", "ft-a", "#e11d48", "A");
   const bgColor = makeColor("ft-bc", "ft-bc-i", "Background", "ft-bg", "#fef08a", "ab");
   const caseBtn = el("button", { type: "button", id: "ft-case", title: "Proper / UPPER / lower", textContent: "Aa" });
-  const alignBtn = el("button", { type: "button", id: "ft-align", title: "Left / Center / Right / Justify", textContent: "⇤" });
+  const alignBtn = el("button", { type: "button", id: "ft-align", title: "Align Left", textContent: "⇤" });
 
   const bar = el("div", { id: "ft-bar" }, [
-    fontFamily,
-    fontSize,
-    el("span", { className: "ft-div" }),
-    boldBtn,
-    italicBtn,
-    el("span", { className: "ft-div" }),
-    textColor.wrap,
-    bgColor.wrap,
-    el("span", { className: "ft-div" }),
-    caseBtn,
-    alignBtn
+    fontFamily, fontSize, el("span", { className: "ft-div" }),
+    boldBtn, italicBtn, el("span", { className: "ft-div" }),
+    textColor.wrap, bgColor.wrap, el("span", { className: "ft-div" }),
+    caseBtn, alignBtn
   ]);
-
   document.body.appendChild(bar);
 
-  // 3. State & Helpers
   let caseState = 0; // 0: Proper -> 1: UPPER -> 2: lower
-  let alignState = 0; // 0: Left -> 1: Center -> 2: Right -> 3: Justify
-
   const alignments = [
-    { cmd: "justifyLeft", icon: "⇤", title: "Align Left" },
-    { cmd: "justifyCenter", icon: "⇥⇤", title: "Align Center" },
-    { cmd: "justifyRight", icon: "⇥", title: "Align Right" },
-    { cmd: "justifyFull", icon: "≡", title: "Justify" }
+    { value: "left", icon: "⇤", title: "Align Left" },
+    { value: "center", icon: "⇥⇤", title: "Align Center" },
+    { value: "right", icon: "⇥", title: "Align Right" },
+    { value: "justify", icon: "≡", title: "Justify" }
   ];
 
   const getContainer = () => document.querySelector(TARGET_SELECTOR) || document.body;
   const toProperCase = (str) => str.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+
+  // Find nearest block inside container, or wrap bare text/inline run in a <div>
+  function getTargetBlock(container) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+
+    let node = sel.getRangeAt(0).startContainer;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+
+    while (node && node !== container) {
+      if (BLOCK_TAGS.has(node.tagName)) return node;
+      node = node.parentElement;
+    }
+
+    // If selection is directly inside container with no inner block, wrap current line/range
+    const range = sel.getRangeAt(0);
+    const wrapper = document.createElement("div");
+    const blockRange = document.createRange();
+    blockRange.setStart(container, 0);
+    blockRange.setEnd(range.startContainer, range.startOffset);
+
+    // Move only inline nodes around the selection into a block wrapper
+    let target = range.startContainer;
+    if (target.nodeType === Node.TEXT_NODE) target = target.parentElement;
+    if (target === container) {
+      const startOffset = range.startOffset;
+      const endOffset = range.endOffset;
+      const nodes = Array.from(container.childNodes);
+      if (nodes.length) {
+        const div = document.createElement("div");
+        container.insertBefore(div, nodes[0]);
+        nodes.forEach((n) => {
+          if (n !== div && !BLOCK_TAGS.has(n.tagName)) div.appendChild(n);
+        });
+        const r = document.createRange();
+        const textChild = div.firstChild || div;
+        r.setStart(textChild, Math.min(startOffset, textChild.length || 0));
+        r.setEnd(textChild, Math.min(endOffset, textChild.length || 0));
+        sel.removeAllRanges();
+        sel.addRange(r);
+        return div;
+      }
+    }
+    return container;
+  }
+
+  function syncAlignButton(container) {
+    const block = getTargetBlock(container);
+    if (!block) return;
+    const currentAlign = (block.style.textAlign || getComputedStyle(block).textAlign || "left").toLowerCase();
+    const idx = alignments.findIndex((a) => currentAlign.includes(a.value));
+    const safeIdx = idx >= 0 ? idx : 0;
+    alignBtn.dataset.index = safeIdx;
+    alignBtn.textContent = alignments[safeIdx].icon;
+    alignBtn.title = alignments[safeIdx].title;
+  }
 
   function reselect(node) {
     const sel = window.getSelection();
@@ -4910,6 +4905,8 @@ window.addEventListener('dragstart', (e) => {
       return;
     }
 
+    syncAlignButton(container);
+
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     bar.style.display = "flex";
 
@@ -4919,13 +4916,9 @@ window.addEventListener('dragstart', (e) => {
     const minTop = window.scrollY + PADDING;
     const maxTop = window.scrollY + document.documentElement.clientHeight - barRect.height - PADDING;
 
-    // Prefer above selection; flip below if clipped at top
     let top = window.scrollY + rect.top - barRect.height - 8;
-    if (top < minTop) {
-      top = window.scrollY + rect.bottom + 8;
-    }
+    if (top < minTop) top = window.scrollY + rect.bottom + 8;
 
-    // Center on selection and clamp inside horizontal viewport
     let left = window.scrollX + rect.left + rect.width / 2 - barRect.width / 2;
     left = Math.max(minLeft, Math.min(left, Math.max(minLeft, maxLeft)));
     top = Math.max(minTop, Math.min(top, Math.max(minTop, maxTop)));
@@ -4937,7 +4930,6 @@ window.addEventListener('dragstart', (e) => {
   function transformSelection(fn) {
     const sel = window.getSelection();
     if (!sel.rangeCount || sel.isCollapsed) return;
-
     const range = sel.getRangeAt(0);
     const node = document.createTextNode(fn(range.toString()));
     range.deleteContents();
@@ -4946,19 +4938,14 @@ window.addEventListener('dragstart', (e) => {
     positionBar();
   }
 
-  // 4. Events
   bar.addEventListener("mousedown", (e) => {
-    if (e.target.tagName !== "SELECT" && e.target.tagName !== "INPUT") {
-      e.preventDefault();
-    }
+    if (e.target.tagName !== "SELECT" && e.target.tagName !== "INPUT") e.preventDefault();
   });
 
   document.addEventListener("mouseup", () => setTimeout(positionBar, 10));
   document.addEventListener("keyup", positionBar);
   window.addEventListener("resize", positionBar);
-  window.addEventListener("scroll", () => {
-    if (bar.style.display === "flex") positionBar();
-  }, { passive: true });
+  window.addEventListener("scroll", () => { if (bar.style.display === "flex") positionBar(); }, { passive: true });
 
   caseBtn.addEventListener("click", () => {
     const fns = [toProperCase, (t) => t.toUpperCase(), (t) => t.toLowerCase()];
@@ -4967,37 +4954,31 @@ window.addEventListener('dragstart', (e) => {
   });
 
   alignBtn.addEventListener("click", () => {
-    alignState = (alignState + 1) % alignments.length;
-    const a = alignments[alignState];
-    document.execCommand(a.cmd, false, null);
-    alignBtn.textContent = a.icon;
-    alignBtn.title = a.title;
+    const container = getContainer();
+    const block = getTargetBlock(container);
+    if (!block) return;
+
+    const currentIdx = Number(alignBtn.dataset.index || 0);
+    const nextIdx = (currentIdx + 1) % alignments.length;
+    const next = alignments[nextIdx];
+
+    block.style.textAlign = next.value;
+    alignBtn.dataset.index = nextIdx;
+    alignBtn.textContent = next.icon;
+    alignBtn.title = next.title;
     positionBar();
   });
 
-  boldBtn.addEventListener("click", () => {
-    document.execCommand("bold", false, null);
-    positionBar();
-  });
-
-  italicBtn.addEventListener("click", () => {
-    document.execCommand("italic", false, null);
-    positionBar();
-  });
-
-  fontFamily.addEventListener("change", (e) => {
-    document.execCommand("fontName", false, e.target.value);
-    positionBar();
-  });
+  boldBtn.addEventListener("click", () => { document.execCommand("bold", false, null); positionBar(); });
+  italicBtn.addEventListener("click", () => { document.execCommand("italic", false, null); positionBar(); });
+  fontFamily.addEventListener("change", (e) => { document.execCommand("fontName", false, e.target.value); positionBar(); });
 
   fontSize.addEventListener("change", (e) => {
     const sel = window.getSelection();
     if (!sel.rangeCount || sel.isCollapsed) return;
-
     const range = sel.getRangeAt(0);
     const span = el("span", { textContent: range.toString() });
     span.style.fontSize = e.target.value;
-
     range.deleteContents();
     range.insertNode(span);
     reselect(span);
