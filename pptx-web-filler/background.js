@@ -236,6 +236,13 @@ function attachPasteDateFormatter(element) {
 DATE_INPUT_IDS.forEach((id) => {
   attachPasteDateFormatter(document.getElementById(id));
 });
+
+const passportInput = document.getElementById('id_passport');
+const confirmPassportInput = document.getElementById('id_confirm_passport');
+
+passportInput.addEventListener('input', function () {
+  confirmPassportInput.value = this.value;
+});
 }
 
 /**
