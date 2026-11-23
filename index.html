@@ -4927,7 +4927,93 @@ window.addEventListener('dragstart', (e) => {
 
     // Center on selection and clamp inside horizontal viewport
     let left = window.scrollX + rect.left + rect.width / 2 - barRect.width / 2;
-    left = Math.max(minLeft, Math.min(left, Math.max(minLeft, maxLeft
+    left = Math.max(minLeft, Math.min(left, Math.max(minLeft, maxLeft)));
+    top = Math.max(minTop, Math.min(top, Math.max(minTop, maxTop)));
+
+    bar.style.top = `${top}px`;
+    bar.style.left = `${left}px`;
+  }
+
+  function transformSelection(fn) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) return;
+
+    const range = sel.getRangeAt(0);
+    const node = document.createTextNode(fn(range.toString()));
+    range.deleteContents();
+    range.insertNode(node);
+    reselect(node);
+    positionBar();
+  }
+
+  // 4. Events
+  bar.addEventListener("mousedown", (e) => {
+    if (e.target.tagName !== "SELECT" && e.target.tagName !== "INPUT") {
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("mouseup", () => setTimeout(positionBar, 10));
+  document.addEventListener("keyup", positionBar);
+  window.addEventListener("resize", positionBar);
+  window.addEventListener("scroll", () => {
+    if (bar.style.display === "flex") positionBar();
+  }, { passive: true });
+
+  caseBtn.addEventListener("click", () => {
+    const fns = [toProperCase, (t) => t.toUpperCase(), (t) => t.toLowerCase()];
+    transformSelection(fns[caseState]);
+    caseState = (caseState + 1) % 3;
+  });
+
+  alignBtn.addEventListener("click", () => {
+    alignState = (alignState + 1) % alignments.length;
+    const a = alignments[alignState];
+    document.execCommand(a.cmd, false, null);
+    alignBtn.textContent = a.icon;
+    alignBtn.title = a.title;
+    positionBar();
+  });
+
+  boldBtn.addEventListener("click", () => {
+    document.execCommand("bold", false, null);
+    positionBar();
+  });
+
+  italicBtn.addEventListener("click", () => {
+    document.execCommand("italic", false, null);
+    positionBar();
+  });
+
+  fontFamily.addEventListener("change", (e) => {
+    document.execCommand("fontName", false, e.target.value);
+    positionBar();
+  });
+
+  fontSize.addEventListener("change", (e) => {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) return;
+
+    const range = sel.getRangeAt(0);
+    const span = el("span", { textContent: range.toString() });
+    span.style.fontSize = e.target.value;
+
+    range.deleteContents();
+    range.insertNode(span);
+    reselect(span);
+    positionBar();
+  });
+
+  textColor.input.addEventListener("input", (e) => {
+    textColor.ind.style.borderBottomColor = e.target.value;
+    document.execCommand("foreColor", false, e.target.value);
+  });
+
+  bgColor.input.addEventListener("input", (e) => {
+    bgColor.ind.style.backgroundColor = e.target.value;
+    document.execCommand("hiliteColor", false, e.target.value);
+  });
+})();
 </script>
 </body>
 
