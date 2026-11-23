@@ -115,6 +115,30 @@ document.querySelector("#id_traveled_country").value = "SA";
 document.querySelector("#id_traveled_country").dispatchEvent(new Event("change", { bubbles: true }));
 document.querySelector("#id_traveled_country").dispatchEvent(new Event("input", { bubbles: true }));
 
+document.querySelector("#id_gender").value = "male";
+document.querySelector("#id_gender").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_gender").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_marital_status").value = "unmarried";
+document.querySelector("#id_marital_status").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_marital_status").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_passport_issue_place").value = "Pakistan";
+document.querySelector("#id_passport_issue_place").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_passport_issue_place").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_email").value = "shehzadahmad1123@gmail.com";
+document.querySelector("#id_email").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_email").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_phone").value = "+923007373148";
+document.querySelector("#id_phone").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_phone").dispatchEvent(new Event("input", { bubbles: true }));
+
+document.querySelector("#id_applied_position").value = "31";
+document.querySelector("#id_applied_position").dispatchEvent(new Event("change", { bubbles: true }));
+document.querySelector("#id_applied_position").dispatchEvent(new Event("input", { bubbles: true }));
+
 document.querySelector("#id_appointment_type_0").checked = true;
 document.querySelector("#id_appointment_type_0").dispatchEvent(new Event("change", { bubbles: true }));
 document.querySelector("#id_appointment_type_0").dispatchEvent(new Event("input", { bubbles: true }));
