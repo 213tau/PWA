@@ -4717,6 +4717,334 @@ window.addEventListener('dragstart', (e) => {
   
   lastDragTime = now;
 }, { passive: true });
+
+(() => {
+  const TARGET_SELECTOR = "#output"; // Change to your container selector or "body"
+
+  // 1. Inject CSS dynamically
+  const style = document.createElement("style");
+  style.textContent = `
+    #ft-floating-toolbar {
+      position: absolute;
+      display: none;
+      align-items: center;
+      gap: 4px;
+      background: #ffffff;
+      padding: 6px 10px;
+      border-radius: 8px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
+      z-index: 9999;
+      user-select: none;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #ft-floating-toolbar button,
+    #ft-floating-toolbar select {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #222222;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 30px;
+    }
+    #ft-floating-toolbar button:hover,
+    #ft-floating-toolbar select:hover {
+      background: #f0f2f5;
+    }
+    .ft-sep {
+      width: 1px;
+      height: 20px;
+      background: #e0e0e0;
+      margin: 0 4px;
+    }
+    .ft-color-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .ft-color-wrap:hover {
+      background: #f0f2f5;
+    }
+    .ft-color-wrap input[type="color"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+    .ft-color-a {
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1;
+      border-bottom: 3px solid #e11d48;
+      pointer-events: none;
+    }
+    .ft-color-bg {
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 3px;
+      background: #fef08a;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // 2. Build Toolbar DOM dynamically
+  const toolbar = document.createElement("div");
+  toolbar.id = "ft-floating-toolbar";
+
+  const createSep = () => {
+    const sep = document.createElement("span");
+    sep.className = "ft-sep";
+    return sep;
+  };
+
+  const createSelect = (id, title, options, selectedValue) => {
+    const select = document.createElement("select");
+    select.id = id;
+    select.title = title;
+    options.forEach(({ label, value }) => {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      if (value === selectedValue) opt.selected = true;
+      select.appendChild(opt);
+    });
+    return select;
+  };
+
+  const createButton = (id, title, htmlContent) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = id;
+    btn.title = title;
+    btn.innerHTML = htmlContent;
+    return btn;
+  };
+
+  const createColorPicker = (inputId, indicatorId, title, indicatorClass, defaultColor) => {
+    const label = document.createElement("label");
+    label.className = "ft-color-wrap";
+    label.title = title;
+
+    const indicator = document.createElement("span");
+    indicator.id = indicatorId;
+    indicator.className = indicatorClass;
+    indicator.textContent = indicatorClass === "ft-color-a" ? "A" : "ab";
+
+    const input = document.createElement("input");
+    input.type = "color";
+    input.id = inputId;
+    input.value = defaultColor;
+
+    label.append(indicator, input);
+    return { label, indicator, input };
+  };
+
+  const fontFamilySelect = createSelect(
+    "ft-font-family",
+    "Font Family",
+    [
+      { label: "Arial", value: "Arial" },
+      { label: "Georgia", value: "Georgia" },
+      { label: "Courier New", value: "'Courier New'" },
+      { label: "Times New Roman", value: "'Times New Roman'" },
+      { label: "Verdana", value: "Verdana" }
+    ],
+    "Arial"
+  );
+
+  const fontSizeSelect = createSelect(
+    "ft-font-size",
+    "Font Size",
+    [
+      { label: "12", value: "12px" },
+      { label: "14", value: "14px" },
+      { label: "16", value: "16px" },
+      { label: "20", value: "20px" },
+      { label: "24", value: "24px" },
+      { label: "32", value: "32px" }
+    ],
+    "16px"
+  );
+
+  const boldBtn = createButton("ft-bold", "Bold", "<b>B</b>");
+  const italicBtn = createButton("ft-italic", "Italic", "<i>I</i>");
+  const textColor = createColorPicker("ft-text-color", "ft-text-ind", "Text Color", "ft-color-a", "#e11d48");
+  const bgColor = createColorPicker("ft-bg-color", "ft-bg-ind", "Background Color", "ft-color-bg", "#fef08a");
+  const caseBtn = createButton("ft-case", "Cycle Case: Proper / UPPER / lower", "Aa");
+  const alignBtn = createButton("ft-align", "Cycle Alignment: Left / Center / Right / Justify", "≡ Left");
+
+  toolbar.append(
+    fontFamilySelect,
+    fontSizeSelect,
+    createSep(),
+    boldBtn,
+    italicBtn,
+    createSep(),
+    textColor.label,
+    bgColor.label,
+    createSep(),
+    caseBtn,
+    alignBtn
+  );
+
+  document.body.appendChild(toolbar);
+
+  // 3. Selection, Cycling & Formatting Logic
+  let caseState = 0; // 0: Proper Case -> 1: UPPERCASE -> 2: lowercase
+  let alignState = 0; // 0: Left -> 1: Center -> 2: Right -> 3: Justify
+
+  const alignments = [
+    { cmd: "justifyLeft", label: "≡ Left" },
+    { cmd: "justifyCenter", label: "≡ Center" },
+    { cmd: "justifyRight", label: "≡ Right" },
+    { cmd: "justifyFull", label: "≡ Justify" }
+  ];
+
+  function getContainer() {
+    return document.querySelector(TARGET_SELECTOR) || document.body;
+  }
+
+  function toProperCase(text) {
+    return text.toLowerCase().replace(/\b\p{L}/gu, char => char.toUpperCase());
+  }
+
+  function reselectNode(node) {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function updateToolbarPosition() {
+    const container = getContainer();
+    const selection = window.getSelection();
+
+    if (
+      !selection.rangeCount ||
+      selection.isCollapsed ||
+      !container.contains(selection.anchorNode)
+    ) {
+      toolbar.style.display = "none";
+      return;
+    }
+
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    toolbar.style.display = "flex";
+
+    const toolbarRect = toolbar.getBoundingClientRect();
+    let top = window.scrollY + rect.top - toolbarRect.height - 10;
+    let left = window.scrollX + rect.left + rect.width / 2 - toolbarRect.width / 2;
+
+    if (top < window.scrollY + 10) {
+      top = window.scrollY + rect.bottom + 10;
+    }
+    if (left < 10) {
+      left = 10;
+    }
+
+    toolbar.style.top = `${top}px`;
+    toolbar.style.left = `${left}px`;
+  }
+
+  function modifySelectedText(transformerFn) {
+    const selection = window.getSelection();
+    if (!selection.rangeCount || selection.isCollapsed) return;
+
+    const range = selection.getRangeAt(0);
+    const transformed = transformerFn(range.toString());
+
+    const textNode = document.createTextNode(transformed);
+    range.deleteContents();
+    range.insertNode(textNode);
+
+    reselectNode(textNode);
+    updateToolbarPosition();
+  }
+
+  toolbar.addEventListener("mousedown", (e) => {
+    if (e.target.tagName !== "SELECT" && e.target.tagName !== "INPUT") {
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("mouseup", () => setTimeout(updateToolbarPosition, 10));
+  document.addEventListener("keyup", updateToolbarPosition);
+
+  caseBtn.addEventListener("click", () => {
+    if (caseState === 0) {
+      modifySelectedText(toProperCase);
+    } else if (caseState === 1) {
+      modifySelectedText(text => text.toUpperCase());
+    } else {
+      modifySelectedText(text => text.toLowerCase());
+    }
+    caseState = (caseState + 1) % 3;
+  });
+
+  alignBtn.addEventListener("click", () => {
+    alignState = (alignState + 1) % alignments.length;
+    const current = alignments[alignState];
+    document.execCommand(current.cmd, false, null);
+    alignBtn.textContent = current.label;
+    updateToolbarPosition();
+  });
+
+  boldBtn.addEventListener("click", () => {
+    document.execCommand("bold", false, null);
+    updateToolbarPosition();
+  });
+
+  italicBtn.addEventListener("click", () => {
+    document.execCommand("italic", false, null);
+    updateToolbarPosition();
+  });
+
+  fontFamilySelect.addEventListener("change", (e) => {
+    document.execCommand("fontName", false, e.target.value);
+    updateToolbarPosition();
+  });
+
+  fontSizeSelect.addEventListener("change", (e) => {
+    const selection = window.getSelection();
+    if (!selection.rangeCount || selection.isCollapsed) return;
+
+    const range = selection.getRangeAt(0);
+    const span = document.createElement("span");
+    span.style.fontSize = e.target.value;
+    span.textContent = range.toString();
+
+    range.deleteContents();
+    range.insertNode(span);
+    reselectNode(span);
+    updateToolbarPosition();
+  });
+
+  textColor.input.addEventListener("input", (e) => {
+    textColor.indicator.style.borderBottomColor = e.target.value;
+    document.execCommand("foreColor", false, e.target.value);
+  });
+
+  bgColor.input.addEventListener("input", (e) => {
+    bgColor.indicator.style.backgroundColor = e.target.value;
+    document.execCommand("hiliteColor", false, e.target.value);
+  });
+})();
 </script>
 </body>
 
