@@ -159,6 +159,83 @@ if (firstNameInput) {
     firstNameInput.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
     firstNameInput.click();
 }
+const DATE_INPUT_IDS = [
+  "id_dob",
+  "id_passport_issue_date",
+  "id_passport_expiry_on",
+];
+
+const MONTHS = {
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
+};
+
+function formatDateFromPastedText(rawText) {
+  const cleaned = rawText.trim().replace(/\s+/g, " ");
+  // Matches formats like "24 Nov 2026", "5 mar 1998", or "24-Nov-2026"
+  const match = cleaned.match(/^(\d{1,2})[\s-]+([a-zA-Z]{3,})[\s-]+(\d{4})$/);
+  if (!match) return null;
+
+  const day = match[1].padStart(2, "0");
+  const monthKey = match[2].slice(0, 3).toLowerCase();
+  const year = match[3];
+  const month = MONTHS[monthKey];
+
+  if (!month) return null;
+
+  // Basic calendar validity check (e.g., rejects 31/02/2026)
+  const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+  const isValidDate =
+    parsedDate.getFullYear() === Number(year) &&
+    parsedDate.getMonth() === Number(month) - 1 &&
+    parsedDate.getDate() === Number(day);
+
+  return isValidDate ? `${day}/${month}/${year}` : null;
+}
+
+function attachPasteDateFormatter(element) {
+  if (!element) return;
+
+  element.addEventListener("paste", (event) => {
+    const pastedText = (event.clipboardData || window.clipboardData)?.getData("text");
+    if (!pastedText) return;
+
+    const formatted = formatDateFromPastedText(pastedText);
+    if (!formatted) return; // Leave normal paste behavior if format doesn't match
+
+    event.preventDefault();
+
+    if ("value" in element) {
+      const start = element.selectionStart ?? element.value.length;
+      const end = element.selectionEnd ?? element.value.length;
+      element.value =
+        element.value.slice(0, start) + formatted + element.value.slice(end);
+
+      const cursorPos = start + formatted.length;
+      if (typeof element.setSelectionRange === "function") {
+        element.setSelectionRange(cursorPos, cursorPos);
+      }
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (element.isContentEditable) {
+      document.execCommand("insertText", false, formatted);
+    }
+  });
+}
+
+DATE_INPUT_IDS.forEach((id) => {
+  attachPasteDateFormatter(document.getElementById(id));
+});
 }
 
 /**
