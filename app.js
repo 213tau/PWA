@@ -11695,3 +11695,198 @@ function toggleAllOCRFields() {
     btn.dataset.globalToggled = nextState ? "true" : "false";
   }
 }
+
+const DPI = 96;
+const A4_WIDTH_IN = 8.27;
+const A4_HEIGHT_IN = 11.69;
+const A4_WIDTH_PX = Math.round(A4_WIDTH_IN * DPI);   // ~794px
+const A4_HEIGHT_PX = Math.round(A4_HEIGHT_IN * DPI); // ~1122px
+
+function getBaseFilename(outputEl, fallbackBase = "a4-images-presentation") {
+  if (!outputEl) return fallbackBase;
+  const match = outputEl.textContent.match(/\d{5}-\d{7}-\d{1}/);
+  if (match) return match[0];
+  const userFilename = outputEl.querySelector("div")?.innerText.trim();
+  return userFilename ? userFilename.replace(/[\\/:*?"<>|]/g, "_") : fallbackBase;
+}
+
+function downloadFile(content, filename, mimeType) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+async function collectSlidesData() {
+  let imagesarray = Array.from(document.querySelectorAll("img"));
+
+  if (imagesarray.length && typeof images !== "undefined" && images.length > 0) {
+    imagesarray = await Promise.all(
+      images.map(async (e) => {
+        let src = e.img.src;
+        if (src.startsWith("blob:")) {
+          const response = await fetch(src);
+          const blob = await response.blob();
+          src = await blobToBase64(blob);
+        }
+        return { src };
+      })
+    );
+  }
+
+  const slides = [];
+
+  for (const img of imagesarray) {
+    const src = img.src || img.getAttribute?.("src");
+    if (!src || !src.startsWith("data:image")) continue;
+
+    const image = new Image();
+    image.src = src;
+    await new Promise((resolve) => {
+      image.onload = resolve;
+    });
+
+    const maxWidthPx = A4_WIDTH_IN * DPI;
+    const maxHeightPx = A4_HEIGHT_IN * DPI;
+    let finalSrc = src;
+
+    if (image.naturalWidth > maxWidthPx * 2 || image.naturalHeight > maxHeightPx * 2) {
+      finalSrc = await resizeImage(src, maxWidthPx, maxHeightPx);
+    }
+
+    const imgWidthIn = image.naturalWidth / DPI;
+    const imgHeightIn = image.naturalHeight / DPI;
+    const aspectRatio = imgHeightIn / imgWidthIn;
+    const widthInInches = A4_WIDTH_IN;
+    const heightInInches = widthInInches * aspectRatio;
+    const yOffsetIn = Math.max((A4_HEIGHT_IN - heightInInches) / 2, 0);
+
+    slides.push({
+      type: "image",
+      data: finalSrc,
+      xIn: 0,
+      yIn: yOffsetIn,
+      wIn: widthInInches,
+      hIn: heightInInches,
+    });
+  }
+
+  const outputEl = document.querySelector("#output");
+  let outputLines = [];
+
+  if (outputEl && outputEl.textContent.trim() !== "") {
+    outputLines = Array.from(outputEl.children)
+      .map((div) => div.innerText.trim())
+      .filter((line) => line.length > 0);
+
+    slides.push({
+      type: "text",
+      text: outputLines.join("\n"),
+      lines: outputLines,
+      xIn: 0.5,
+      yIn: 0.5,
+      wIn: A4_WIDTH_IN - 1,
+      hIn: A4_HEIGHT_IN - 1,
+      fontSizePt: 18,
+      color: "#363636",
+    });
+  }
+
+  const baseName = getBaseFilename(outputEl);
+  return { slides, outputLines, baseName };
+}
+
+function buildJsonPayload({ slides, outputLines, baseName }) {
+  return JSON.stringify(
+    {
+      title: baseName,
+      layout: {
+        name: "A4",
+        widthIn: A4_WIDTH_IN,
+        heightIn: A4_HEIGHT_IN,
+        dpi: DPI,
+      },
+      outputLines,
+      slides,
+    },
+    null,
+    2
+  );
+}
+
+function buildSvgDocument({ slides }) {
+  const pageGapPx = 24;
+  const totalHeightPx =
+    slides.length > 0
+      ? slides.length * A4_HEIGHT_PX + (slides.length - 1) * pageGapPx
+      : A4_HEIGHT_PX;
+
+  const pagesMarkup = slides
+    .map((slide, index) => {
+      const pageY = index * (A4_HEIGHT_PX + pageGapPx);
+
+      let contentMarkup = "";
+      if (slide.type === "image") {
+        const xPx = slide.xIn * DPI;
+        const yPx = slide.yIn * DPI;
+        const wPx = slide.wIn * DPI;
+        const hPx = slide.hIn * DPI;
+
+        contentMarkup = `<image href="${escapeXml(slide.data)}" x="${xPx}" y="${yPx}" width="${wPx}" height="${hPx}" preserveAspectRatio="none" />`;
+      } else if (slide.type === "text") {
+        const xPx = slide.xIn * DPI;
+        const yPx = slide.yIn * DPI;
+        const fontPx = Math.round(slide.fontSizePt * (DPI / 72));
+        const lineHeightPx = Math.round(fontPx * 1.35);
+
+        const tspans = slide.lines
+          .map((line, lineIdx) => {
+            const dy = lineIdx === 0 ? 0 : lineHeightPx;
+            return `<tspan x="${xPx}" dy="${dy}">${escapeXml(line)}</tspan>`;
+          })
+          .join("");
+
+        contentMarkup = `<text x="${xPx}" y="${yPx + fontPx}" fill="${escapeXml(slide.color)}" font-family="sans-serif" font-size="${fontPx}">${tspans}</text>`;
+      }
+
+      return `
+  <g transform="translate(0, ${pageY})">
+    <rect x="0" y="0" width="${A4_WIDTH_PX}" height="${A4_HEIGHT_PX}" fill="#ffffff" stroke="#d0d0d0" stroke-width="1" />
+    ${contentMarkup}
+  </g>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${A4_WIDTH_PX} ${totalHeightPx}" width="${A4_WIDTH_PX}" height="${totalHeightPx}">
+${pagesMarkup}
+</svg>`;
+}
+
+document.querySelector("#generatejsonorsvg").addEventListener("click", async (event) => {
+  // Read format from button attribute, or prompt/toggle as needed
+  const format = (event.currentTarget.dataset.format || "json").toLowerCase();
+  const data = await collectSlidesData();
+
+  if (format === "svg") {
+    const svgContent = buildSvgDocument(data);
+    downloadFile(svgContent, `${data.baseName}.svg`, "image/svg+xml;charset=utf-8");
+  } else {
+    const jsonContent = buildJsonPayload(data);
+    downloadFile(jsonContent, `${data.baseName}.json`, "application/json;charset=utf-8");
+  }
+});

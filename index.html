@@ -789,6 +789,8 @@ pre {
         <button id="ocrToggleBtn" data-global-toggled="false" onclick="toggleAllOCRFields()">Toggle Format</button>
         <button onclick="saveoutput()">Load Output</button>
         <button id="urduStyle">Urdu Style (Jameel Noori)</button>
+        <button id="generatejsonorsvg" data-format="json">Export JSON</button>
+        <!-- Or change data-format="svg" for SVG export, or wire up a selector/toggle -->
         <button id="generatepptx">Download A4 PPTX</button>
         <button onclick="editoutput()">Edit Output</button>
         <button onclick="textup()">TextUp</button>
@@ -4808,19 +4810,21 @@ window.addEventListener('dragstart', (e) => {
 
   const boldBtn = el("button", { type: "button", id: "ft-b", title: "Bold", innerHTML: "<b>B</b>" });
   const italicBtn = el("button", { type: "button", id: "ft-i", title: "Italic", innerHTML: "<i>I</i>" });
+  const underlineBtn = el("button", { type: "button", id: "ft-u", title: "Underline", innerHTML: "<u>U</u>" });
   const textColor = makeColor("ft-tc", "ft-tc-i", "Text Color", "ft-a", "#e11d48", "A");
   const bgColor = makeColor("ft-bc", "ft-bc-i", "Background", "ft-bg", "#fef08a", "ab");
   const caseBtn = el("button", { type: "button", id: "ft-case", title: "Proper / UPPER / lower", textContent: "Aa" });
   const formatBtn = el("button", { type: "button", id: "ft-fmt", title: "Cycle CNIC / Date / Phone Format", textContent: "#" });
+  const dirBtn = el("button", { type: "button", id: "ft-dir", title: "Direction: LTR / RTL", textContent: "⇄" });
   const alignBtn = el("button", { type: "button", id: "ft-align", title: "Align Left", textContent: "⇤" });
   const justifyBtn = el("button", { type: "button", id: "ft-justify", title: "Justify", textContent: "≡" });
 
   const bar = el("div", { id: "ft-bar" }, [
     fontFamily, fontSize, el("span", { className: "ft-div" }),
-    boldBtn, italicBtn, el("span", { className: "ft-div" }),
+    boldBtn, italicBtn, underlineBtn, el("span", { className: "ft-div" }),
     textColor.wrap, bgColor.wrap, el("span", { className: "ft-div" }),
     caseBtn, formatBtn, el("span", { className: "ft-div" }),
-    alignBtn, justifyBtn
+    dirBtn, alignBtn, justifyBtn
   ]);
   document.body.appendChild(bar);
 
@@ -4876,10 +4880,8 @@ window.addEventListener('dragstart', (e) => {
       if (sep === ".") return { d: p1, m: p2, y, currentIdx: 1 };
       if (sep === "/") return { d: p1, m: p2, y, currentIdx: 3 };
       if (sep === "-") {
-        // Distinguish dd-mm-yyyy (idx 2) vs mm-dd-yyyy (idx 5)
         if (p1 > 12) return { d: p1, m: p2, y, currentIdx: 2 };
         if (p2 > 12) return { d: p2, m: p1, y, currentIdx: 5 };
-        // Default ambiguous hyphenated date: treat as dd-mm-yyyy if <= 12, unless user is already cycling
         return { d: p1, m: p2, y, currentIdx: 2 };
       }
     }
@@ -4905,8 +4907,8 @@ window.addEventListener('dragstart', (e) => {
     // 2. Phone (+92 3dd ddddddd -> 03ddddddddd -> 03dd-ddddddd -> +923ddddddddd -> +92 3dd ddddddd)
     const phoneMatch = trimmed.match(/^(?:\+92[\s-]?|0)(3\d{2})[\s-]?(\d{7})$/);
     if (phoneMatch) {
-      const code = phoneMatch[1]; // 3dd
-      const num = phoneMatch[2];  // ddddddd
+      const code = phoneMatch[1];
+      const num = phoneMatch[2];
       const variants = [
         `+92 ${code} ${num}`,
         `0${code}${num}`,
@@ -4918,7 +4920,7 @@ window.addEventListener('dragstart', (e) => {
       return leading + next + trailing;
     }
 
-    // 3. Date: Start from DD MMM YYYY or dd.mm.yyyy -> dd-mm-yyyy -> dd/mm/yyyy -> yyyy-mm-dd -> mm-dd-yyyy
+    // 3. Date
     const dateInfo = parseDateParts(trimmed);
     if (dateInfo) {
       const { d, m, y } = dateInfo;
@@ -4970,8 +4972,6 @@ window.addEventListener('dragstart', (e) => {
         const hasChildBlock = Array.from(node.children).some((c) => BLOCK_TAGS.has(c.tagName));
         if (hasChildBlock) return NodeFilter.FILTER_SKIP;
 
-        // Ensure the selection actually overlaps content inside this specific block,
-        // not merely a boundary offset at the edge of an adjacent block
         const nodeRange = document.createRange();
         nodeRange.selectNodeContents(node);
 
@@ -4984,7 +4984,6 @@ window.addEventListener('dragstart', (e) => {
           return NodeFilter.FILTER_SKIP;
         }
 
-        // Ignore blocks where only zero-length boundary overlap occurs
         const overlapStart =
           range.compareBoundaryPoints(Range.START_TO_START, nodeRange) > 0
             ? [range.startContainer, range.startOffset]
@@ -5063,8 +5062,8 @@ window.addEventListener('dragstart', (e) => {
     reselect(wrapper);
     return [wrapper];
   }
-  
-  function syncAlignButtons(container) {
+
+  function syncBlockButtons(container) {
     const sel = window.getSelection();
     if (!sel.rangeCount) return;
     let node = sel.getRangeAt(0).startContainer;
@@ -5073,14 +5072,23 @@ window.addEventListener('dragstart', (e) => {
       node = node.parentElement;
     }
     const target = node || container;
-    const currentAlign = (target.style.textAlign || getComputedStyle(target).textAlign || "left").toLowerCase();
+    const computed = getComputedStyle(target);
 
+    // Sync Text Align
+    const currentAlign = (target.style.textAlign || computed.textAlign || "left").toLowerCase();
     justifyBtn.classList.toggle("active", currentAlign === "justify");
     const idx = alignments.findIndex((a) => currentAlign.includes(a.value));
     const safeIdx = idx >= 0 ? idx : 0;
     alignBtn.dataset.index = safeIdx;
     alignBtn.textContent = alignments[safeIdx].icon;
     alignBtn.title = alignments[safeIdx].title;
+
+    // Sync Direction (LTR / RTL)
+    const currentDir = (target.getAttribute("dir") || target.style.direction || computed.direction || "ltr").toLowerCase();
+    const isRtl = currentDir === "rtl";
+    dirBtn.classList.toggle("active", isRtl);
+    dirBtn.textContent = isRtl ? "RTL" : "LTR";
+    dirBtn.title = isRtl ? "Direction: RTL (Click for LTR)" : "Direction: LTR (Click for RTL)";
   }
 
   function reselect(node) {
@@ -5100,7 +5108,7 @@ window.addEventListener('dragstart', (e) => {
       return;
     }
 
-    syncAlignButtons(container);
+    syncBlockButtons(container);
 
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     bar.style.display = "flex";
@@ -5152,6 +5160,24 @@ window.addEventListener('dragstart', (e) => {
     transformSelection(cycleFormat);
   });
 
+  dirBtn.addEventListener("click", () => {
+    const container = getContainer();
+    const blocks = getTargetBlocks(container);
+    if (!blocks.length) return;
+
+    const isCurrentlyRtl = blocks.every((b) =>
+      (b.getAttribute("dir") || b.style.direction || getComputedStyle(b).direction).toLowerCase() === "rtl"
+    );
+    const nextDir = isCurrentlyRtl ? "ltr" : "rtl";
+
+    blocks.forEach((b) => {
+      b.setAttribute("dir", nextDir);
+      b.style.direction = nextDir;
+    });
+
+    positionBar();
+  });
+
   alignBtn.addEventListener("click", () => {
     const container = getContainer();
     const blocks = getTargetBlocks(container);
@@ -5184,6 +5210,7 @@ window.addEventListener('dragstart', (e) => {
 
   boldBtn.addEventListener("click", () => { document.execCommand("bold", false, null); positionBar(); });
   italicBtn.addEventListener("click", () => { document.execCommand("italic", false, null); positionBar(); });
+  underlineBtn.addEventListener("click", () => { document.execCommand("underline", false, null); positionBar(); });
   fontFamily.addEventListener("change", (e) => { document.execCommand("fontName", false, e.target.value); positionBar(); });
 
   fontSize.addEventListener("change", (e) => {
