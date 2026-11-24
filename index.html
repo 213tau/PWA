@@ -4758,7 +4758,7 @@ window.addEventListener('dragstart', (e) => {
       white-space: nowrap;
     }
     #ft-bar select { max-width: 84px; padding-right: 2px; }
-    #ft-bar button:hover, #ft-bar select:hover { background: #f1f3f5; }
+    #ft-bar button:hover, #ft-bar select:hover, #ft-bar button.active { background: #f1f3f5; }
     .ft-div { width: 1px; height: 16px; background: #e5e7eb; margin: 0 2px; flex-shrink: 0; }
     .ft-color {
       position: relative;
@@ -4811,13 +4811,16 @@ window.addEventListener('dragstart', (e) => {
   const textColor = makeColor("ft-tc", "ft-tc-i", "Text Color", "ft-a", "#e11d48", "A");
   const bgColor = makeColor("ft-bc", "ft-bc-i", "Background", "ft-bg", "#fef08a", "ab");
   const caseBtn = el("button", { type: "button", id: "ft-case", title: "Proper / UPPER / lower", textContent: "Aa" });
+  const formatBtn = el("button", { type: "button", id: "ft-fmt", title: "Cycle CNIC / Date / Phone Format", textContent: "#" });
   const alignBtn = el("button", { type: "button", id: "ft-align", title: "Align Left", textContent: "⇤" });
+  const justifyBtn = el("button", { type: "button", id: "ft-justify", title: "Justify", textContent: "≡" });
 
   const bar = el("div", { id: "ft-bar" }, [
     fontFamily, fontSize, el("span", { className: "ft-div" }),
     boldBtn, italicBtn, el("span", { className: "ft-div" }),
     textColor.wrap, bgColor.wrap, el("span", { className: "ft-div" }),
-    caseBtn, alignBtn
+    caseBtn, formatBtn, el("span", { className: "ft-div" }),
+    alignBtn, justifyBtn
   ]);
   document.body.appendChild(bar);
 
@@ -4825,62 +4828,215 @@ window.addEventListener('dragstart', (e) => {
   const alignments = [
     { value: "left", icon: "⇤", title: "Align Left" },
     { value: "center", icon: "⇥⇤", title: "Align Center" },
-    { value: "right", icon: "⇥", title: "Align Right" },
-    { value: "justify", icon: "≡", title: "Justify" }
+    { value: "right", icon: "⇥", title: "Align Right" }
   ];
 
   const getContainer = () => document.querySelector(TARGET_SELECTOR) || document.body;
   const toProperCase = (str) => str.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
-  // Find nearest block inside container, or wrap bare text/inline run in a <div>
-  function getTargetBlock(container) {
-    const sel = window.getSelection();
-    if (!sel.rangeCount) return null;
+  // --- Smart Format Cycler (CNIC / Date / Phone) ---
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const MONTH_MAP = {
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+    may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12
+  };
+  const pad2 = (n) => String(n).padStart(2, "0");
 
-    let node = sel.getRangeAt(0).startContainer;
-    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+  function parseDateParts(str) {
+    const clean = str.trim().replace(/,/g, "");
+    let d, m, y;
 
-    while (node && node !== container) {
-      if (BLOCK_TAGS.has(node.tagName)) return node;
-      node = node.parentElement;
+    // 1. DD MMM YYYY (e.g., 24 Nov 2026)
+    let match = clean.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+    if (match && MONTH_MAP[match[2].toLowerCase()]) {
+      d = Number(match[1]);
+      m = MONTH_MAP[match[2].toLowerCase()];
+      y = Number(match[3]);
+      return { d, m, y, currentIdx: 0 };
     }
 
-    // If selection is directly inside container with no inner block, wrap current line/range
-    const range = sel.getRangeAt(0);
-    const wrapper = document.createElement("div");
-    const blockRange = document.createRange();
-    blockRange.setStart(container, 0);
-    blockRange.setEnd(range.startContainer, range.startOffset);
+    // 2. YYYY-MM-DD (ISO)
+    match = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (match) {
+      y = Number(match[1]);
+      m = Number(match[2]);
+      d = Number(match[3]);
+      return { d, m, y, currentIdx: 4 };
+    }
 
-    // Move only inline nodes around the selection into a block wrapper
-    let target = range.startContainer;
-    if (target.nodeType === Node.TEXT_NODE) target = target.parentElement;
-    if (target === container) {
-      const startOffset = range.startOffset;
-      const endOffset = range.endOffset;
-      const nodes = Array.from(container.childNodes);
-      if (nodes.length) {
-        const div = document.createElement("div");
-        container.insertBefore(div, nodes[0]);
-        nodes.forEach((n) => {
-          if (n !== div && !BLOCK_TAGS.has(n.tagName)) div.appendChild(n);
-        });
-        const r = document.createRange();
-        const textChild = div.firstChild || div;
-        r.setStart(textChild, Math.min(startOffset, textChild.length || 0));
-        r.setEnd(textChild, Math.min(endOffset, textChild.length || 0));
-        sel.removeAllRanges();
-        sel.addRange(r);
-        return div;
+    // 3. Separated by ., -, or /
+    match = clean.match(/^(\d{1,2})([.\-/])(\d{1,2})\2(\d{4})$/);
+    if (match) {
+      const p1 = Number(match[1]);
+      const sep = match[2];
+      const p2 = Number(match[3]);
+      y = Number(match[4]);
+
+      if (sep === ".") return { d: p1, m: p2, y, currentIdx: 1 };
+      if (sep === "/") return { d: p1, m: p2, y, currentIdx: 3 };
+      if (sep === "-") {
+        // Distinguish dd-mm-yyyy (idx 2) vs mm-dd-yyyy (idx 5)
+        if (p1 > 12) return { d: p1, m: p2, y, currentIdx: 2 };
+        if (p2 > 12) return { d: p2, m: p1, y, currentIdx: 5 };
+        // Default ambiguous hyphenated date: treat as dd-mm-yyyy if <= 12, unless user is already cycling
+        return { d: p1, m: p2, y, currentIdx: 2 };
       }
     }
-    return container;
+    return null;
   }
 
-  function syncAlignButton(container) {
-    const block = getTargetBlock(container);
-    if (!block) return;
-    const currentAlign = (block.style.textAlign || getComputedStyle(block).textAlign || "left").toLowerCase();
+  let lastDateCycle = { key: "", idx: -1 };
+
+  function cycleFormat(raw) {
+    const trimmed = raw.trim();
+    const leading = raw.match(/^\s*/)[0];
+    const trailing = raw.match(/\s*$/)[0];
+
+    // 1. CNIC: 13 digits (ddddd-ddddddd-d <-> ddddddddddddd)
+    const cnicMatch = trimmed.match(/^(\d{5})-?(\d{7})-?(\d)$/);
+    if (cnicMatch) {
+      const formatted = trimmed.includes("-")
+        ? `${cnicMatch[1]}${cnicMatch[2]}${cnicMatch[3]}`
+        : `${cnicMatch[1]}-${cnicMatch[2]}-${cnicMatch[3]}`;
+      return leading + formatted + trailing;
+    }
+
+    // 2. Phone (+92 3dd ddddddd -> 03ddddddddd -> 03dd-ddddddd -> +923ddddddddd -> +92 3dd ddddddd)
+    const phoneMatch = trimmed.match(/^(?:\+92[\s-]?|0)(3\d{2})[\s-]?(\d{7})$/);
+    if (phoneMatch) {
+      const code = phoneMatch[1]; // 3dd
+      const num = phoneMatch[2];  // ddddddd
+      const variants = [
+        `+92 ${code} ${num}`,
+        `0${code}${num}`,
+        `0${code}-${num}`,
+        `+92${code}${num}`
+      ];
+      const idx = variants.indexOf(trimmed);
+      const next = variants[(idx + 1) % variants.length];
+      return leading + next + trailing;
+    }
+
+    // 3. Date: DD MMM YYYY -> dd.mm.yyyy -> dd-mm-yyyy -> dd/mm/yyyy -> yyyy-mm-dd -> mm-dd-yyyy
+    const dateInfo = parseDateParts(trimmed);
+    if (dateInfo) {
+      const { d, m, y } = dateInfo;
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        const variants = [
+          `${pad2(d)} ${MONTHS[m - 1]} ${y}`,
+          `${pad2(d)}.${pad2(m)}.${y}`,
+          `${pad2(d)}-${pad2(m)}-${y}`,
+          `${pad2(d)}/${pad2(m)}/${y}`,
+          `${y}-${pad2(m)}-${pad2(d)}`,
+          `${pad2(m)}-${pad2(d)}-${y}`
+        ];
+        const canonicalKey = `${y}-${m}-${d}`;
+        let currentIdx = variants.indexOf(trimmed);
+        if (lastDateCycle.key === canonicalKey && lastDateCycle.idx !== -1) {
+          currentIdx = lastDateCycle.idx;
+        }
+        const nextIdx = (currentIdx + 1) % variants.length;
+        lastDateCycle = { key: canonicalKey, idx: nextIdx };
+        return leading + variants[nextIdx] + trailing;
+      }
+    }
+
+    return raw;
+  }
+
+  // --- Scoped Block Isolation (Prevents affecting unselected text) ---
+  function getTargetBlocks(container) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) return [];
+
+    const range = sel.getRangeAt(0);
+    const blocks = new Set();
+
+    // Collect any existing block elements intersecting the selection inside container
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (node) =>
+        BLOCK_TAGS.has(node.tagName) && range.intersectsNode(node)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP
+    });
+
+    let current;
+    while ((current = walker.nextNode())) {
+      // Only take leaf-most blocks so parent containers don't override inner blocks
+      const hasChildBlock = Array.from(current.children).some((c) => BLOCK_TAGS.has(c.tagName));
+      if (!hasChildBlock) blocks.add(current);
+    }
+
+    if (blocks.size > 0) return Array.from(blocks);
+
+    // Check if selection is already inside a single block element inside container
+    let ancestor = range.commonAncestorContainer;
+    if (ancestor.nodeType === Node.TEXT_NODE) ancestor = ancestor.parentElement;
+    while (ancestor && ancestor !== container) {
+      if (BLOCK_TAGS.has(ancestor.tagName)) return [ancestor];
+      ancestor = ancestor.parentElement;
+    }
+
+    // Bare inline text directly inside container: isolate ONLY the selected line/range into a <div>
+    const lineRange = range.cloneRange();
+
+    // Expand start backward to nearest <br>, block sibling, or container start
+    let startNode = range.startContainer;
+    let startOffset = range.startOffset;
+    if (startNode.nodeType === Node.TEXT_NODE) {
+      const textBefore = startNode.textContent.slice(0, startOffset);
+      const lastNewline = textBefore.lastIndexOf("\n");
+      if (lastNewline !== -1) {
+        lineRange.setStart(startNode, lastNewline + 1);
+      } else {
+        let prev = startNode.previousSibling;
+        while (prev && prev.nodeName !== "BR" && !BLOCK_TAGS.has(prev.nodeName)) {
+          lineRange.setStartBefore(prev);
+          prev = prev.previousSibling;
+        }
+      }
+    }
+
+    // Expand end forward to nearest <br>, block sibling, or container end
+    let endNode = range.endContainer;
+    let endOffset = range.endOffset;
+    if (endNode.nodeType === Node.TEXT_NODE) {
+      const textAfter = endNode.textContent.slice(endOffset);
+      const nextNewline = textAfter.indexOf("\n");
+      if (nextNewline !== -1) {
+        lineRange.setEnd(endNode, endOffset + nextNewline);
+      } else {
+        let next = endNode.nextSibling;
+        while (next && next.nodeName !== "BR" && !BLOCK_TAGS.has(next.nodeName)) {
+          lineRange.setEndAfter(next);
+          next = next.nextSibling;
+        }
+      }
+    }
+
+    const wrapper = document.createElement("div");
+    const extracted = lineRange.extractContents();
+    wrapper.appendChild(extracted);
+    lineRange.insertNode(wrapper);
+
+    // Re-select the text inside the newly isolated wrapper
+    reselect(wrapper);
+    return [wrapper];
+  }
+
+  function syncAlignButtons(container) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    let node = sel.getRangeAt(0).startContainer;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    while (node && node !== container && !BLOCK_TAGS.has(node.tagName)) {
+      node = node.parentElement;
+    }
+    const target = node || container;
+    const currentAlign = (target.style.textAlign || getComputedStyle(target).textAlign || "left").toLowerCase();
+
+    justifyBtn.classList.toggle("active", currentAlign === "justify");
     const idx = alignments.findIndex((a) => currentAlign.includes(a.value));
     const safeIdx = idx >= 0 ? idx : 0;
     alignBtn.dataset.index = safeIdx;
@@ -4905,7 +5061,7 @@ window.addEventListener('dragstart', (e) => {
       return;
     }
 
-    syncAlignButton(container);
+    syncAlignButtons(container);
 
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     bar.style.display = "flex";
@@ -4953,19 +5109,37 @@ window.addEventListener('dragstart', (e) => {
     caseState = (caseState + 1) % 3;
   });
 
+  formatBtn.addEventListener("click", () => {
+    transformSelection(cycleFormat);
+  });
+
   alignBtn.addEventListener("click", () => {
     const container = getContainer();
-    const block = getTargetBlock(container);
-    if (!block) return;
+    const blocks = getTargetBlocks(container);
+    if (!blocks.length) return;
 
     const currentIdx = Number(alignBtn.dataset.index || 0);
     const nextIdx = (currentIdx + 1) % alignments.length;
     const next = alignments[nextIdx];
 
-    block.style.textAlign = next.value;
+    blocks.forEach((b) => (b.style.textAlign = next.value));
     alignBtn.dataset.index = nextIdx;
     alignBtn.textContent = next.icon;
     alignBtn.title = next.title;
+    justifyBtn.classList.remove("active");
+    positionBar();
+  });
+
+  justifyBtn.addEventListener("click", () => {
+    const container = getContainer();
+    const blocks = getTargetBlocks(container);
+    if (!blocks.length) return;
+
+    const isAlreadyJustified = blocks.every((b) => b.style.textAlign === "justify");
+    const newAlign = isAlreadyJustified ? "left" : "justify";
+
+    blocks.forEach((b) => (b.style.textAlign = newAlign));
+    justifyBtn.classList.toggle("active", newAlign === "justify");
     positionBar();
   });
 
