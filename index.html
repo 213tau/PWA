@@ -4918,24 +4918,35 @@ window.addEventListener('dragstart', (e) => {
       return leading + next + trailing;
     }
 
-    // 3. Date: DD MMM YYYY -> dd.mm.yyyy -> dd-mm-yyyy -> dd/mm/yyyy -> yyyy-mm-dd -> mm-dd-yyyy
+    // 3. Date: Start from DD MMM YYYY or dd.mm.yyyy -> dd-mm-yyyy -> dd/mm/yyyy -> yyyy-mm-dd -> mm-dd-yyyy
     const dateInfo = parseDateParts(trimmed);
     if (dateInfo) {
       const { d, m, y } = dateInfo;
       if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
         const variants = [
           `${pad2(d)} ${MONTHS[m - 1]} ${y}`,
-          `${pad2(d)}.${pad2(m)}.${y}`,
           `${pad2(d)}-${pad2(m)}-${y}`,
           `${pad2(d)}/${pad2(m)}/${y}`,
           `${y}-${pad2(m)}-${pad2(d)}`,
           `${pad2(m)}-${pad2(d)}-${y}`
         ];
+        const startVariants = new Set([
+          `${pad2(d)} ${MONTHS[m - 1]} ${y}`,
+          `${pad2(d)}.${pad2(m)}.${y}`
+        ]);
         const canonicalKey = `${y}-${m}-${d}`;
         let currentIdx = variants.indexOf(trimmed);
+
+        if (currentIdx === -1 && startVariants.has(trimmed)) {
+          currentIdx = 0;
+        }
         if (lastDateCycle.key === canonicalKey && lastDateCycle.idx !== -1) {
           currentIdx = lastDateCycle.idx;
         }
+        if (currentIdx === -1) {
+          currentIdx = 0;
+        }
+
         const nextIdx = (currentIdx + 1) % variants.length;
         lastDateCycle = { key: canonicalKey, idx: nextIdx };
         return leading + variants[nextIdx] + trailing;
