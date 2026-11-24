@@ -4964,24 +4964,55 @@ window.addEventListener('dragstart', (e) => {
     const range = sel.getRangeAt(0);
     const blocks = new Set();
 
-    // Collect any existing block elements intersecting the selection inside container
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, {
-      acceptNode: (node) =>
-        BLOCK_TAGS.has(node.tagName) && range.intersectsNode(node)
-          ? NodeFilter.FILTER_ACCEPT
-          : NodeFilter.FILTER_SKIP
+      acceptNode: (node) => {
+        if (!BLOCK_TAGS.has(node.tagName)) return NodeFilter.FILTER_SKIP;
+        const hasChildBlock = Array.from(node.children).some((c) => BLOCK_TAGS.has(c.tagName));
+        if (hasChildBlock) return NodeFilter.FILTER_SKIP;
+
+        // Ensure the selection actually overlaps content inside this specific block,
+        // not merely a boundary offset at the edge of an adjacent block
+        const nodeRange = document.createRange();
+        nodeRange.selectNodeContents(node);
+
+        const startsAfterSelection =
+          range.compareBoundaryPoints(Range.END_TO_START, nodeRange) <= 0;
+        const endsBeforeSelection =
+          range.compareBoundaryPoints(Range.START_TO_END, nodeRange) >= 0;
+
+        if (startsAfterSelection || endsBeforeSelection) {
+          return NodeFilter.FILTER_SKIP;
+        }
+
+        // Ignore blocks where only zero-length boundary overlap occurs
+        const overlapStart =
+          range.compareBoundaryPoints(Range.START_TO_START, nodeRange) > 0
+            ? [range.startContainer, range.startOffset]
+            : [nodeRange.startContainer, nodeRange.startOffset];
+        const overlapEnd =
+          range.compareBoundaryPoints(Range.END_TO_END, nodeRange) < 0
+            ? [range.endContainer, range.endOffset]
+            : [nodeRange.endContainer, nodeRange.endOffset];
+
+        const overlapRange = document.createRange();
+        overlapRange.setStart(overlapStart[0], overlapStart[1]);
+        overlapRange.setEnd(overlapEnd[0], overlapEnd[1]);
+
+        if (overlapRange.collapsed || !overlapRange.toString().trim()) {
+          return NodeFilter.FILTER_SKIP;
+        }
+
+        return NodeFilter.FILTER_ACCEPT;
+      }
     });
 
     let current;
     while ((current = walker.nextNode())) {
-      // Only take leaf-most blocks so parent containers don't override inner blocks
-      const hasChildBlock = Array.from(current.children).some((c) => BLOCK_TAGS.has(c.tagName));
-      if (!hasChildBlock) blocks.add(current);
+      blocks.add(current);
     }
 
     if (blocks.size > 0) return Array.from(blocks);
 
-    // Check if selection is already inside a single block element inside container
     let ancestor = range.commonAncestorContainer;
     if (ancestor.nodeType === Node.TEXT_NODE) ancestor = ancestor.parentElement;
     while (ancestor && ancestor !== container) {
@@ -4992,7 +5023,6 @@ window.addEventListener('dragstart', (e) => {
     // Bare inline text directly inside container: isolate ONLY the selected line/range into a <div>
     const lineRange = range.cloneRange();
 
-    // Expand start backward to nearest <br>, block sibling, or container start
     let startNode = range.startContainer;
     let startOffset = range.startOffset;
     if (startNode.nodeType === Node.TEXT_NODE) {
@@ -5009,7 +5039,6 @@ window.addEventListener('dragstart', (e) => {
       }
     }
 
-    // Expand end forward to nearest <br>, block sibling, or container end
     let endNode = range.endContainer;
     let endOffset = range.endOffset;
     if (endNode.nodeType === Node.TEXT_NODE) {
@@ -5031,11 +5060,10 @@ window.addEventListener('dragstart', (e) => {
     wrapper.appendChild(extracted);
     lineRange.insertNode(wrapper);
 
-    // Re-select the text inside the newly isolated wrapper
     reselect(wrapper);
     return [wrapper];
   }
-
+  
   function syncAlignButtons(container) {
     const sel = window.getSelection();
     if (!sel.rangeCount) return;
